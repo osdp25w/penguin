@@ -1,0 +1,10 @@
+version: "3.9"
+services:
+  frontend:
+    build: .
+    container_name: penguin_front
+    ports:
+      - "8081:80"          # Nginx 80 -> host 8080
+    environment:
+      - TZ=Asia/Taipei
+    restart: unless-stopped
