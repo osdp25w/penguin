@@ -37,8 +37,6 @@
     "vue-tsc": "^2.2.10"
   },
   "msw": {
-    "workerDirectory": [
-      "public"
-    ]
+    "workerDirectory": "public"
   }
 }
