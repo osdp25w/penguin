@@ -1,0 +1,9 @@
+@unocss/reset/tailwind.css; /* 先使用 Tailwind-like reset，可換成 normalize 等 */
+@unocss-placeholder;        /* UnoCSS 會在 build 時把最終 CSS 注入到這裡 */
+
+/* 下面可以加一些全域樣式（非必須） --------------------------- */
+html,
+body {
+  @apply font-sans antialiased bg-gradient-to-br from-brand-800 via-brand-900 to-slate-900 text-white;
+  background-attachment: fixed;
+}
