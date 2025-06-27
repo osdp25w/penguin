@@ -1,0 +1,1 @@
+{"root":["./src/app.vue","./src/main.ts","./src/vite-env.d.ts","./src/components/helloworld.vue","./src/components/kpi/kpicard.vue","./src/layouts/applayout.vue","./src/pages/alerts.vue","./src/pages/batteryhealth.vue","./src/pages/livemap.vue","./src/pages/overview.vue","./src/pages/vehicletable.vue","./src/router/index.ts"],"version":"5.8.3"}

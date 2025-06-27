@@ -1,0 +1,44 @@
+{
+  /* 根 tsconfig，供 vue-tsc 與 tsc 共用
+     ------------------------------------------------ */
+  "compilerOptions": {
+    /* ---------- 基礎設定 ---------- */
+    "target": "es2018",
+    "module": "esnext",
+    "moduleResolution": "node",
+    "lib": ["es2018", "dom"],
+    "strict": true,
+
+    /* ---------- Vue / Vite ---------- */
+    "jsx": "preserve",                       // 讓 .vue <script setup> 可用 JSX
+    "allowSyntheticDefaultImports": true,
+
+    /* ---------- 全域型別 ---------- */
+    "types": [
+      "node",
+      "vite/client",
+      "google.maps"                          // ★ 新增：讓 vue-tsc 找到 google 命名空間
+    ],
+
+    /* ---------- 路徑別名 ---------- */
+    "baseUrl": ".",                         // 專案根做為根目錄
+    "paths": {
+      "@/*":     ["src/*"],                 // @ ⇒ src
+      "@/types": ["src/types/index.ts"]     // 額外指明 @/types
+    }
+  },
+
+  /* 編譯器要處理的檔案 --------------------------------------------- */
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "src/**/*.tsx",
+    "src/**/*.vue"
+  ],
+
+  /* 排除產物 -------------------------------------------------------- */
+  "exclude": [
+    "dist",
+    "node_modules"
+  ]
+}
