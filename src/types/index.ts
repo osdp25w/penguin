@@ -1,51 +1,73 @@
-// ────────────────────────────────────
-//  公用型別定義  src/types.ts
-// ────────────────────────────────────
-
-/* 1️⃣ 儀表板 KPI ------------------------------------------------------- */
+/* 1️⃣ KPI ---------------------------------------------------------- */
 export interface SummaryKpi {
-  online   : number     // 上線車輛數
-  offline  : number     // 離線車輛數
-  distance : number     // 今日總里程     km
-  carbon   : number     // 今日減碳      kg
+  online   : number
+  offline  : number
+  distance : number   // km
+  carbon   : number   // kg
 }
-/** stores/summary.ts 期待的「複數」名稱 */
-export type SummaryKpis = SummaryKpi   // 只是別名，方便 import
+export type SummaryKpis = SummaryKpi
 
-/* 2️⃣ 車輛 ------------------------------------------------------------- */
+/* 2️⃣ Vehicle ------------------------------------------------------ */
 export interface Vehicle {
-  id       : string
-  name     : string
-  soc      : number   // State-of-Charge %
-  lastSeen : string   // ISO datetime
+  id          : string
+  name        : string
+  soc         : number
+  lastSeen    : string               // ISO
+
+  /* ── 新增欄位 (管理 / ML 皆會用) ── */
+  motorId?     : string
+  batteryId?   : string
+  controllerId?: string
+
+  mqttOnline   : boolean
+  mqttPort     : number
+
+  lat          : number              // 6-位小數
+  lon          : number
 }
 
-/* 3️⃣ 電池列表（靜態屬性） --------------------------------------------- */
+/* 3️⃣ Battery ------------------------------------------------------ */
 export interface Battery {
   id        : string
-  vehicleId : string   // 對應車輛
-  health    : number   // 0-100 %
-  temp      : number   // °C
+  vehicleId : string
+  health    : number
+  temp      : number
 }
 
-/* 4️⃣ 電池時序統計（趨勢圖、歷史） ------------------------------------ */
+/* 4️⃣ Battery Stat (趨勢圖) --------------------------------------- */
 export interface BatteryStat {
-  id        : string   // Battery ID
-  vehicleId : string   // 分車輛統計
-  soc       : number   // %
-  temp      : number   // °C
-  /** 平均健康度（若趨勢圖需要）—可選，避免編譯錯誤 */
-  health?   : number   // %
-  ts        : string   // ISO datetime
+  id        : string
+  vehicleId : string
+  soc       : number
+  temp      : number
+  health?   : number
+  ts        : string
 }
 
-/* 5️⃣ 警報 / 事件 ------------------------------------------------------ */
-export type AlertSeverity = 'info' | 'warning' | 'critical'   // 統一用 warning
-
+/* 5️⃣ Alert -------------------------------------------------------- */
+export type AlertSeverity = 'info' | 'warning' | 'critical'
 export interface Alert {
   id        : string
   vehicleId : string
   message   : string
-  ts        : string            // ISO datetime
+  ts        : string
   severity  : AlertSeverity
+}
+
+/* 6️⃣ RBAC --------------------------------------------------------- */
+export interface Role {
+  id     : string
+  name   : string
+  desc   : string
+  scopes : string[]
+}
+
+export interface User {
+  id        : string
+  email     : string
+  fullName  : string
+  roleId    : string
+  active    : boolean
+  createdAt : string
+  lastLogin : string
 }
