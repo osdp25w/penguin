@@ -12,7 +12,9 @@
     "test:e2e": "cypress open"
   },
   "dependencies": {
+    "@iconify-json/lucide": "^1.2.63",
     "@testing-library/vue": "^8.1.0",
+    "@unocss/preset-icons": "^66.4.2",
     "echarts": "^5.6.0",
     "maplibre-gl": "^3.6.2",
     "pinia": "^2.3.1",

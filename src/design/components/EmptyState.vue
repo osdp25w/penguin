@@ -11,7 +11,7 @@
         {{ title }}
       </h3>
       
-      <p v-if="description" class="text-gray-500 max-w-sm">
+      <p v-if="description" class="text-gray-700 max-w-sm">
         {{ description }}
       </p>
     </div>
@@ -40,7 +40,7 @@ const iconClass = computed(() => {
   const baseClasses = 'p-3 rounded-full'
   
   const variantClasses = {
-    default: 'bg-gray-100 text-gray-400',
+    default: 'bg-gray-100 text-gray-600',
     search: 'bg-blue-100 text-blue-400',
     error: 'bg-red-100 text-red-400',
     loading: 'bg-yellow-100 text-yellow-400',

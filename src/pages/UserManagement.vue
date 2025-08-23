@@ -4,7 +4,7 @@
     <!-- ── Toolbar ─────────────────────────────────────────────── -->
     <header class="flex items-center justify-between">
       <div class="flex items-center gap-4">
-        <h2 class="text-2xl font-bold">使用者與角色管理</h2>
+        <h2 class="text-2xl font-bold text-gray-900">使用者與角色管理</h2>
         <!-- 新增使用者 -->
         <button
           class="btn-add flex items-center gap-1 shadow-lg hover:shadow-xl transition"
@@ -15,7 +15,7 @@
       </div>
 
       <button
-        class="btn text-sm i-ph:arrow-clockwise-duotone flex items-center gap-1"
+        class="btn text-sm i-ph-arrow-clockwise flex items-center gap-1"
         :disabled="store.isLoading"
         @click="store.fetchAll"
       >
@@ -26,12 +26,12 @@
     <!-- ── User / Role 表格 ─────────────────────────────────────── -->
     <div class="card overflow-x-auto">
       <table class="min-w-full text-left text-sm">
-        <thead class="bg-white/5 text-brand-300 sticky top-0">
+        <thead class="bg-white/5 text-gray-900 sticky top-0">
           <tr>
-            <th class="px-4 py-2 w-[200px]">Email</th>
-            <th class="px-4 py-2 w-[140px]">姓名</th>
-            <th class="px-4 py-2 w-[110px]">角色</th>
-            <th class="px-4 py-2 text-center w-[70px]">狀態</th>
+            <th class="px-4 py-2 w-[200px] font-medium">Email</th>
+            <th class="px-4 py-2 w-[140px] font-medium">姓名</th>
+            <th class="px-4 py-2 w-[110px] font-medium">角色</th>
+            <th class="px-4 py-2 text-center w-[70px] font-medium">狀態</th>
             <th class="px-4 py-2 w-[140px]"></th>
           </tr>
         </thead>
@@ -81,9 +81,9 @@
 
             <!-- 檢視模式 -->
             <template v-else>
-              <td class="px-4 py-2 font-mono">{{ u.email }}</td>
-              <td class="px-4 py-2">{{ u.fullName }}</td>
-              <td class="px-4 py-2">{{ u.roleName }}</td>
+              <td class="px-4 py-2 font-mono text-gray-900">{{ u.email }}</td>
+              <td class="px-4 py-2 text-gray-900">{{ u.fullName }}</td>
+              <td class="px-4 py-2 text-gray-900">{{ u.roleName }}</td>
               <td class="px-4 py-2 text-center">
                 <span :class="u.active ? 'text-emerald-400' : 'text-rose-400'">
                   {{ u.active ? '啟用' : '停用' }}
@@ -105,7 +105,7 @@
     </div>
 
     <!-- 狀態訊息 -->
-    <p v-if="store.isLoading" class="text-gray-400">Loading…</p>
+    <p v-if="store.isLoading" class="text-gray-600">Loading…</p>
     <p v-if="store.errMsg"   class="text-rose-400">{{ store.errMsg }}</p>
 
     <!-- ── 新增對話框 ─────────────────────────────────────────── -->

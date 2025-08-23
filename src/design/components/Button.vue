@@ -16,7 +16,7 @@
 import { computed } from 'vue'
 
 interface Props {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger'
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline'
   size?: 'sm' | 'md' | 'lg'
   type?: 'button' | 'submit' | 'reset'
   disabled?: boolean
@@ -72,6 +72,14 @@ const buttonClasses = computed(() => {
       'text-white',
       'hover:opacity-90',
       'focus:ring-brand-secondary',
+    ],
+    outline: [
+      'text-gray-700',
+      'border',
+      'border-gray-300',
+      'bg-white',
+      'hover:bg-gray-50',
+      'focus:ring-brand-primary',
     ],
     ghost: [
       'text-brand-primary',

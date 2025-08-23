@@ -3,7 +3,7 @@
     <div class="bg-white dark:bg-gray-900 rounded-lg p-6 max-w-md w-full mx-4">
       <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-white">啟用測試資料</h3>
       
-      <div class="space-y-4 text-sm text-gray-600 dark:text-gray-400">
+      <div class="space-y-4 text-sm text-gray-600 dark:text-gray-600">
         <div>
           <h4 class="font-medium text-gray-900 dark:text-white">1. 設定環境變數</h4>
           <p>在 .env 檔案中加入：</p>

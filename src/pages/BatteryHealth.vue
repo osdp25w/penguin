@@ -62,7 +62,7 @@ const chartOption = computed(() => ({
     <header class="flex items-center justify-between">
       <h2 class="text-2xl font-bold">電池健康 / 故障機率</h2>
       <button
-        class="btn i-ph:arrow-clockwise-duotone text-sm"
+        class="btn i-ph-arrow-clockwise text-sm"
         :disabled="batStore.loading || mlStore.loading"
         @click="() => { batStore.fetchAll(); mlStore.fetchBatteryRisk() }"
       >
@@ -132,7 +132,7 @@ const chartOption = computed(() => ({
     />
 
     <!-- ─── 狀態訊息 ─────────────────────────────────────── -->
-    <p v-if="batStore.loading || mlStore.loading" class="text-gray-400">
+    <p v-if="batStore.loading || mlStore.loading" class="text-gray-600">
       Loading…
     </p>
     <p v-if="batStore.errMsg || mlStore.errMsg" class="text-rose-400">

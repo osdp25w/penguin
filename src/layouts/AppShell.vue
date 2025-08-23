@@ -14,7 +14,7 @@
                 class="lg:hidden"
                 @click="sidebarOpen = !sidebarOpen"
               >
-                <i-ph:list class="w-5 h-5" />
+                <i class="i-ph-list w-5 h-5" />
               </Button>
               
               <!-- Logo -->
@@ -22,50 +22,21 @@
                 to="/"
                 class="flex items-center gap-2 text-xl font-bold text-brand-primary"
               >
-                <i-ph:bicycle class="w-8 h-8" />
+                <i class="i-ph-bicycle w-8 h-8" />
                 嘉大數據平台
               </router-link>
             </div>
             
-            <!-- Desktop Navigation -->
-            <nav class="hidden lg:flex items-center gap-1">
-              <router-link
-                v-for="item in navigation"
-                :key="item.name"
-                :to="item.href"
-                class="px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
-                :class="isActiveRoute(item.href) 
-                  ? 'bg-brand-primary text-white' 
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'"
-              >
-                <component :is="item.icon" class="w-4 h-4 mr-2 inline-block" />
-                {{ item.name }}
-              </router-link>
+            <!-- Breadcrumb -->
+            <nav class="hidden lg:flex items-center gap-2 text-sm">
+              <i class="i-ph-house w-4 h-4 text-gray-600"></i>
+              <span class="text-gray-600">/</span>
+              <span class="font-medium text-gray-900">{{ currentPageTitle }}</span>
             </nav>
           </div>
           
-          <!-- Right side - Search & User -->
-          <div class="flex items-center gap-4">
-            <!-- Search -->
-            <div class="hidden md:block">
-              <div class="relative">
-                <input
-                  v-model="searchQuery"
-                  type="text"
-                  placeholder="搜尋..."
-                  class="w-64 px-4 py-2 pl-10 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-brand-primary outline-none"
-                  @keyup.enter="handleSearch"
-                >
-                <i-ph:magnifying-glass class="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-              </div>
-            </div>
-            
-            <!-- Notifications -->
-            <Button variant="ghost" size="sm" class="relative">
-              <i-ph:bell class="w-5 h-5" />
-              <span class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-            </Button>
-            
+          <!-- Right side - User Menu -->
+          <div class="flex items-center">
             <!-- User Menu -->
             <div class="relative" ref="userMenuRef">
               <Button
@@ -80,7 +51,7 @@
                 <span class="hidden sm:block text-sm font-medium text-gray-700">
                   {{ currentUser.name }}
                 </span>
-                <i-ph:caret-down class="w-4 h-4 text-gray-400" />
+                <i class="i-ph-caret-down w-4 h-4 text-gray-600" />
               </Button>
               
               <!-- User Dropdown -->
@@ -96,16 +67,15 @@
                   v-if="userMenuOpen"
                   class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50"
                 >
-                  <a 
+                  <button 
                     v-for="item in userMenuItems"
                     :key="item.name"
-                    :href="item.href"
-                    class="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150"
-                    @click="userMenuOpen = false"
+                    class="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-150"
+                    @click="handleUserMenuAction(item)"
                   >
                     <component :is="item.icon" class="w-4 h-4" />
                     {{ item.name }}
-                  </a>
+                  </button>
                 </div>
               </Transition>
             </div>
@@ -133,7 +103,7 @@
                   size="sm"
                   @click="sidebarOpen = false"
                 >
-                  <i-ph:x class="w-4 h-4" />
+                  <i class="i-ph-x w-4 h-4" />
                 </Button>
               </div>
             </div>
@@ -155,7 +125,7 @@
           
           <!-- Sidebar Footer -->
           <div class="p-4 border-t border-gray-200">
-            <div class="text-xs text-gray-500 text-center">
+            <div class="text-xs text-gray-700 text-center">
               © 2024 嘉大數據平台
             </div>
           </div>
@@ -176,45 +146,58 @@
         </div>
       </main>
     </div>
+    
+    <!-- Modals -->
+    <EditProfileModal 
+      v-if="showProfileModal" 
+      @close="showProfileModal = false"
+      @success="handleProfileSuccess" 
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Button } from '@/design/components'
+import { useAuth } from '@/stores/auth'
+import EditProfileModal from '@/components/profile/EditProfileModal.vue'
 
 const route = useRoute()
+const router = useRouter()
+const auth = useAuth()
 const sidebarOpen = ref(false)
 const userMenuOpen = ref(false)
-const searchQuery = ref('')
 const userMenuRef = ref<HTMLElement>()
+const showProfileModal = ref(false)
 
-// Mock user data - 實際專案中應從 store 獲取
-const currentUser = {
+// 當前使用者資訊
+const currentUser = computed(() => auth.user || {
   name: '管理員',
   email: 'admin@example.com',
   role: 'admin'
-}
+})
 
 const userInitials = computed(() => {
-  return currentUser.name.slice(0, 1).toUpperCase()
+  return currentUser.value.name?.slice(0, 1).toUpperCase() || 'U'
+})
+
+const currentPageTitle = computed(() => {
+  return route.meta.title as string || '總覽'
 })
 
 const navigation = [
-  { name: '總覽', href: '/', icon: 'i-ph:house' },
-  { name: '車輛警報', href: '/alerts', icon: 'i-ph:warning' },
-  { name: '歸還流程', href: '/return', icon: 'i-ph:arrow-counter-clockwise' },
-  { name: '使用者管理', href: '/users', icon: 'i-ph:users' },
-  { name: '站點地圖', href: '/map', icon: 'i-ph:map-pin' },
-  { name: '數據分析', href: '/analytics', icon: 'i-ph:chart-line' },
+  { name: '總覽', href: '/', icon: 'i-ph-house' },
+  { name: '場域地圖', href: '/sites', icon: 'i-ph-map-pin' },
+  { name: '車輛清單', href: '/vehicles', icon: 'i-ph-bicycle' },
+  { name: '警報中心', href: '/alerts', icon: 'i-ph-warning-circle' },
+  { name: 'ML 預測', href: '/ml', icon: 'i-ph-chart-line-up' },
+  { name: '帳號管理', href: '/admin/users', icon: 'i-ph-users' },
 ]
 
 const userMenuItems = [
-  { name: '個人設定', href: '/profile', icon: 'i-ph:user' },
-  { name: '系統設定', href: '/settings', icon: 'i-ph:gear' },
-  { name: '說明文件', href: '/help', icon: 'i-ph:question' },
-  { name: '登出', href: '/logout', icon: 'i-ph:sign-out' },
+  { name: '個人資料', action: 'profile', icon: 'i-ph-user' },
+  { name: '登出', action: 'logout', icon: 'i-ph-sign-out' },
 ]
 
 const isActiveRoute = (href: string) => {
@@ -224,11 +207,26 @@ const isActiveRoute = (href: string) => {
   return route.path.startsWith(href)
 }
 
-const handleSearch = () => {
-  if (searchQuery.value.trim()) {
-    console.log('搜尋:', searchQuery.value)
-    // 實際搜尋邏輯
+
+const handleUserMenuAction = (item: any) => {
+  console.log('點擊用戶選單項目:', item)
+  userMenuOpen.value = false
+  
+  if (item.action === 'profile') {
+    console.log('打開個人資料模態框')
+    showProfileModal.value = true
+    console.log('showProfileModal 狀態:', showProfileModal.value)
+  } else if (item.action === 'logout') {
+    auth.logout()
+    router.push('/login')
+  } else if (item.href) {
+    router.push(item.href)
   }
+}
+
+const handleProfileSuccess = () => {
+  // TODO: Show success toast
+  console.log('個人資料更新成功')
 }
 
 // Close user menu when clicking outside

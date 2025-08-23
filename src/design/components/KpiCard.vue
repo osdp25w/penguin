@@ -22,7 +22,7 @@
             />
             <span :class="changeTextClass" class="text-sm font-medium">
               {{ Math.abs(change) }}{{ unit }}
-              <span class="text-gray-500 font-normal ml-1">vs {{ period }}</span>
+              <span class="text-gray-700 font-normal ml-1">vs {{ period }}</span>
             </span>
           </div>
         </div>
@@ -126,12 +126,12 @@ const changeIcon = computed(() => {
   if (props.change === undefined) return null
   
   if (props.change > 0) {
-    return props.trend === 'down' ? 'i-ph:trend-down' : 'i-ph:trend-up'
+    return props.trend === 'down' ? 'i-ph-trend-down' : 'i-ph-trend-up'
   } else if (props.change < 0) {
-    return props.trend === 'up' ? 'i-ph:trend-up' : 'i-ph:trend-down'
+    return props.trend === 'up' ? 'i-ph-trend-up' : 'i-ph-trend-down'
   }
   
-  return 'i-ph:minus'
+  return 'i-ph-minus'
 })
 
 const changeIconClass = computed(() => {
@@ -143,7 +143,7 @@ const changeIconClass = computed(() => {
     return props.trend === 'up' ? 'text-green-500' : 'text-red-500'
   }
   
-  return 'text-gray-500'
+  return 'text-gray-700'
 })
 
 const changeTextClass = computed(() => {

@@ -13,7 +13,7 @@ interface SiteFilters {
 
 const SiteListSchema = z.array(SiteSchema)
 
-export const useSitesStore = defineStore('sites', () => {
+export const useSites = defineStore('sites', () => {
   const list = ref<Site[]>([])
   const selected = ref<Site | undefined>()
   const loading = ref(false)

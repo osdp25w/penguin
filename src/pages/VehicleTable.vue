@@ -73,12 +73,12 @@ async function save() {
         </button>
       </div>
       <div class="flex items-center gap-2">
-        <button class="btn i-ph:arrow-clockwise-duotone"
+        <button class="btn i-ph-arrow-clockwise"
                 :disabled="store.loading"
                 @click="store.fetch(store.page)">
           重新整理
         </button>
-        <span v-if="store.loading" class="text-sm text-gray-400">Loading…</span>
+        <span v-if="store.loading" class="text-sm text-gray-600">Loading…</span>
       </div>
     </header>
 
@@ -129,11 +129,11 @@ async function save() {
 
     <!-- Pagination -->
     <footer class="flex items-center justify-end gap-4">
-      <button class="btn i-ph:caret-left-duotone"
+      <button class="btn i-ph-caret-left"
               :disabled="store.page===1 || store.loading"
               @click="store.fetch(store.page-1)"/>
       <span class="text-sm">Page <b>{{ store.page }}</b></span>
-      <button class="btn i-ph:caret-right-duotone"
+      <button class="btn i-ph-caret-right"
               :disabled="disabledNext"
               @click="store.fetch(store.page+1)"/>
     </footer>

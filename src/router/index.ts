@@ -1,52 +1,79 @@
-/* ─── Pinia 就緒 (守衛要用) ───────────────────────────── */
-import { createPinia, setActivePinia } from 'pinia'
-const pinia = createPinia()
-setActivePinia(pinia)
+/* ─── Vue-Router 不再需要提前建立 Pinia ───────────────── */
 
 /* ─── Vue-Router 相關 ────────────────────────────────── */
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuth } from '@/stores/auth'
 
-/* lazy pages */
+/* ─── Layout & Pages ────────────────────────────────── */
+const AppShell       = () => import('@/layouts/AppShell.vue')
 const Login          = () => import('@/pages/Login.vue')
-const Overview       = () => import('@/pages/Overview.vue')
-const LiveMap        = () => import('@/pages/LiveMap.vue')
-const VehicleTable   = () => import('@/pages/VehicleTable.vue')
-const BatteryHealth  = () => import('@/pages/BatteryHealth.vue')
-const Alerts         = () => import('@/pages/Alerts.vue')
-const UserManagement = () => import('@/pages/UserManagement.vue')
-const SiteMap        = () => import('@/pages/SiteMap.vue')
 
-/* ML 綜合單頁 */
-const MLPredict      = () => import('@/pages/MLPredict.vue')
+/* 六大頁面 */
+const Overview       = () => import('@/pages/Overview.vue')         // 總覽
+const SiteMap        = () => import('@/pages/SiteMap.vue')         // 場域地圖  
+const Vehicles       = () => import('@/pages/Vehicles.vue')        // 車輛清單
+const Alerts         = () => import('@/pages/Alerts.vue')          // 警報中心
+const MLPredict      = () => import('@/pages/MLPredict.vue')       // ML 預測
+const UserManagement = () => import('@/pages/UserManagement.vue')  // 帳號管理
 
 /* routes -------------------------------------------------- */
 const routes: RouteRecordRaw[] = [
-  /* ── 公開 ── */
-  { path: '/login', component: Login },
-
-  /* ── 需登入 ── */
-  { path: '/',         component: Overview,      meta:{ requiresAuth:true } },
-  { path: '/map',      component: LiveMap,       meta:{ requiresAuth:true } },
-  { path: '/sites',    component: SiteMap,       meta:{ requiresAuth:true, title:'場域地圖' } },
-  { path: '/vehicles', component: VehicleTable,  meta:{ requiresAuth:true } },
-  { path: '/battery',  component: BatteryHealth, meta:{ requiresAuth:true } },
-  { path: '/alerts',   component: Alerts,        meta:{ requiresAuth:true } },
-
-  /* ML 綜合預測 */
-  { path: '/ml', component: MLPredict,  meta:{ requiresAuth:true, title:'ML 預測' } },
-
-  /* Admin 專用 */
-  { path: '/admin/users', component: UserManagement,
-    meta:{ requiresAuth:true, requiresAdmin:true, title:'帳號管理' } },
-
-  /* 403 */
-  { path: '/403',
-    component: { template:'<div class="grid h-screen place-content-center text-2xl font-bold text-rose-600">403&nbsp;Forbidden</div>' }
+  /* ── 公開頁面 ── */
+  { path: '/login', component: Login, meta: { title: '登入' } },
+  
+  /* ── 主應用 (需登入，使用 AppShell Layout) ── */
+  {
+    path: '/',
+    component: AppShell,
+    meta: { requiresAuth: true },
+    children: [
+      {
+        path: '',
+        name: 'overview',
+        component: Overview,
+        meta: { title: '總覽' }
+      },
+      {
+        path: 'sites',
+        name: 'sites',
+        component: SiteMap,
+        meta: { title: '場域地圖' }
+      },
+      {
+        path: 'vehicles',
+        name: 'vehicles', 
+        component: Vehicles,
+        meta: { title: '車輛清單' }
+      },
+      {
+        path: 'alerts',
+        name: 'alerts',
+        component: Alerts,
+        meta: { title: '警報中心' }
+      },
+      {
+        path: 'ml',
+        name: 'ml',
+        component: MLPredict,
+        meta: { title: 'ML 預測' }
+      },
+      {
+        path: 'admin/users',
+        name: 'admin-users',
+        component: UserManagement,
+        meta: { title: '帳號管理', requiresAdmin: true }
+      }
+    ]
   },
 
-  /* 其他 → / */
-  { path: '/:pathMatch(.*)*', redirect:'/' }
+  /* ── 錯誤頁面 ── */
+  {
+    path: '/403',
+    component: { template: '<div class="grid h-screen place-content-center text-2xl font-bold text-rose-600">403 Forbidden</div>' }
+  },
+
+  /* ── 其他路徑重導到首頁 ── */
+  { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 
 export const router = createRouter({
@@ -56,16 +83,24 @@ export const router = createRouter({
 })
 
 /* ─── 全域守衛 ──────────────────────────────────────── */
-router.beforeEach(to => {
+router.beforeEach((to) => {
   const auth = useAuth()
 
-  /* 尚未登入 */
-  if (to.meta.requiresAuth && !auth.isLogin)
-    return { path:'/login', query:{ redirect:to.fullPath } }
+  /* 檢查登入狀態 */
+  if (to.meta.requiresAuth && !auth.isLogin) {
+    return { path: '/login', query: { redirect: to.fullPath } }
+  }
 
-  /* 管理員驗證 */
+  /* 檢查管理員權限 */
   if (to.meta.requiresAdmin) {
     const role = auth.user?.roleId || sessionStorage.getItem('role')
     if (role !== 'admin') return '/403'
+  }
+
+  /* 設定頁面標題 */
+  if (to.meta.title) {
+    document.title = `${to.meta.title} - 嘉大數據平台`
+  } else {
+    document.title = '嘉大數據平台'
   }
 })

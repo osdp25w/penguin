@@ -44,7 +44,7 @@
                hover:bg-indigo-400 transition-colors disabled:opacity-60
                disabled:cursor-not-allowed"
       >
-        <span v-if="loading" class="i-ph:spinner-gap-duotone animate-spin text-lg" />
+        <span v-if="loading" class="i-ph-spinner animate-spin text-lg" />
         <span v-else class="opacity-90">登入</span>
       </button>
 

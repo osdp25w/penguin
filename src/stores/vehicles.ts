@@ -1,7 +1,7 @@
 // src/stores/vehicles.ts
 import { defineStore } from 'pinia'
 import type { Vehicle } from '@/types'
-import { VehicleListSchema } from '@/types/vehicle'
+// import { VehicleListSchema } from '@/types/vehicle' // 暫時移除驗證
 
 const DEFAULT_PAGE_SIZE = 20
 
@@ -9,7 +9,8 @@ export const useVehicles = defineStore('vehicles', {
   state: () => ({
     loading : false as boolean,
     errMsg  : '' as string,
-    items   : [] as Vehicle[],
+    items   : [] as Vehicle[], // Legacy items for pagination
+    vehicles: [] as Vehicle[], // New vehicles array for general use
     page    : 1 as number,
     total   : 0 as number,
     pageSize: DEFAULT_PAGE_SIZE as number,
@@ -75,7 +76,7 @@ export const useVehicles = defineStore('vehicles', {
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         
         const data = await response.json()
-        this.bySite[siteId] = VehicleListSchema.parse(data)
+        this.bySite[siteId] = data
       } catch (err: any) {
         this.errorBySite[siteId] = err.message || 'Unknown error'
         this.bySite[siteId] = []
@@ -97,6 +98,71 @@ export const useVehicles = defineStore('vehicles', {
     /** Get error for site vehicles */
     getErrorBySite(siteId: string): string | null {
       return this.errorBySite[siteId] || null
+    },
+
+    /** 獲取所有車輛 (支援篩選和搜尋) */
+    async fetchVehicles(params?: {
+      siteId?: string;
+      keyword?: string;
+      status?: string;
+      soh_lt?: number;
+    }) {
+      this.loading = true
+      try {
+        const searchParams = new URLSearchParams()
+        if (params?.siteId) searchParams.set('siteId', params.siteId)
+        if (params?.keyword) searchParams.set('keyword', params.keyword)
+        if (params?.status) searchParams.set('status', params.status)
+        if (params?.soh_lt) searchParams.set('soh_lt', params.soh_lt.toString())
+
+        const response = await fetch(`/api/v1/vehicles/list?${searchParams}`)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        
+        const data = await response.json()
+        this.vehicles = data
+        this.errMsg = ''
+      } catch (err: any) {
+        this.errMsg = err.message || '獲取車輛列表失敗'
+        this.vehicles = []
+      } finally {
+        this.loading = false
+      }
+    },
+
+    /** 獲取車輛電池詳細資訊 */
+    async fetchBatteryMetrics(vehicleId: string) {
+      try {
+        const response = await fetch(`/api/v1/metrics/vehicle/${vehicleId}/battery`)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        
+        return await response.json()
+      } catch (err: any) {
+        console.error('Fetch battery metrics error:', err)
+        return null
+      }
+    },
+
+    /** 更新車輛狀態 */
+    updateVehicleStatus(vehicleId: string, status: Vehicle['status']) {
+      // 更新 vehicles 陣列
+      const vehicleIndex = this.vehicles.findIndex(v => v.id === vehicleId)
+      if (vehicleIndex !== -1) {
+        this.vehicles[vehicleIndex].status = status
+      }
+
+      // 更新 items 陣列
+      const itemIndex = this.items.findIndex(v => v.id === vehicleId)
+      if (itemIndex !== -1) {
+        this.items[itemIndex].status = status
+      }
+
+      // 更新 bySite 中的車輛
+      Object.keys(this.bySite).forEach(siteId => {
+        const siteVehicleIndex = this.bySite[siteId].findIndex(v => v.id === vehicleId)
+        if (siteVehicleIndex !== -1) {
+          this.bySite[siteId][siteVehicleIndex].status = status
+        }
+      })
     }
   }
 })

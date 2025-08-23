@@ -40,8 +40,24 @@ async function bootstrap() {
   await startMockServiceWorker()      // ← 若需 mock，確定 worker 已就緒
 
   const app = createApp(App)
-  app.use(createPinia())
+  const pinia = createPinia()
+  
+  app.use(pinia)
   app.use(router)
+  
+  // 初始化 auth store 狀態
+  const { useAuth } = await import('@/stores/auth')
+  const auth = useAuth()
+  
+  // 如果有 token，嘗試獲取用戶資訊
+  if (auth.token && auth.fetchMe) {
+    try {
+      await auth.fetchMe()
+    } catch (error) {
+      console.warn('Failed to fetch user info:', error)
+    }
+  }
+  
   app.mount('#app')
 }
 

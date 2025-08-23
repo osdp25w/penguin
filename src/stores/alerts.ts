@@ -27,12 +27,19 @@ export const useAlerts = defineStore('alerts', {
     async fetchOpen () {
       try {
         this.isLoading = true
-        const res = await fetch('/api/v1/alerts?state=open')
-        if (!res.ok) throw new Error(res.statusText)
-        this.list = await res.json()
         this.errMsg = ''
+        
+        const res = await fetch('/api/v1/alerts?resolved=false')
+        
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`)
+        }
+        
+        const data = await res.json()
+        this.list = AlertListSchema.parse(data)
       } catch (e: any) {
         this.errMsg = e.message ?? '警報載入失敗'
+        console.error('Alerts fetch error:', e)
       } finally {
         this.isLoading = false
       }
@@ -78,17 +85,20 @@ export const useAlerts = defineStore('alerts', {
     /* === 私有：由感測數據判斷是否生成警報 ==================== */
     _genAlertsFromSensor (data: any): Alert[] {
       const alerts: Alert[] = []
-      const ts = new Date().toISOString()
+      const createdAt = new Date().toISOString()
 
       /* 控制器溫度 ------------------------------------------- */
       if (typeof data.controllerTemp === 'number' &&
           data.controllerTemp >= CONTROLLER_OVERHEAT) {
         alerts.push({
           id        : crypto.randomUUID(),
+          siteId    : data.siteId ?? 'unknown',
           vehicleId : data.vehicleId ?? '未知車輛',
+          type      : 'temperature_alert',
           message   : `控制器溫度過高 (${data.controllerTemp} °C ≥ ${CONTROLLER_OVERHEAT} °C)`,
           severity  : 'critical',
-          ts
+          resolved  : false,
+          createdAt
         })
       }
 
@@ -98,10 +108,13 @@ export const useAlerts = defineStore('alerts', {
           data.battTemp >= BATTERY_DISCHG_OVERHEAT) {
         alerts.push({
           id        : crypto.randomUUID(),
+          siteId    : data.siteId ?? 'unknown',
           vehicleId : data.vehicleId ?? '未知車輛',
+          type      : 'battery_temperature',
           message   : `電池放電溫度過高 (${data.battTemp} °C ≥ ${BATTERY_DISCHG_OVERHEAT} °C)`,
           severity  : 'critical',
-          ts
+          resolved  : false,
+          createdAt
         })
       }
 
@@ -111,10 +124,13 @@ export const useAlerts = defineStore('alerts', {
           data.battTemp >= BATTERY_CHG_OVERHEAT) {
         alerts.push({
           id        : crypto.randomUUID(),
+          siteId    : data.siteId ?? 'unknown',
           vehicleId : data.vehicleId ?? '未知車輛',
+          type      : 'battery_temperature',
           message   : `電池充電溫度過高 (${data.battTemp} °C ≥ ${BATTERY_CHG_OVERHEAT} °C)`,
           severity  : 'critical',
-          ts
+          resolved  : false,
+          createdAt
         })
       }
 

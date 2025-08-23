@@ -16,7 +16,7 @@
 
     <!-- 右側文字 -->
     <div class="flex flex-col leading-snug">
-      <span class="text-base font-medium text-gray-500">{{ label }}</span>
+      <span class="text-base font-medium text-gray-700">{{ label }}</span>
       <span class="text-3xl font-extrabold text-gray-900">
         {{ value }}
         <span v-if="unit" class="ml-1 text-lg font-semibold text-gray-600">{{ unit }}</span>

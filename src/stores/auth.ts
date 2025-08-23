@@ -5,10 +5,12 @@ import { defineStore } from 'pinia'
 /*  型別定義                                                       */
 /* -------------------------------------------------------------- */
 export interface User {
-  id     : string
-  name   : string
-  email  : string
-  roleId : 'admin' | 'manager' | 'user'
+  id        : string
+  name      : string
+  email     : string
+  roleId    : 'admin' | 'manager' | 'user'
+  phone?    : string
+  avatarUrl?: string
 }
 
 const TOKEN_KEY = 'penguin.jwt'
@@ -66,6 +68,65 @@ export const useAuth = defineStore('auth', {
       this.user  = null
       localStorage.removeItem(TOKEN_KEY)
       sessionStorage.removeItem(ROLE_KEY)
+    },
+
+    /* ---------- 獲取個人資料 ---------------------------------- */
+    async fetchMe() {
+      if (!this.token) return
+
+      try {
+        const res = await fetch('/api/v1/me', {
+          method: 'GET',
+          headers: { 
+            'Authorization': `Bearer ${this.token}`,
+            'Content-Type': 'application/json' 
+          }
+        })
+        if (!res.ok) throw new Error('獲取個人資料失敗')
+
+        const user = await res.json() as User
+        this.user = user
+        return user
+      } catch (e: any) {
+        console.error('Fetch me error:', e)
+        throw e
+      }
+    },
+
+    /* ---------- 更新個人資料 ---------------------------------- */
+    async updateMe(payload: {
+      name?: string
+      email?: string
+      phone?: string
+      avatarUrl?: string
+      currentPassword?: string
+      password?: string
+    }) {
+      if (!this.token) throw new Error('未登入')
+
+      try {
+        const res = await fetch('/api/v1/me', {
+          method: 'PUT',
+          headers: { 
+            'Authorization': `Bearer ${this.token}`,
+            'Content-Type': 'application/json' 
+          },
+          body: JSON.stringify(payload)
+        })
+        
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}))
+          throw new Error(errorData.message || '更新個人資料失敗')
+        }
+
+        const updatedUser = await res.json() as User
+        this.user = updatedUser
+        
+        return updatedUser
+      } catch (e: any) {
+        console.error('Update me error:', e)
+        throw e
+      }
     }
   }
 })

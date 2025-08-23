@@ -9,23 +9,42 @@
       </div>
       
       <div class="flex items-center gap-3">
-        <select
-          v-model="selectedPeriod"
-          class="input-base w-32"
-          @change="updateData"
-        >
-          <option value="today">今日</option>
-          <option value="week">本週</option>
-          <option value="month">本月</option>
-        </select>
+        <div class="flex items-center gap-2">
+          <label class="text-sm font-medium text-gray-700">起始日期：</label>
+          <input
+            v-model="startDate"
+            type="date"
+            class="input-base w-36"
+            @change="updateData"
+          />
+        </div>
+        
+        <div class="flex items-center gap-2">
+          <label class="text-sm font-medium text-gray-700">結束日期：</label>
+          <input
+            v-model="endDate"
+            type="date"
+            class="input-base w-36"
+            @change="updateData"
+          />
+        </div>
         
         <Button
           variant="primary"
           @click="refreshData"
           :disabled="isLoading"
         >
-          <i-ph:arrow-clockwise class="w-4 h-4" />
+          <i class="i-ph-arrow-clockwise w-4 h-4" />
           更新資料
+        </Button>
+        
+        <Button
+          variant="ghost"
+          @click="exportData"
+          :disabled="isLoading"
+        >
+          <i class="i-ph-download w-4 h-4" />
+          匯出報表
         </Button>
       </div>
     </div>
@@ -39,7 +58,7 @@
         :change="5.2"
         trend="up"
         period="昨日"
-        icon="i-ph:bicycle"
+        icon="i-ph-bicycle"
         color="green"
       />
       
@@ -50,7 +69,7 @@
         :change="-2.1"
         trend="down"
         period="昨日"
-        icon="i-ph:warning-circle"
+        icon="i-ph-warning-circle"
         color="red"
       />
       
@@ -61,7 +80,7 @@
         :change="12.8"
         trend="up"
         period="昨日"
-        icon="i-ph:map-pin"
+        icon="i-ph-map-pin"
         color="blue"
         format="number"
         :precision="1"
@@ -74,7 +93,7 @@
         :change="8.5"
         trend="up"
         period="昨日"
-        icon="i-ph:leaf"
+        icon="i-ph-tree"
         color="green"
         format="number"
         :precision="1"
@@ -130,74 +149,7 @@
       </Card>
     </div>
 
-    <!-- Recent Activity -->
-    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-      <!-- Recent Alerts -->
-      <Card padding="md">
-        <template #header>
-          <div class="flex-between">
-            <h3 class="text-lg font-semibold text-gray-900">最新警報</h3>
-            <Button variant="ghost" size="sm">
-              查看全部
-              <i-ph:arrow-right class="w-4 h-4" />
-            </Button>
-          </div>
-        </template>
-        
-        <div class="space-y-3">
-          <div
-            v-for="alert in recentAlerts"
-            :key="alert.id"
-            class="flex items-start gap-3 p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors duration-200"
-          >
-            <div :class="getAlertIconClass(alert.type)">
-              <component :is="getAlertIcon(alert.type)" class="w-4 h-4" />
-            </div>
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-medium text-gray-900">{{ alert.message }}</p>
-              <p class="text-xs text-gray-500 mt-1">{{ alert.time }}</p>
-            </div>
-          </div>
-        </div>
-        
-        <div v-if="recentAlerts.length === 0" class="py-8">
-          <EmptyState
-            title="目前沒有警報"
-            description="系統運作正常，沒有需要注意的警報"
-            icon="i-ph:check-circle"
-            variant="default"
-          />
-        </div>
-      </Card>
-
-      <!-- System Status -->
-      <Card padding="md">
-        <template #header>
-          <h3 class="text-lg font-semibold text-gray-900">系統狀態</h3>
-        </template>
-        
-        <div class="space-y-4">
-          <div
-            v-for="status in systemStatus"
-            :key="status.name"
-            class="flex items-center justify-between p-3 rounded-lg bg-gray-50"
-          >
-            <div class="flex items-center gap-3">
-              <div :class="getStatusIconClass(status.status)">
-                <component :is="getStatusIcon(status.status)" class="w-4 h-4" />
-              </div>
-              <div>
-                <p class="text-sm font-medium text-gray-900">{{ status.name }}</p>
-                <p class="text-xs text-gray-500">{{ status.description }}</p>
-              </div>
-            </div>
-            <span :class="getStatusBadgeClass(status.status)" class="px-2 py-1 text-xs font-medium rounded-full">
-              {{ getStatusText(status.status) }}
-            </span>
-          </div>
-        </div>
-      </Card>
-    </div>
+    <!-- Recent Activity (Disabled) - Removed for cleaner layout -->
   </div>
 </template>
 
@@ -208,10 +160,24 @@ import SocTrend from '@/components/charts/SocTrend.vue'
 import CarbonBar from '@/components/charts/CarbonBar.vue'
 
 // Reactive data
-const selectedPeriod = ref('today')
+const startDate = ref(getDefaultStartDate())
+const endDate = ref(getDefaultEndDate()) 
 const isLoading = ref(false)
 const socLoading = ref(false)
 const carbonLoading = ref(false)
+
+// Helper functions for default dates
+function getDefaultStartDate(): string {
+  const today = new Date()
+  const lastWeek = new Date(today)
+  lastWeek.setDate(today.getDate() - 7)
+  return lastWeek.toISOString().split('T')[0]
+}
+
+function getDefaultEndDate(): string {
+  const today = new Date()
+  return today.toISOString().split('T')[0]
+}
 
 const summary = reactive({ 
   online: 42, 
@@ -288,65 +254,135 @@ const refreshData = async () => {
 }
 
 const updateData = () => {
-  // Update data based on selected period
-  console.log('更新資料期間:', selectedPeriod.value)
-  // In real app, fetch data from API based on period
+  // Update data based on selected date range
+  console.log('更新資料日期範圍:', { 
+    startDate: startDate.value, 
+    endDate: endDate.value 
+  })
+  
+  // Validate date range
+  if (startDate.value && endDate.value) {
+    const start = new Date(startDate.value)
+    const end = new Date(endDate.value)
+    
+    if (start > end) {
+      alert('起始日期不能晚於結束日期')
+      return
+    }
+    
+    // Calculate days difference
+    const diffTime = end.getTime() - start.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    console.log('日期範圍天數:', diffDays)
+    
+    // In real app, fetch data from API based on date range
+    // Example API call: fetchData({ startDate: startDate.value, endDate: endDate.value })
+  }
 }
 
-// Helper methods for status indicators
-const getAlertIcon = (type: string) => {
-  const icons = {
-    warning: 'i-ph:warning',
-    error: 'i-ph:x-circle',
-    info: 'i-ph:info'
+const exportData = () => {
+  // Validate date range before export
+  if (!startDate.value || !endDate.value) {
+    alert('請選擇完整的日期範圍')
+    return
   }
-  return icons[type as keyof typeof icons] || 'i-ph:info'
+  
+  const start = new Date(startDate.value)
+  const end = new Date(endDate.value)
+  
+  if (start > end) {
+    alert('起始日期不能晚於結束日期')
+    return
+  }
+  
+  // Prepare export data
+  const exportData = {
+    dateRange: {
+      startDate: startDate.value,
+      endDate: endDate.value
+    },
+    kpi: {
+      onlineVehicles: summary.online,
+      offlineVehicles: summary.offline,
+      totalDistance: summary.distance,
+      carbonSaved: summary.carbon
+    },
+    chartData: {
+      socTrend: {
+        labels: socLabels,
+        values: socValues
+      },
+      carbonReduction: {
+        labels: carbonLabels,
+        values: carbonValues
+      }
+    },
+    exportTime: new Date().toISOString(),
+    exportedBy: 'system'
+  }
+  
+  // Create and download CSV file
+  const csvContent = generateCSVContent(exportData)
+  downloadCSV(csvContent, `system-overview-${startDate.value}-to-${endDate.value}.csv`)
+  
+  console.log('匯出資料:', exportData)
 }
 
-const getAlertIconClass = (type: string) => {
-  const classes = {
-    warning: 'p-2 rounded-lg bg-yellow-100 text-yellow-600',
-    error: 'p-2 rounded-lg bg-red-100 text-red-600',
-    info: 'p-2 rounded-lg bg-blue-100 text-blue-600'
-  }
-  return classes[type as keyof typeof classes] || classes.info
+const generateCSVContent = (data: any): string => {
+  const lines = []
+  
+  // Header
+  lines.push('系統總覽報表')
+  lines.push(`匯出時間：${new Date(data.exportTime).toLocaleString('zh-TW')}`)
+  lines.push(`日期範圍：${data.dateRange.startDate} 至 ${data.dateRange.endDate}`)
+  lines.push('')
+  
+  // KPI Data
+  lines.push('KPI 指標')
+  lines.push('指標名稱,數值,單位')
+  lines.push(`上線車輛,${data.kpi.onlineVehicles},台`)
+  lines.push(`離線車輛,${data.kpi.offlineVehicles},台`)
+  lines.push(`今日總里程,${data.kpi.totalDistance},公里`)
+  lines.push(`減碳效益,${data.kpi.carbonSaved},kg CO₂`)
+  lines.push('')
+  
+  // SoC Trend Data
+  lines.push('電池狀態趨勢')
+  lines.push('時間,平均 SoC (%)')
+  data.chartData.socTrend.labels.forEach((label: string, index: number) => {
+    lines.push(`${label},${data.chartData.socTrend.values[index]}`)
+  })
+  lines.push('')
+  
+  // Carbon Reduction Data
+  lines.push('減碳量統計')
+  lines.push('日期,減碳量 (kg CO₂)')
+  data.chartData.carbonReduction.labels.forEach((label: string, index: number) => {
+    lines.push(`${label},${data.chartData.carbonReduction.values[index]}`)
+  })
+  
+  return lines.join('\n')
 }
 
-const getStatusIcon = (status: string) => {
-  const icons = {
-    healthy: 'i-ph:check-circle',
-    warning: 'i-ph:warning',
-    error: 'i-ph:x-circle'
+const downloadCSV = (content: string, filename: string) => {
+  // Add BOM for proper UTF-8 encoding in Excel
+  const BOM = '\uFEFF'
+  const blob = new Blob([BOM + content], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  
+  if (link.download !== undefined) {
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', filename)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
-  return icons[status as keyof typeof icons] || 'i-ph:check-circle'
 }
 
-const getStatusIconClass = (status: string) => {
-  const classes = {
-    healthy: 'p-2 rounded-lg bg-green-100 text-green-600',
-    warning: 'p-2 rounded-lg bg-yellow-100 text-yellow-600',
-    error: 'p-2 rounded-lg bg-red-100 text-red-600'
-  }
-  return classes[status as keyof typeof classes] || classes.healthy
-}
-
-const getStatusBadgeClass = (status: string) => {
-  const classes = {
-    healthy: 'bg-green-100 text-green-800',
-    warning: 'bg-yellow-100 text-yellow-800',
-    error: 'bg-red-100 text-red-800'
-  }
-  return classes[status as keyof typeof classes] || classes.healthy
-}
-
-const getStatusText = (status: string) => {
-  const texts = {
-    healthy: '正常',
-    warning: '警告',
-    error: '異常'
-  }
-  return texts[status as keyof typeof texts] || '正常'
-}
+// Cleanup: Removed unused helper methods for disabled alert and status sections
 
 onMounted(() => {
   // Initial data load
