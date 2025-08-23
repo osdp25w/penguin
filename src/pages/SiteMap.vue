@@ -145,7 +145,7 @@
             >
               <div class="flex-between">
                 <h4 class="font-medium text-gray-900">{{ site.name }}</h4>
-                <span :class="getStatusBadgeClass(site.status) px-2 py-1 text-xs font-medium rounded-full">
+                <span :class="[getStatusBadgeClass(site.status), 'px-2 py-1 text-xs font-medium rounded-full']">
                   {{ getStatusText(site.status) }}
                 </span>
               </div>

@@ -191,7 +191,7 @@
                 <p class="text-xs text-gray-500">{{ status.description }}</p>
               </div>
             </div>
-            <span :class="getStatusBadgeClass(status.status) px-2 py-1 text-xs font-medium rounded-full">
+            <span :class="[getStatusBadgeClass(status.status), 'px-2 py-1 text-xs font-medium rounded-full']">
               {{ getStatusText(status.status) }}
             </span>
           </div>

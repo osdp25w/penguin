@@ -17,10 +17,9 @@
           <div v-if="change !== undefined" class="flex items-center gap-1">
             <component 
               :is="changeIcon" 
-              :class="changeIconClass"
-              class="w-4 h-4" 
+              :class="[changeIconClass, 'w-4 h-4']"
             />
-            <span :class="changeTextClass text-sm font-medium">
+            <span :class="[changeTextClass, 'text-sm font-medium']">
               {{ Math.abs(change) }}{{ unit }}
               <span class="text-gray-500 font-normal ml-1">vs {{ period }}</span>
             </span>

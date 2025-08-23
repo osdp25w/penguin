@@ -194,7 +194,7 @@
                 {{ getSiteName(vehicle.siteId) }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
-                <span :class="getStatusBadgeClass(vehicle.status) px-2 py-1 text-xs font-medium rounded-full">
+                <span :class="[getStatusBadgeClass(vehicle.status), 'px-2 py-1 text-xs font-medium rounded-full']">
                   {{ getStatusText(vehicle.status) }}
                 </span>
               </td>
