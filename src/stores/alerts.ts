@@ -3,6 +3,7 @@
  * ---------------------------------------------------------------- */
 import { defineStore } from 'pinia'
 import type { Alert } from '@/types'
+import { AlertListSchema } from '@/types/alert'
 
 /* === 計畫書警戒閾值 ============================================= */
 const CONTROLLER_OVERHEAT       = 90  // 控制器溫度 °C
@@ -14,7 +15,11 @@ export const useAlerts = defineStore('alerts', {
     isLive   : false,         // WebSocket 是否連線中
     isLoading: false,         // API 載入中
     errMsg   : '',            // 錯誤訊息
-    list     : [] as Alert[]  // 警報清單
+    list     : [] as Alert[],  // 警報清單
+    // Site-based alerts for map
+    bySite: {} as Record<string, Alert[]>,
+    loadingBySite: {} as Record<string, boolean>,
+    errorBySite: {} as Record<string, string | null>
   }),
 
   actions: {
@@ -114,6 +119,54 @@ export const useAlerts = defineStore('alerts', {
       }
 
       return alerts
+    },
+
+    /** Fetch alerts by site ID */
+    async fetchBySiteSince(siteId: string, since?: string) {
+      if (!siteId) return
+      
+      this.loadingBySite[siteId] = true
+      this.errorBySite[siteId] = null
+      
+      try {
+        const params = new URLSearchParams({ siteId })
+        if (since) params.append('since', since)
+        
+        const response = await fetch(`/api/v1/alerts?${params}`)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        
+        const data = await response.json()
+        this.bySite[siteId] = AlertListSchema.parse(data)
+      } catch (err: any) {
+        this.errorBySite[siteId] = err.message || 'Unknown error'
+        this.bySite[siteId] = []
+      } finally {
+        this.loadingBySite[siteId] = false
+      }
+    },
+
+    /** Get alerts by site ID */
+    getAlertsBySite(siteId: string): Alert[] {
+      return this.bySite[siteId] || []
+    },
+
+    /** Get recent alerts by site ID */
+    getRecentAlertsBySite(siteId: string, limit = 5): Alert[] {
+      const alerts = this.getAlertsBySite(siteId)
+      return alerts
+        .filter(alert => !alert.resolved)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, limit)
+    },
+
+    /** Check if site alerts are loading */
+    isLoadingBySite(siteId: string): boolean {
+      return this.loadingBySite[siteId] || false
+    },
+
+    /** Get error for site alerts */
+    getErrorBySite(siteId: string): string | null {
+      return this.errorBySite[siteId] || null
     }
   }
 })

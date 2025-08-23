@@ -1,4 +1,8 @@
-/* 1️⃣ KPI ---------------------------------------------------------- */
+export * from './site'
+export * from './vehicle'  
+export * from './alert'
+
+/* Legacy types - keeping for compatibility */
 export interface SummaryKpi {
   online   : number
   offline  : number
@@ -7,26 +11,6 @@ export interface SummaryKpi {
 }
 export type SummaryKpis = SummaryKpi
 
-/* 2️⃣ Vehicle ------------------------------------------------------ */
-export interface Vehicle {
-  id          : string
-  name        : string
-  soc         : number
-  lastSeen    : string               // ISO
-
-  /* ── 新增欄位 (管理 / ML 皆會用) ── */
-  motorId?     : string
-  batteryId?   : string
-  controllerId?: string
-
-  mqttOnline   : boolean
-  mqttPort     : number
-
-  lat          : number              // 6-位小數
-  lon          : number
-}
-
-/* 3️⃣ Battery ------------------------------------------------------ */
 export interface Battery {
   id        : string
   vehicleId : string
@@ -34,7 +18,6 @@ export interface Battery {
   temp      : number
 }
 
-/* 4️⃣ Battery Stat (趨勢圖) --------------------------------------- */
 export interface BatteryStat {
   id        : string
   vehicleId : string
@@ -44,17 +27,6 @@ export interface BatteryStat {
   ts        : string
 }
 
-/* 5️⃣ Alert -------------------------------------------------------- */
-export type AlertSeverity = 'info' | 'warning' | 'critical'
-export interface Alert {
-  id        : string
-  vehicleId : string
-  message   : string
-  ts        : string
-  severity  : AlertSeverity
-}
-
-/* 6️⃣ RBAC --------------------------------------------------------- */
 export interface Role {
   id     : string
   name   : string

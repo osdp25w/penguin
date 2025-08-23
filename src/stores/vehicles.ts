@@ -1,6 +1,7 @@
 // src/stores/vehicles.ts
 import { defineStore } from 'pinia'
 import type { Vehicle } from '@/types'
+import { VehicleListSchema } from '@/types/vehicle'
 
 const DEFAULT_PAGE_SIZE = 20
 
@@ -11,7 +12,11 @@ export const useVehicles = defineStore('vehicles', {
     items   : [] as Vehicle[],
     page    : 1 as number,
     total   : 0 as number,
-    pageSize: DEFAULT_PAGE_SIZE as number
+    pageSize: DEFAULT_PAGE_SIZE as number,
+    // Site-based vehicle storage for map
+    bySite: {} as Record<string, Vehicle[]>,
+    loadingBySite: {} as Record<string, boolean>,
+    errorBySite: {} as Record<string, string | null>
   }),
 
   getters: {
@@ -56,6 +61,42 @@ export const useVehicles = defineStore('vehicles', {
       // 預先加到列表前面，並更新總數
       this.items.unshift(v)
       this.total += 1
+    },
+
+    /** Fetch vehicles by site ID for map */
+    async fetchBySite(siteId: string) {
+      if (!siteId) return
+      
+      this.loadingBySite[siteId] = true
+      this.errorBySite[siteId] = null
+      
+      try {
+        const response = await fetch(`/api/v1/vehicles?siteId=${siteId}`)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        
+        const data = await response.json()
+        this.bySite[siteId] = VehicleListSchema.parse(data)
+      } catch (err: any) {
+        this.errorBySite[siteId] = err.message || 'Unknown error'
+        this.bySite[siteId] = []
+      } finally {
+        this.loadingBySite[siteId] = false
+      }
+    },
+
+    /** Get vehicles by site ID */
+    getVehiclesBySite(siteId: string): Vehicle[] {
+      return this.bySite[siteId] || []
+    },
+
+    /** Check if site vehicles are loading */
+    isLoadingBySite(siteId: string): boolean {
+      return this.loadingBySite[siteId] || false
+    },
+
+    /** Get error for site vehicles */
+    getErrorBySite(siteId: string): string | null {
+      return this.errorBySite[siteId] || null
     }
   }
 })

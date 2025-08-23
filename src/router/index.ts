@@ -15,6 +15,7 @@ const VehicleTable   = () => import('@/pages/VehicleTable.vue')
 const BatteryHealth  = () => import('@/pages/BatteryHealth.vue')
 const Alerts         = () => import('@/pages/Alerts.vue')
 const UserManagement = () => import('@/pages/UserManagement.vue')
+const SiteMap        = () => import('@/pages/SiteMap.vue')
 
 /* ML 綜合單頁 */
 const MLPredict      = () => import('@/pages/MLPredict.vue')
@@ -27,6 +28,7 @@ const routes: RouteRecordRaw[] = [
   /* ── 需登入 ── */
   { path: '/',         component: Overview,      meta:{ requiresAuth:true } },
   { path: '/map',      component: LiveMap,       meta:{ requiresAuth:true } },
+  { path: '/sites',    component: SiteMap,       meta:{ requiresAuth:true, title:'場域地圖' } },
   { path: '/vehicles', component: VehicleTable,  meta:{ requiresAuth:true } },
   { path: '/battery',  component: BatteryHealth, meta:{ requiresAuth:true } },
   { path: '/alerts',   component: Alerts,        meta:{ requiresAuth:true } },

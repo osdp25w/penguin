@@ -1,5 +1,8 @@
 import { rest, type RestHandler } from 'msw'
 import { faker }                  from '@faker-js/faker'
+import { sitesHandlers } from './handlers/sites'
+import { vehiclesHandlers } from './handlers/vehicles'
+import { alertsHandlers } from './handlers/alerts'
 
 const api = (p: string) => `/api/v1${p}`
 
@@ -170,6 +173,9 @@ const mlBattery: RestHandler = rest.get(api('/ml/battery'), (_, res, ctx) =>
 
 /* ── Export handlers ───────────────────────────────── */
 export const handlers = [
+  ...sitesHandlers,
+  ...vehiclesHandlers,
+  ...alertsHandlers,
   summary,
   vehicles,
   batteries,
