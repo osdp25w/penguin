@@ -22,8 +22,9 @@ async function startMockServiceWorker(): Promise<void> {
 }
 
 /* ────────────────────────────────────────────────────────────────
- *  2. 全域樣式 (UnoCSS → 自訂覆蓋，順序不能反)
+ *  2. 全域樣式 (Design Tokens → UnoCSS → 自訂覆蓋，順序不能反)
  * ---------------------------------------------------------------- */
+import '@/design/tokens.css'
 import 'virtual:uno.css'
 import '@/assets/index.css'
 

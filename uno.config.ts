@@ -25,10 +25,16 @@ export default defineConfig({
   ],
 
   /* ------------------------------------------------------------------ *
-   * 2️⃣  全域主題：品牌色 & 字級                                         *
+   * 2️⃣  全域主題：品牌色 & 字級 + Design Tokens                        *
    * ------------------------------------------------------------------ */
   theme: {
     colors: {
+      'brand-primary': 'var(--color-brand-primary)',
+      'brand-secondary': 'var(--color-brand-secondary)',
+      'success': 'var(--color-success)',
+      'warning': 'var(--color-warning)',
+      'danger': 'var(--color-danger)',
+      'info': 'var(--color-info)',
       brand: {
         50:  '#eef2ff',
         100: '#e0e7ff',
@@ -50,22 +56,41 @@ export default defineConfig({
       '2xl': '28px',
       '3xl': '32px',
     },
+    /* 自訂陰影 */
+    boxShadow: {
+      'base': 'var(--shadow-base)',
+      'lg': 'var(--shadow-lg)',
+      'xl': 'var(--shadow-xl)',
+    },
   },
 
   /* ------------------------------------------------------------------ *
-   * 3️⃣  常用捷徑：btn / card                                           *
+   * 3️⃣  常用捷徑：btn / card + Design System Components               *
    * ------------------------------------------------------------------ */
   shortcuts: {
-    /* 主按鈕 ── `class="btn"` */
+    /* 按鈕變體 */
+    'btn-primary': 'px-4 py-2 bg-brand-primary text-white rounded-lg font-medium hover:opacity-90 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
+    'btn-secondary': 'px-4 py-2 bg-brand-secondary text-white rounded-lg font-medium hover:opacity-90 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
+    'btn-ghost': 'px-4 py-2 text-brand-primary border border-brand-primary rounded-lg font-medium hover:bg-brand-primary hover:text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
+    'btn-danger': 'px-4 py-2 bg-danger text-white rounded-lg font-medium hover:opacity-90 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
+    
+    /* 卡片組件 */
+    'card': 'bg-white rounded-xl shadow-base border border-gray-200',
+    'card-hover': 'bg-white rounded-xl shadow-base border border-gray-200 hover:shadow-lg transition-shadow duration-200',
+    
+    /* 輸入組件 */
+    'input-base': 'w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-brand-primary outline-none transition-all duration-200',
+    
+    /* 佈局組件 */
+    'flex-center': 'flex items-center justify-center',
+    'flex-between': 'flex items-center justify-between',
+    
+    /* 原有按鈕保持兼容 */
     btn: `inline-flex items-center gap-2 rounded-lg px-4 py-2 font-medium
           bg-brand-500 text-white
           hover:bg-brand-400 active:bg-brand-600
           transition duration-150
           disabled:cursor-not-allowed disabled:opacity-60`,
-
-    /* 玻璃卡 ── `class="card"` */
-    card: `rounded-2xl shadow-lg bg-white/5 backdrop-blur-sm
-           border border-white/10 p-6`,
   },
 
   /* ------------------------------------------------------------------ *
@@ -78,5 +103,13 @@ export default defineConfig({
       `from-${t}-500/80`,
       `to-${t}-600/90`,
     ]),
+    // Design system utilities
+    'btn-primary',
+    'btn-secondary', 
+    'btn-ghost',
+    'btn-danger',
+    'card',
+    'card-hover',
+    'input-base',
   ],
 })

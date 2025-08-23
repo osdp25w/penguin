@@ -1,7 +1,7 @@
 <template>
-  <AppLayout />
+  <AppShell />
 </template>
 
 <script setup lang="ts">
-import AppLayout from '@/layouts/AppLayout.vue';
+import AppShell from '@/layouts/AppShell.vue';
 </script>
