@@ -14,12 +14,14 @@ export default defineConfig({
     presetUno(),
     presetAttributify(),
     presetIcons({
-      /* 讓 <i-ph:arrow-left-duotone /> 正常渲染 ----------------------- */
+      /* 支援 ph 和 lucide 圖示集 ------------------------------------ */
       collections: {
         ph: () =>
           import('@iconify-json/ph/icons.json').then((i) => i.default),
+        lucide: () =>
+          import('@iconify-json/lucide/icons.json').then((i) => i.default),
       },
-      scale: 1.2,
+      scale: 1.1,
       warn: true,
     }),
   ],
@@ -94,7 +96,7 @@ export default defineConfig({
   },
 
   /* ------------------------------------------------------------------ *
-   * 4️⃣  safelist：動態產生的漸層／背景色先打包進去                      *
+   * 4️⃣  safelist：動態產生的漸層／背景色 + 圖示類別                      *
    * ------------------------------------------------------------------ */
   safelist: [
     ...['emerald', 'rose', 'indigo', 'teal', 'brand'].flatMap((t) => [
@@ -111,5 +113,38 @@ export default defineConfig({
     'card',
     'card-hover',
     'input-base',
+    // 常用圖示類別（確保動態圖示能正確載入）
+    'i-ph:trend-up',
+    'i-ph:trend-down', 
+    'i-ph:minus',
+    'i-ph:bicycle',
+    'i-ph:warning-circle',
+    'i-ph:map-pin',
+    'i-ph:leaf',
+    'i-ph:check-circle',
+    'i-ph:gear',
+    'i-ph:chart-line-up',
+    'i-ph:chart-line-down',
+    'i-ph:house',
+    'i-ph:users',
+    'i-ph:bell',
+    'i-ph:magnifying-glass',
+    'i-ph:arrow-clockwise',
+    'i-ph:x-circle',
+    'i-ph:info',
+    'i-ph:warning',
+    'i-ph:arrow-right',
+    'i-ph:list',
+    'i-ph:x',
+    'i-ph:caret-down',
+    'i-ph:sign-out',
+    'i-ph:user',
+    'i-ph:question',
+    'i-lucide:bike',
+    'i-lucide:map-pin',
+    'i-lucide:alert-triangle',
+    'i-lucide:activity',
+    'i-lucide:users',
+    'i-lucide:settings',
   ],
 })

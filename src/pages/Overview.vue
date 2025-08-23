@@ -24,7 +24,7 @@
           @click="refreshData"
           :disabled="isLoading"
         >
-          <i-ph:arrow-clockwise class="w-4 h-4" />
+          <i class="i-ph:arrow-clockwise" class="w-4 h-4"></i>
           更新資料
         </Button>
       </div>
@@ -139,7 +139,7 @@
             <h3 class="text-lg font-semibold text-gray-900">最新警報</h3>
             <Button variant="ghost" size="sm">
               查看全部
-              <i-ph:arrow-right class="w-4 h-4" />
+              <i class="i-ph:arrow-right" class="w-4 h-4"></i>
             </Button>
           </div>
         </template>

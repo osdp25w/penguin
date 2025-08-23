@@ -14,7 +14,7 @@
                 class="lg:hidden"
                 @click="sidebarOpen = !sidebarOpen"
               >
-                <i-ph:list class="w-5 h-5" />
+                <i class="i-ph:list" class="w-5 h-5"></i>
               </Button>
               
               <!-- Logo -->
@@ -22,7 +22,7 @@
                 to="/"
                 class="flex items-center gap-2 text-xl font-bold text-brand-primary"
               >
-                <i-ph:bicycle class="w-8 h-8" />
+                <i class="i-ph:bicycle" class="w-8 h-8"></i>
                 嘉大數據平台
               </router-link>
             </div>
@@ -56,13 +56,13 @@
                   class="w-64 px-4 py-2 pl-10 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-brand-primary outline-none"
                   @keyup.enter="handleSearch"
                 >
-                <i-ph:magnifying-glass class="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+                <i class="i-ph:magnifying-glass" class="absolute left-3 top-2.5 w-4 h-4 text-gray-400"></i>
               </div>
             </div>
             
             <!-- Notifications -->
             <Button variant="ghost" size="sm" class="relative">
-              <i-ph:bell class="w-5 h-5" />
+              <i class="i-ph:bell" class="w-5 h-5"></i>
               <span class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
             </Button>
             
@@ -80,7 +80,7 @@
                 <span class="hidden sm:block text-sm font-medium text-gray-700">
                   {{ currentUser.name }}
                 </span>
-                <i-ph:caret-down class="w-4 h-4 text-gray-400" />
+                <i class="i-ph:caret-down" class="w-4 h-4 text-gray-400"></i>
               </Button>
               
               <!-- User Dropdown -->
@@ -133,7 +133,7 @@
                   size="sm"
                   @click="sidebarOpen = false"
                 >
-                  <i-ph:x class="w-4 h-4" />
+                  <i class="i-ph:x" class="w-4 h-4"></i>
                 </Button>
               </div>
             </div>
@@ -202,12 +202,12 @@ const userInitials = computed(() => {
 })
 
 const navigation = [
-  { name: '總覽', href: '/', icon: 'i-ph:house' },
-  { name: '車輛警報', href: '/alerts', icon: 'i-ph:warning' },
-  { name: '歸還流程', href: '/return', icon: 'i-ph:arrow-counter-clockwise' },
-  { name: '使用者管理', href: '/users', icon: 'i-ph:users' },
-  { name: '站點地圖', href: '/map', icon: 'i-ph:map-pin' },
-  { name: '數據分析', href: '/analytics', icon: 'i-ph:chart-line' },
+  { name: '系統總覽', href: '/', icon: 'i-ph:house' },
+  { name: '場域地圖', href: '/sites', icon: 'i-ph:map-pin' },
+  { name: '車輛清單', href: '/vehicles', icon: 'i-ph:bicycle' },
+  { name: '警報中心', href: '/alerts', icon: 'i-ph:warning-circle' },
+  { name: 'ML 預測', href: '/ml', icon: 'i-ph:chart-line-up' },
+  { name: '帳號管理', href: '/admin/users', icon: 'i-ph:users' },
 ]
 
 const userMenuItems = [

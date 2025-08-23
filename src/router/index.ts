@@ -1,52 +1,53 @@
-/* ─── Pinia 就緒 (守衛要用) ───────────────────────────── */
-import { createPinia, setActivePinia } from 'pinia'
-const pinia = createPinia()
-setActivePinia(pinia)
-
 /* ─── Vue-Router 相關 ────────────────────────────────── */
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuth } from '@/stores/auth'
 
-/* lazy pages */
-const Login          = () => import('@/pages/Login.vue')
-const Overview       = () => import('@/pages/Overview.vue')
-const LiveMap        = () => import('@/pages/LiveMap.vue')
-const VehicleTable   = () => import('@/pages/VehicleTable.vue')
-const BatteryHealth  = () => import('@/pages/BatteryHealth.vue')
-const Alerts         = () => import('@/pages/Alerts.vue')
-const UserManagement = () => import('@/pages/UserManagement.vue')
-const SiteMap        = () => import('@/pages/SiteMap.vue')
+/* Layout */
+const AppShell = () => import('@/layouts/AppShell.vue')
 
-/* ML 綜合單頁 */
-const MLPredict      = () => import('@/pages/MLPredict.vue')
+/* Pages */
+const Login = () => import('@/pages/Login.vue')
+const Overview = () => import('@/pages/Overview.vue')
+const SiteMap = () => import('@/pages/SiteMap.vue')
+const Vehicles = () => import('@/pages/Vehicles.vue')
+const Alerts = () => import('@/pages/Alerts.vue')
+const MLPredict = () => import('@/pages/MLPredict.vue')
+const Users = () => import('@/pages/admin/Users.vue')
 
 /* routes -------------------------------------------------- */
 const routes: RouteRecordRaw[] = [
-  /* ── 公開 ── */
+  /* ── 公開頁面 ── */
   { path: '/login', component: Login },
 
-  /* ── 需登入 ── */
-  { path: '/',         component: Overview,      meta:{ requiresAuth:true } },
-  { path: '/map',      component: LiveMap,       meta:{ requiresAuth:true } },
-  { path: '/sites',    component: SiteMap,       meta:{ requiresAuth:true, title:'場域地圖' } },
-  { path: '/vehicles', component: VehicleTable,  meta:{ requiresAuth:true } },
-  { path: '/battery',  component: BatteryHealth, meta:{ requiresAuth:true } },
-  { path: '/alerts',   component: Alerts,        meta:{ requiresAuth:true } },
-
-  /* ML 綜合預測 */
-  { path: '/ml', component: MLPredict,  meta:{ requiresAuth:true, title:'ML 預測' } },
-
-  /* Admin 專用 */
-  { path: '/admin/users', component: UserManagement,
-    meta:{ requiresAuth:true, requiresAdmin:true, title:'帳號管理' } },
-
-  /* 403 */
-  { path: '/403',
-    component: { template:'<div class="grid h-screen place-content-center text-2xl font-bold text-rose-600">403&nbsp;Forbidden</div>' }
+  /* ── 主應用 (需登入) ── */
+  {
+    path: '/',
+    component: AppShell,
+    meta: { requiresAuth: true },
+    children: [
+      { path: '', component: Overview, meta: { title: '系統總覽' } },
+      { path: 'sites', component: SiteMap, meta: { title: '場域地圖' } },
+      { path: 'vehicles', component: Vehicles, meta: { title: '車輛清單' } },
+      { path: 'alerts', component: Alerts, meta: { title: '警報中心' } },
+      { path: 'ml', component: MLPredict, meta: { title: 'ML 預測' } },
+      { 
+        path: 'admin/users', 
+        component: Users, 
+        meta: { title: '帳號管理', requiresAdmin: true } 
+      },
+    ]
   },
 
-  /* 其他 → / */
-  { path: '/:pathMatch(.*)*', redirect:'/' }
+  /* 403 Forbidden */
+  { 
+    path: '/403',
+    component: { 
+      template: '<div class="min-h-screen flex-center"><div class="text-center"><h1 class="text-4xl font-bold text-red-600 mb-4">403</h1><p class="text-gray-600">存取被拒絕</p></div></div>' 
+    }
+  },
+
+  /* 其他路由 → 首頁 */
+  { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 
 export const router = createRouter({
