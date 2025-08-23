@@ -1,9 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, reactive } from 'vue'
 import { z } from 'zod'
-import { useVehiclesStore } from './vehicles'
-import { useSitesStore } from './sites' 
-import { useAlertsStore } from './alerts'
+import { useVehicles } from './vehicles'
+import { useSites } from './sites'
 
 // Zod 驗證模式
 export const ReturnPayloadSchema = z.object({
@@ -25,7 +24,7 @@ export const ReturnRecordSchema = ReturnPayloadSchema.extend({
 export type ReturnPayload = z.infer<typeof ReturnPayloadSchema>
 export type ReturnRecord = z.infer<typeof ReturnRecordSchema>
 
-export const useReturnsStore = defineStore('returns', () => {
+export const useReturns = defineStore('returns', () => {
   // State
   const list = ref<ReturnRecord[]>([])
   const loading = ref(false)
@@ -130,14 +129,7 @@ export const useReturnsStore = defineStore('returns', () => {
       lastUpdated: returnRecord.createdAt,
     })
 
-    // 更新站點可用車輛數
-    const sitesStore = useSitesStore()
-    await sitesStore.updateSiteStats(returnRecord.siteId)
-    
-    // 如果是跨站歸還，也更新原站點
-    if (returnRecord.fromSiteId && returnRecord.fromSiteId !== returnRecord.siteId) {
-      await sitesStore.updateSiteStats(returnRecord.fromSiteId)
-    }
+    // TODO: Update site stats when API is available
   }
 
   // 獲取站點最近歸還記錄
@@ -162,9 +154,9 @@ export const useReturnsStore = defineStore('returns', () => {
 
   return {
     // State
-    list: readonly(list),
-    loading: readonly(loading),
-    error: readonly(error),
+    list,
+    loading,
+    error,
     
     // Actions
     returnVehicle,

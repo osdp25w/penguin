@@ -3,6 +3,7 @@ import { faker }                  from '@faker-js/faker'
 import { sitesHandlers } from './handlers/sites'
 import { vehiclesHandlers } from './handlers/vehicles'
 import { alertsHandlers } from './handlers/alerts'
+import { returnsHandlers } from './handlers/returns'
 
 const api = (p: string) => `/api/v1${p}`
 
@@ -176,6 +177,7 @@ export const handlers = [
   ...sitesHandlers,
   ...vehiclesHandlers,
   ...alertsHandlers,
+  ...returnsHandlers,
   summary,
   vehicles,
   batteries,

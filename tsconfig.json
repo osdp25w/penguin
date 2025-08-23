@@ -16,8 +16,7 @@
     /* ---------- 全域型別 ---------- */
     "types": [
       "node",
-      "vite/client",
-      "google.maps"                          // ★ 新增：讓 vue-tsc 找到 google 命名空間
+      "vite/client"
     ],
 
     /* ---------- 路徑別名 ---------- */

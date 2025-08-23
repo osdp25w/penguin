@@ -93,76 +93,102 @@ const hasResult=computed(()=>Object.keys(result).length>0)
 </script>
 
 <template>
-  <div class="space-y-6">
-    <!-- 標題列 -->
-    <header class="flex items-center gap-4">
-      <h2 class="text-2xl font-bold">機器學習綜合預測</h2>
-      <span class="text-brand-300 text-sm">
-        花蓮路線 (車站 ➜ 七星潭) 距離 ≈ {{ routeDistance }} km
-      </span>
-      <button class="btn ml-auto" :disabled="ml.loading" @click="runPredict">
-        {{ ml.loading ? '計算中…' : '重新計算' }}
-      </button>
-    </header>
-
-    <!-- 表格 -->
-    <div class="card overflow-auto">
-      <table class="min-w-full text-sm">
-        <thead class="bg-gray-700 text-gray-200 sticky top-0">
-          <tr>
-            <th class="px-4 py-2 text-left">車輛 ID</th>
-            <th class="px-4 py-2 text-right">緯度</th>
-            <th class="px-4 py-2 text-right">經度</th>
-            <th class="px-4 py-2 text-right">預計時間 (分)</th>
-            <th class="px-4 py-2 text-right">能耗 (kWh)</th>
-            <th class="px-4 py-2 text-right">減碳 (kg)</th>
-            <th class="px-4 py-2 text-right">騎乘耗電 (kWh)</th>
-            <th class="px-4 py-2 text-center">充電建議</th>
-            <th class="px-4 py-2 text-right">建議踏頻 (rpm)</th>
-            <th class="px-4 py-2 text-right">建議變速比</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="v in vStore.items" :key="v.id"
-              class="border-t border-white/10 hover:bg-brand-400/5 transition">
-            <td class="px-4 py-2">{{ v.id }}</td>
-            <td class="px-4 py-2 text-right">{{ v.lat?.toFixed(6) ?? '—' }}</td>
-            <td class="px-4 py-2 text-right">{{ v.lon?.toFixed(6) ?? '—' }}</td>
-            <td class="px-4 py-2 text-right">
-              {{ result[v.id]?.estTime ?? (ml.loading ? '…' : '—') }}
-            </td>
-            <td class="px-4 py-2 text-right">
-              {{ result[v.id]?.estEnergy ?? (ml.loading ? '…' : '—') }}
-            </td>
-            <td class="px-4 py-2 text-right">
-              {{ result[v.id]?.saved ?? (ml.loading ? '…' : '—') }}
-            </td>
-            <td class="px-4 py-2 text-right">
-              {{ result[v.id]?.kWh ?? (ml.loading ? '…' : '—') }}
-            </td>
-            <td class="px-4 py-2 text-center">
-              {{ result[v.id]?.nextCharge ?? (ml.loading ? '…' : '—') }}
-            </td>
-            <td class="px-4 py-2 text-right">
-              {{ result[v.id]?.cadence ?? (ml.loading ? '…' : '—') }}
-            </td>
-            <td class="px-4 py-2 text-right">
-              {{ result[v.id]?.gearRatio ?? (ml.loading ? '…' : '—') }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div v-if="!hasResult" class="py-8 text-center text-brand-300">
-        {{ ml.loading ? '計算中，請稍候…' : '尚無預測結果' }}
+  <div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white border-b border-gray-200 px-6 py-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <i class="i-ph:cpu w-6 h-6 text-brand-primary" />
+          <div>
+            <h1 class="text-xl font-semibold text-gray-900">機器學習綜合預測</h1>
+            <p class="text-sm text-gray-600">
+              花蓮路線 (車站 ➜ 七星潭) 距離 ≈ {{ routeDistance }} km
+            </p>
+          </div>
+        </div>
+        <button
+          @click="runPredict"
+          :disabled="ml.loading"
+          class="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90 disabled:opacity-50"
+        >
+          <i :class="['i-ph:arrow-clockwise w-4 h-4', { 'animate-spin': ml.loading }]" />
+          <span>{{ ml.loading ? '計算中…' : '重新計算' }}</span>
+        </button>
       </div>
     </div>
 
-    <p v-if="ml.errMsg" class="text-rose-400">{{ ml.errMsg }}</p>
+    <!-- Content -->
+    <div class="p-6">
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">車輛 ID</th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">緯度</th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">經度</th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">預計時間 (分)</th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">能耗 (kWh)</th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">減碳 (kg)</th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">騎乘耗電 (kWh)</th>
+                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">充電建議</th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">建議踏頻 (rpm)</th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">建議變速比</th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              <tr v-for="v in vStore.items" :key="v.id" class="hover:bg-gray-50 transition-colors">
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ v.id }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{{ v.lat?.toFixed(6) ?? '—' }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{{ v.lon?.toFixed(6) ?? '—' }}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                  {{ result[v.id]?.estTime ?? (ml.loading ? '…' : '—') }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                  {{ result[v.id]?.estEnergy ?? (ml.loading ? '…' : '—') }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-green-600 text-right font-medium">
+                  {{ result[v.id]?.saved ?? (ml.loading ? '…' : '—') }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                  {{ result[v.id]?.kWh ?? (ml.loading ? '…' : '—') }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    {{ result[v.id]?.nextCharge ?? (ml.loading ? '…' : '—') }}
+                  </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                  {{ result[v.id]?.cadence ?? (ml.loading ? '…' : '—') }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                  {{ result[v.id]?.gearRatio ?? (ml.loading ? '…' : '—') }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div v-if="!hasResult" class="py-12 text-center">
+            <i class="i-ph:cpu w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <h3 class="text-lg font-medium text-gray-900 mb-2">
+              {{ ml.loading ? '計算中，請稍候…' : '尚無預測結果' }}
+            </h3>
+            <p class="text-gray-500">點擊重新計算按鈕開始預測</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Error Message -->
+      <div
+        v-if="ml.errMsg"
+        class="mt-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg"
+      >
+        <div class="flex items-center space-x-2">
+          <i class="i-ph:warning-circle w-5 h-5" />
+          <span class="font-medium">{{ ml.errMsg }}</span>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
-<style scoped>
-.btn  { @apply rounded bg-brand-600 px-4 py-1.5 text-white hover:bg-brand-500 disabled:opacity-60 transition; }
-.card { @apply rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-lg shadow-black/20 p-4; }
-</style>
