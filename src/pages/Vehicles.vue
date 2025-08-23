@@ -9,11 +9,11 @@
       
       <div class="flex items-center gap-3">
         <Button variant="ghost" @click="refreshData">
-          <i class="i-ph:arrow-clockwise" class="w-4 h-4"></i>
+          <i class="i-ph:arrow-clockwise w-4 h-4"></i>
           重新整理
         </Button>
         <Button variant="primary" @click="showAddModal = true">
-          <i class="i-ph:plus" class="w-4 h-4"></i>
+          <i class="i-ph:plus w-4 h-4"></i>
           新增車輛
         </Button>
       </div>
@@ -33,7 +33,7 @@
               class="input-base pl-10"
               @input="applyFilters"
             />
-            <i class="i-ph:magnifying-glass" class="absolute left-3 top-2.5 w-4 h-4 text-gray-400"></i>
+            <i class="i-ph:magnifying-glass absolute left-3 top-2.5 w-4 h-4 text-gray-400"></i>
           </div>
         </div>
 
@@ -194,7 +194,7 @@
                 {{ getSiteName(vehicle.siteId) }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
-                <span :class="getStatusBadgeClass(vehicle.status)" class="px-2 py-1 text-xs font-medium rounded-full">
+                <span :class="getStatusBadgeClass(vehicle.status) px-2 py-1 text-xs font-medium rounded-full">
                   {{ getStatusText(vehicle.status) }}
                 </span>
               </td>
@@ -216,13 +216,13 @@
               <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                 <div class="flex items-center gap-2">
                   <Button variant="ghost" size="sm" @click="viewVehicle(vehicle)">
-                    <i class="i-ph:eye" class="w-4 h-4"></i>
+                    <i class="i-ph:eye w-4 h-4"></i>
                   </Button>
                   <Button variant="ghost" size="sm" @click="editVehicle(vehicle)">
-                    <i class="i-ph:pencil" class="w-4 h-4"></i>
+                    <i class="i-ph:pencil w-4 h-4"></i>
                   </Button>
                   <Button variant="ghost" size="sm" @click="locateVehicle(vehicle)">
-                    <i class="i-ph:map-pin" class="w-4 h-4"></i>
+                    <i class="i-ph:map-pin w-4 h-4"></i>
                   </Button>
                 </div>
               </td>
@@ -283,15 +283,15 @@
           </span>
           <div class="flex items-center gap-2">
             <Button variant="ghost" size="sm" @click="batchMaintenance">
-              <i class="i-ph:wrench" class="w-4 h-4"></i>
+              <i class="i-ph:wrench w-4 h-4"></i>
               標記維護
             </Button>
             <Button variant="ghost" size="sm" @click="batchUpdateStatus">
-              <i class="i-ph:check-circle" class="w-4 h-4"></i>
+              <i class="i-ph:check-circle w-4 h-4"></i>
               更新狀態
             </Button>
             <Button variant="danger" size="sm" @click="batchDelete">
-              <i class="i-ph:trash" class="w-4 h-4"></i>
+              <i class="i-ph:trash w-4 h-4"></i>
               刪除
             </Button>
           </div>

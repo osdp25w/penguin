@@ -9,7 +9,7 @@
       
       <div class="flex items-center gap-3">
         <Button variant="ghost" size="sm" @click="refreshData">
-          <i class="i-ph:arrow-clockwise" class="w-4 h-4"></i>
+          <i class="i-ph:arrow-clockwise w-4 h-4"></i>
           重新整理
         </Button>
         <Button 
@@ -17,7 +17,7 @@
           @click="showReturnModal = true"
           :disabled="!selectedSite"
         >
-          <i class="i-ph:bicycle" class="w-4 h-4"></i>
+          <i class="i-ph:bicycle w-4 h-4"></i>
           歸還車輛
         </Button>
       </div>
@@ -145,7 +145,7 @@
             >
               <div class="flex-between">
                 <h4 class="font-medium text-gray-900">{{ site.name }}</h4>
-                <span :class="getStatusBadgeClass(site.status)" class="px-2 py-1 text-xs font-medium rounded-full">
+                <span :class="getStatusBadgeClass(site.status) px-2 py-1 text-xs font-medium rounded-full">
                   {{ getStatusText(site.status) }}
                 </span>
               </div>
@@ -206,7 +206,7 @@
                 <p class="text-gray-600 mt-1">{{ selectedSite.address }}</p>
               </div>
               <Button variant="ghost" size="sm" @click="selectedSite = null">
-                <i class="i-ph:x" class="w-5 h-5"></i>
+                <i class="i-ph:x w-5 h-5"></i>
               </Button>
             </div>
           </div>
@@ -216,7 +216,7 @@
             <div class="grid grid-cols-2 gap-4 mb-4">
               <div>
                 <span class="block text-sm text-gray-600">狀態</span>
-                <span :class="getStatusColor(selectedSite.status)" class="font-medium">
+                <span :class="getStatusColor(selectedSite.status) font-medium">
                   {{ getStatusText(selectedSite.status) }}
                 </span>
               </div>
@@ -254,7 +254,7 @@
                 </div>
                 <div class="flex items-center gap-4 mt-2 text-sm text-gray-600">
                   <span class="flex items-center gap-1">
-                    <i class="i-ph:battery-high" class="w-4 h-4"></i>
+                    <i class="i-ph:battery-high w-4 h-4"></i>
                     {{ returnRecord.battery }}%
                   </span>
                   <span v-if="returnRecord.issues" class="text-orange-600">
@@ -309,7 +309,7 @@
               fullWidth
               @click="showReturnModal = true"
             >
-              <i class="i-ph:bicycle" class="w-4 h-4"></i>
+              <i class="i-ph:bicycle w-4 h-4"></i>
               歸還車輛至此站點
             </Button>
           </div>
@@ -339,7 +339,7 @@
         class="fixed top-4 right-4 z-50 p-4 bg-green-500 text-white rounded-lg shadow-lg"
       >
         <div class="flex items-center gap-2">
-          <i class="i-ph:check-circle" class="w-5 h-5"></i>
+          <i class="i-ph:check-circle w-5 h-5"></i>
           {{ toastMessage }}
         </div>
       </div>

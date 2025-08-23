@@ -26,7 +26,7 @@
               @click="$emit('close')"
               class="!p-2"
             >
-              <i class="i-ph:x" class="w-5 h-5"></i>
+              <i class="i-ph:x w-5 h-5"></i>
             </Button>
           </div>
 
@@ -167,7 +167,7 @@
                 照片上傳 (選填)
               </label>
               <div class="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                <i class="i-ph:camera" class="w-8 h-8 text-gray-400 mx-auto mb-2"></i>
+                <i class="i-ph:camera w-8 h-8 text-gray-400 mx-auto mb-2"></i>
                 <p class="text-sm text-gray-600">點擊上傳或拖拽檔案至此</p>
                 <p class="text-xs text-gray-500 mt-1">支援 JPG, PNG 格式，最大 5MB</p>
               </div>

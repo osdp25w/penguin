@@ -20,7 +20,7 @@
               :class="changeIconClass"
               class="w-4 h-4" 
             />
-            <span :class="changeTextClass" class="text-sm font-medium">
+            <span :class="changeTextClass text-sm font-medium">
               {{ Math.abs(change) }}{{ unit }}
               <span class="text-gray-500 font-normal ml-1">vs {{ period }}</span>
             </span>

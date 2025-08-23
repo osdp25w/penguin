@@ -24,7 +24,7 @@
           @click="refreshData"
           :disabled="isLoading"
         >
-          <i class="i-ph:arrow-clockwise" class="w-4 h-4"></i>
+          <i class="i-ph:arrow-clockwise w-4 h-4"></i>
           更新資料
         </Button>
       </div>
@@ -139,7 +139,7 @@
             <h3 class="text-lg font-semibold text-gray-900">最新警報</h3>
             <Button variant="ghost" size="sm">
               查看全部
-              <i class="i-ph:arrow-right" class="w-4 h-4"></i>
+              <i class="i-ph:arrow-right w-4 h-4"></i>
             </Button>
           </div>
         </template>
@@ -191,7 +191,7 @@
                 <p class="text-xs text-gray-500">{{ status.description }}</p>
               </div>
             </div>
-            <span :class="getStatusBadgeClass(status.status)" class="px-2 py-1 text-xs font-medium rounded-full">
+            <span :class="getStatusBadgeClass(status.status) px-2 py-1 text-xs font-medium rounded-full">
               {{ getStatusText(status.status) }}
             </span>
           </div>

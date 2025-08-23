@@ -14,7 +14,7 @@
                 class="lg:hidden"
                 @click="sidebarOpen = !sidebarOpen"
               >
-                <i class="i-ph:list" class="w-5 h-5"></i>
+                <i class="i-ph:list w-5 h-5"></i>
               </Button>
               
               <!-- Logo -->
@@ -22,7 +22,7 @@
                 to="/"
                 class="flex items-center gap-2 text-xl font-bold text-brand-primary"
               >
-                <i class="i-ph:bicycle" class="w-8 h-8"></i>
+                <i class="i-ph:bicycle w-8 h-8"></i>
                 嘉大數據平台
               </router-link>
             </div>
@@ -56,13 +56,13 @@
                   class="w-64 px-4 py-2 pl-10 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-brand-primary outline-none"
                   @keyup.enter="handleSearch"
                 >
-                <i class="i-ph:magnifying-glass" class="absolute left-3 top-2.5 w-4 h-4 text-gray-400"></i>
+                <i class="i-ph:magnifying-glass absolute left-3 top-2.5 w-4 h-4 text-gray-400"></i>
               </div>
             </div>
             
             <!-- Notifications -->
             <Button variant="ghost" size="sm" class="relative">
-              <i class="i-ph:bell" class="w-5 h-5"></i>
+              <i class="i-ph:bell w-5 h-5"></i>
               <span class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
             </Button>
             
@@ -80,7 +80,7 @@
                 <span class="hidden sm:block text-sm font-medium text-gray-700">
                   {{ currentUser.name }}
                 </span>
-                <i class="i-ph:caret-down" class="w-4 h-4 text-gray-400"></i>
+                <i class="i-ph:caret-down w-4 h-4 text-gray-400"></i>
               </Button>
               
               <!-- User Dropdown -->
@@ -133,7 +133,7 @@
                   size="sm"
                   @click="sidebarOpen = false"
                 >
-                  <i class="i-ph:x" class="w-4 h-4"></i>
+                  <i class="i-ph:x w-4 h-4"></i>
                 </Button>
               </div>
             </div>
