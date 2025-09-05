@@ -56,14 +56,14 @@
           await authStore.login('pony_member_real1', '2m8N625cvmf0');
           html += '<div class="success">✅ 登入成功</div>';
         } catch (loginErr) {
-          html += \`<div class="error">❌ 登入失敗: \${loginErr.message}</div>\`;
+          html += `<div class="error">❌ 登入失敗: ${loginErr.message}</div>`;
           result.innerHTML = html + '</div>';
           return;
         }
         
         // 步驟 2: 檢查登入後的用戶資料
         html += '<h5>登入後的用戶資料:</h5>';
-        html += \`<div class="code-block">\${JSON.stringify(authStore.user, null, 2)}</div>\`;
+        html += `<div class="code-block">${JSON.stringify(authStore.user, null, 2)}</div>`;
         html += '</div>';
         
         // 步驟 3: 檢查 localStorage
@@ -72,14 +72,14 @@
         if (storedProfile) {
           const parsed = JSON.parse(storedProfile);
           html += '<h5>存儲的 Profile:</h5>';
-          html += \`<div class="code-block">\${JSON.stringify(parsed, null, 2)}</div>\`;
+          html += `<div class="code-block">${JSON.stringify(parsed, null, 2)}</div>`;
           
           html += '<h5>重要欄位檢查:</h5>';
           html += '<ul>';
-          html += \`<li><strong>phone:</strong> \${parsed.phone || '❌ 無'}</li>\`;
-          html += \`<li><strong>national_id:</strong> \${parsed.national_id || '❌ 無'}</li>\`;
-          html += \`<li><strong>full_name:</strong> \${parsed.full_name || '❌ 無'}</li>\`;
-          html += \`<li><strong>email:</strong> \${parsed.email || '❌ 無'}</li>\`;
+          html += `<li><strong>phone:</strong> ${parsed.phone || '❌ 無'}</li>`;
+          html += `<li><strong>national_id:</strong> ${parsed.national_id || '❌ 無'}</li>`;
+          html += `<li><strong>full_name:</strong> ${parsed.full_name || '❌ 無'}</li>`;
+          html += `<li><strong>email:</strong> ${parsed.email || '❌ 無'}</li>`;
           html += '</ul>';
         } else {
           html += '<div class="warning">⚠️ localStorage 中沒有 profile 資料</div>';
@@ -93,17 +93,17 @@
           html += '<div class="success">✅ 完整用戶資料載入完成</div>';
           
           html += '<h5>更新後的用戶資料:</h5>';
-          html += \`<div class="code-block">\${JSON.stringify(authStore.user, null, 2)}</div>\`;
+          html += `<div class="code-block">${JSON.stringify(authStore.user, null, 2)}</div>`;
           
           html += '<h5>關鍵欄位檢查:</h5>';
           html += '<ul>';
-          html += \`<li><strong>phone:</strong> \${authStore.user?.phone || '❌ 仍然無'}</li>\`;
-          html += \`<li><strong>idNumber:</strong> \${authStore.user?.idNumber || '❌ 仍然無'}</li>\`;
-          html += \`<li><strong>name:</strong> \${authStore.user?.name || '❌ 仍然無'}</li>\`;
-          html += \`<li><strong>email:</strong> \${authStore.user?.email || '❌ 仍然無'}</li>\`;
+          html += `<li><strong>phone:</strong> ${authStore.user?.phone || '❌ 仍然無'}</li>`;
+          html += `<li><strong>idNumber:</strong> ${authStore.user?.idNumber || '❌ 仍然無'}</li>`;
+          html += `<li><strong>name:</strong> ${authStore.user?.name || '❌ 仍然無'}</li>`;
+          html += `<li><strong>email:</strong> ${authStore.user?.email || '❌ 仍然無'}</li>`;
           html += '</ul>';
         } catch (fetchErr) {
-          html += \`<div class="error">❌ 載入完整用戶資料失敗: \${fetchErr.message}</div>\`;
+          html += `<div class="error">❌ 載入完整用戶資料失敗: ${fetchErr.message}</div>`;
         }
         html += '</div>';
         
@@ -114,23 +114,23 @@
           const memberId = authStore.user?.id;
           
           if (memberId) {
-            html += \`<p>嘗試載入 Member ID: \${memberId}</p>\`;
+            html += `<p>嘗試載入 Member ID: ${memberId}</p>`;
             const memberData = await Koala.getMember(memberId);
             
             html += '<h5>直接 API 回應:</h5>';
-            html += \`<div class="code-block">\${JSON.stringify(memberData, null, 2)}</div>\`;
+            html += `<div class="code-block">${JSON.stringify(memberData, null, 2)}</div>`;
             
             html += '<h5>API 欄位檢查:</h5>';
             html += '<ul>';
-            html += \`<li><strong>phone:</strong> \${memberData?.phone || '❌ API 無'}</li>\`;
-            html += \`<li><strong>national_id:</strong> \${memberData?.national_id || '❌ API 無'}</li>\`;
-            html += \`<li><strong>full_name:</strong> \${memberData?.full_name || '❌ API 無'}</li>\`;
+            html += `<li><strong>phone:</strong> ${memberData?.phone || '❌ API 無'}</li>`;
+            html += `<li><strong>national_id:</strong> ${memberData?.national_id || '❌ API 無'}</li>`;
+            html += `<li><strong>full_name:</strong> ${memberData?.full_name || '❌ API 無'}</li>`;
             html += '</ul>';
           } else {
             html += '<div class="warning">⚠️ 無法獲取 Member ID</div>';
           }
         } catch (apiErr) {
-          html += \`<div class="error">❌ 直接呼叫 Member API 失敗: \${apiErr.message}</div>\`;
+          html += `<div class="error">❌ 直接呼叫 Member API 失敗: ${apiErr.message}</div>`;
         }
         html += '</div>';
         
@@ -153,7 +153,7 @@
         result.innerHTML = html;
         
       } catch (err) {
-        result.innerHTML += \`<div class="error">❌ 除錯過程失敗：\${err.message}</div>\`;
+        result.innerHTML += `<div class="error">❌ 除錯過程失敗：${err.message}</div>`;
         console.error('Debug error:', err);
       }
     };

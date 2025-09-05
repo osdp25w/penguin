@@ -243,3 +243,34 @@ export const vehiclesHandlers = [
     }
   })
 ]
+
+// 提供給前端在無法啟動 Service Worker（如非安全來源或子路徑部署）時的後備方法
+export function getDemoVehiclesList(filters?: {
+  siteId?: string
+  keyword?: string
+  status?: string
+  soh_lt?: number
+}) {
+  const allData = generateNewVehicleData()
+  let vehicles = allData.vehicles
+
+  if (filters?.siteId) {
+    vehicles = vehicles.filter(v => v.siteId === filters.siteId)
+  }
+  if (filters?.keyword) {
+    const kw = filters.keyword.toLowerCase()
+    vehicles = vehicles.filter(v =>
+      v.id.toLowerCase().includes(kw) ||
+      (v.name?.toLowerCase() || '').includes(kw) ||
+      (v.device_id?.toLowerCase() || '').includes(kw)
+    )
+  }
+  if (filters?.status) {
+    vehicles = vehicles.filter(v => v.status === filters.status)
+  }
+  if (filters?.soh_lt != null) {
+    vehicles = vehicles.filter(v => v.soh < Number(filters.soh_lt))
+  }
+
+  return vehicles
+}

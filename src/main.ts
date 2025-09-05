@@ -12,7 +12,8 @@ async function startMockServiceWorker(): Promise<void> {
     const { worker } = await import('@/mocks/browser')
     await worker.start({
       // ↓ 若產線要用，需先 `npx msw init public`
-      serviceWorker: { url: '/mockServiceWorker.js' },
+      // 使用 Vite 的 BASE_URL 以支援子目錄部署
+      serviceWorker: { url: `${import.meta.env.BASE_URL}mockServiceWorker.js` },
       onUnhandledRequest: 'bypass'
     })
     console.info('%c[MSW] ✅ mock worker ready', 'color:#10b981')

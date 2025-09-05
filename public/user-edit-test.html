@@ -86,7 +86,7 @@
         
         result.innerHTML = '<div class="success">✅ Admin 登入成功!</div>';
       } catch (err) {
-        result.innerHTML = \`<div class="error">❌ 登入失敗: \${err.message}</div>\`;
+        result.innerHTML = `<div class="error">❌ 登入失敗: ${err.message}</div>`;
       }
     };
 
@@ -118,22 +118,22 @@
         
         for (const user of currentUsers) {
           const { maskPhone, maskNationalId } = await import('/src/lib/encryption.ts');
-          html += \`<tr>
-            <td>\${user.id}</td>
-            <td>\${user.email}</td>
-            <td>\${user.fullName}</td>
-            <td class="masked">\${maskPhone(user.phone || '')}</td>
-            <td class="masked">\${maskNationalId(user.nationalId || '')}</td>
-            <td>\${user.roleId}</td>
-            <td>\${user.active ? '啟用' : '停用'}</td>
-            <td><button onclick="editUser('\${user.id}')">編輯</button></td>
-          </tr>\`;
+          html += `<tr>
+            <td>${user.id}</td>
+            <td>${user.email}</td>
+            <td>${user.fullName}</td>
+            <td class="masked">${maskPhone(user.phone || '')}</td>
+            <td class="masked">${maskNationalId(user.nationalId || '')}</td>
+            <td>${user.roleId}</td>
+            <td>${user.active ? '啟用' : '停用'}</td>
+            <td><button onclick="editUser('${user.id}')">編輯</button></td>
+          </tr>`;
         }
         html += '</tbody></table>';
         
         result.innerHTML = html;
       } catch (err) {
-        result.innerHTML = \`<div class="error">❌ 載入失敗: \${err.message}</div>\`;
+        result.innerHTML = `<div class="error">❌ 載入失敗: ${err.message}</div>`;
         console.error(err);
       }
     };
@@ -227,7 +227,7 @@
         setTimeout(() => window.loadUsers(), 1000);
 
       } catch (err) {
-        result.innerHTML = \`<div class="error">❌ 保存失敗: \${err.message}</div>\`;
+        result.innerHTML = `<div class="error">❌ 保存失敗: ${err.message}</div>`;
         console.error('Save error:', err);
       }
     };
@@ -261,17 +261,17 @@
 
         let html = '<div class="success">✅ 加解密測試成功</div>';
         html += '<h4>測試結果：</h4>';
-        html += \`<p><strong>原始身份證：</strong>\${testData.nationalId}</p>\`;
-        html += \`<p><strong>加密身份證：</strong><span class="masked">\${encryptedId}</span></p>\`;
-        html += \`<p><strong>解密身份證：</strong>\${decryptedId}</p>\`;
-        html += \`<p><strong>遮罩身份證：</strong>\${maskedId}</p>\`;
-        html += \`<p><strong>遮罩手機：</strong>\${maskedPhone}</p>\`;
-        html += \`<p><strong>加密密碼：</strong><span class="masked">\${encryptedPwd}</span></p>\`;
+        html += `<p><strong>原始身份證：</strong>${testData.nationalId}</p>`;
+        html += `<p><strong>加密身份證：</strong><span class="masked">${encryptedId}</span></p>`;
+        html += `<p><strong>解密身份證：</strong>${decryptedId}</p>`;
+        html += `<p><strong>遮罩身份證：</strong>${maskedId}</p>`;
+        html += `<p><strong>遮罩手機：</strong>${maskedPhone}</p>`;
+        html += `<p><strong>加密密碼：</strong><span class="masked">${encryptedPwd}</span></p>`;
 
         result.innerHTML = html;
 
       } catch (err) {
-        result.innerHTML = \`<div class="error">❌ 測試失敗: \${err.message}</div>\`;
+        result.innerHTML = `<div class="error">❌ 測試失敗: ${err.message}</div>`;
         console.error('Encryption test error:', err);
       }
     };

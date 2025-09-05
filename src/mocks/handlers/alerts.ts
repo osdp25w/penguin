@@ -215,3 +215,11 @@ export const alertsHandlers = [
     )
   })
 ]
+
+// 提供給前端在無法啟動 Service Worker（如非安全來源或子路徑部署）時的後備方法
+export function getDemoAlerts(filter?: 'open' | 'resolved') {
+  let alerts = generateGeneralAlerts()
+  if (filter === 'open') alerts = alerts.filter(a => !a.resolved)
+  if (filter === 'resolved') alerts = alerts.filter(a => a.resolved)
+  return alerts
+}

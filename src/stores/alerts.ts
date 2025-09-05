@@ -35,11 +35,23 @@ export const useAlerts = defineStore('alerts', {
           throw new Error(`HTTP ${res.status}: ${res.statusText}`)
         }
         
+        const ct = res.headers.get('content-type') || ''
+        if (!ct.includes('application/json')) throw new Error('非 JSON 回應（可能是路由或代理設定問題）')
         const data = await res.json()
         this.list = AlertListSchema.parse(data)
       } catch (e: any) {
-        this.errMsg = e.message ?? '警報載入失敗'
         console.error('Alerts fetch error:', e)
+        this.errMsg = e.message ?? '警報載入失敗'
+        // 後備：若啟用 mock，直接使用本地生成資料（在非安全來源或子路徑時 Service Worker 可能無法啟動）
+        try {
+          if (import.meta.env.VITE_ENABLE_MOCK === 'true') {
+            const mod = await import('@/mocks/handlers/alerts')
+            if (mod?.getDemoAlerts) {
+              this.list = mod.getDemoAlerts('open')
+              this.errMsg = ''
+            }
+          }
+        } catch {}
       } finally {
         this.isLoading = false
       }

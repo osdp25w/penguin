@@ -75,7 +75,7 @@
         result.innerHTML = '<div class="success">✅ Admin 登入成功！可以開始測試個人資料修改</div>';
         
       } catch (err) {
-        result.innerHTML = \`<div class="error">❌ Admin 測試失敗：\${err.message}</div>\`;
+        result.innerHTML = `<div class="error">❌ Admin 測試失敗：${err.message}</div>`;
         console.error('Admin profile test error:', err);
       }
     };
@@ -106,7 +106,7 @@
         result.innerHTML = '<div class="success">✅ Member 登入成功！可以開始測試個人資料修改</div>';
         
       } catch (err) {
-        result.innerHTML = \`<div class="error">❌ Member 測試失敗：\${err.message}</div>\`;
+        result.innerHTML = `<div class="error">❌ Member 測試失敗：${err.message}</div>`;
         console.error('Member profile test error:', err);
       }
     };
@@ -120,13 +120,13 @@
       
       let html = '<div class="user-info">';
       html += '<h4>📋 目前用戶資料</h4>';
-      html += \`<p><strong>ID：</strong>\${user.id || '無'}</p>\`;
-      html += \`<p><strong>姓名：</strong>\${user.name || '無'}</p>\`;
-      html += \`<p><strong>Email：</strong>\${user.email || '無'}</p>\`;
-      html += \`<p><strong>角色：</strong>\${user.roleId || '無'}</p>\`;
-      html += \`<p><strong>手機：</strong>\${user.phone || '無'}</p>\`;
-      html += \`<p><strong>身份證：</strong>\${user.idNumber || '無'}</p>\`;
-      html += \`<p><strong>頭像：</strong>\${user.avatarUrl || '無'}</p>\`;
+      html += `<p><strong>ID：</strong>${user.id || '無'}</p>`;
+      html += `<p><strong>姓名：</strong>${user.name || '無'}</p>`;
+      html += `<p><strong>Email：</strong>${user.email || '無'}</p>`;
+      html += `<p><strong>角色：</strong>${user.roleId || '無'}</p>`;
+      html += `<p><strong>手機：</strong>${user.phone || '無'}</p>`;
+      html += `<p><strong>身份證：</strong>${user.idNumber || '無'}</p>`;
+      html += `<p><strong>頭像：</strong>${user.avatarUrl || '無'}</p>`;
       html += '</div>';
       
       userInfo.innerHTML = html;
@@ -138,19 +138,19 @@
       html += '<h4>🧪 個人資料修改測試</h4>';
       html += '<div class="form-group">';
       html += '<label>姓名：</label>';
-      html += \`<input type="text" id="testName" value="\${authStore?.user?.name || ''}" />\`;
+      html += `<input type="text" id="testName" value="${authStore?.user?.name || ''}" />`;
       html += '</div>';
       html += '<div class="form-group">';
       html += '<label>電話：</label>';
-      html += \`<input type="tel" id="testPhone" value="\${authStore?.user?.phone || ''}" />\`;
+      html += `<input type="tel" id="testPhone" value="${authStore?.user?.phone || ''}" />`;
       html += '</div>';
       html += '<div class="form-group">';
       html += '<label>Email：</label>';
-      html += \`<input type="email" id="testEmail" value="\${authStore?.user?.email || ''}" />\`;
+      html += `<input type="email" id="testEmail" value="${authStore?.user?.email || ''}" />`;
       html += '</div>';
       html += '<div class="form-group">';
       html += '<label>身份證號：</label>';
-      html += \`<input type="text" id="testIdNumber" value="\${authStore?.user?.idNumber || ''}" maxlength="10" placeholder="A123456789" />\`;
+      html += `<input type="text" id="testIdNumber" value="${authStore?.user?.idNumber || ''}" maxlength="10" placeholder="A123456789" />`;
       html += '</div>';
       html += '<div class="form-group">';
       html += '<button onclick="testUpdateProfile()">🔄 測試更新個人資料</button>';
@@ -195,7 +195,7 @@
         result.innerHTML = '<div class="success">✅ 個人資料更新成功！</div>';
         
       } catch (err) {
-        result.innerHTML = \`<div class="error">❌ 個人資料更新失敗：\${err.message}</div>\`;
+        result.innerHTML = `<div class="error">❌ 個人資料更新失敗：${err.message}</div>`;
         console.error('Profile update error:', err);
       }
     };

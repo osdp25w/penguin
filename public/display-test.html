@@ -84,7 +84,7 @@
           return;
         }
         
-        result.innerHTML = \`<div class="success">✅ 成功載入 \${memberUsers.length} 位 member 用戶</div>\`;
+        result.innerHTML = `<div class="success">✅ 成功載入 ${memberUsers.length} 位 member 用戶</div>`;
         
         // 顯示詳細表格
         let html = '<h3>📊 Member 用戶顯示格式測試</h3>';
@@ -105,14 +105,14 @@
           const phone = user.phone || '-';
           const nationalId = user.nationalId ? maskNationalId(user.nationalId) : '-';
           
-          html += \`<tr>
-            <td>\${user.id}</td>
-            <td>\${user.email}</td>
-            <td>\${user.fullName}</td>
-            <td class="phone-col">\${phone}</td>
-            <td class="national-id-col">\${nationalId}</td>
-            <td>\${user.roleId}</td>
-          </tr>\`;
+          html += `<tr>
+            <td>${user.id}</td>
+            <td>${user.email}</td>
+            <td>${user.fullName}</td>
+            <td class="phone-col">${phone}</td>
+            <td class="national-id-col">${nationalId}</td>
+            <td>${user.roleId}</td>
+          </tr>`;
         }
         
         html += '</tbody></table>';
@@ -127,19 +127,19 @@
           const token = authStore.token;
           const response = await fetch('/koala/api/account/members/', {
             headers: { 
-              'Authorization': \`Bearer \${token}\`,
+              'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
             }
           });
           const data = await response.json();
           const originalUser = data.data.members.find(m => m.id == user.id);
           
-          html += \`<tr>
-            <td>\${user.email}</td>
-            <td>\${originalUser?.phone || '-'}</td>
-            <td class="encrypted" style="font-size: 0.8em; word-break: break-all;">\${originalUser?.national_id || '-'}</td>
-            <td>\${user.nationalId || '-'}</td>
-          </tr>\`;
+          html += `<tr>
+            <td>${user.email}</td>
+            <td>${originalUser?.phone || '-'}</td>
+            <td class="encrypted" style="font-size: 0.8em; word-break: break-all;">${originalUser?.national_id || '-'}</td>
+            <td>${user.nationalId || '-'}</td>
+          </tr>`;
         }
         
         html += '</tbody></table>';
@@ -157,7 +157,7 @@
         }
         
       } catch (err) {
-        result.innerHTML = \`<div class="error">❌ 測試失敗：\${err.message}</div>\`;
+        result.innerHTML = `<div class="error">❌ 測試失敗：${err.message}</div>`;
         console.error('Test error:', err);
       }
     };

@@ -117,13 +117,29 @@ export const useVehicles = defineStore('vehicles', {
 
         const response = await fetch(`/api/v1/vehicles/list?${searchParams}`)
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        
+        const ct = response.headers.get('content-type') || ''
+        if (!ct.includes('application/json')) throw new Error('非 JSON 回應（可能是路由或代理設定問題）')
         const data = await response.json()
         this.vehicles = data
         this.errMsg = ''
       } catch (err: any) {
         this.errMsg = err.message || '獲取車輛列表失敗'
-        this.vehicles = []
+        // 後備：若啟用 mock，直接使用本地生成資料（在非安全來源或子路徑時 Service Worker 可能無法啟動）
+        try {
+          if (import.meta.env.VITE_ENABLE_MOCK === 'true') {
+            const mod = await import('@/mocks/handlers/vehicles')
+            if (mod?.getDemoVehiclesList) {
+              this.vehicles = mod.getDemoVehiclesList(params)
+              this.errMsg = ''
+            } else {
+              this.vehicles = []
+            }
+          } else {
+            this.vehicles = []
+          }
+        } catch {
+          this.vehicles = []
+        }
       } finally {
         this.loading = false
       }

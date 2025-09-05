@@ -64,15 +64,15 @@
         console.log('Step 1: 登入 pony@admin1.com...');
         await authStore.login('pony@admin1.com', '2m8N625cvmf0');
         
-        result.innerHTML = \`
+        result.innerHTML = `
           <div class="success">
             ✅ 登入成功！<br>
-            <strong>用戶：</strong>\${authStore.user?.name}<br>
-            <strong>Email：</strong>\${authStore.user?.email}<br>
-            <strong>角色 ID：</strong>\${authStore.user?.roleId}<br>
-            <strong>是否為 Admin：</strong>\${authStore.isAdmin ? '是 ✅' : '否 ❌'}
+            <strong>用戶：</strong>${authStore.user?.name}<br>
+            <strong>Email：</strong>${authStore.user?.email}<br>
+            <strong>角色 ID：</strong>${authStore.user?.roleId}<br>
+            <strong>是否為 Admin：</strong>${authStore.isAdmin ? '是 ✅' : '否 ❌'}
           </div>
-        \`;
+        `;
         
         if (!authStore.isAdmin) {
           result.innerHTML += '<div class="warning">⚠️ 注意：此帳號不是 Admin 角色，權限可能受限</div>';
@@ -91,30 +91,30 @@
         const adminUsers = usersStore.users.filter(u => u.roleId === 'admin');
         const activeUsers = usersStore.users.filter(u => u.active);
         
-        stats.innerHTML = \`
+        stats.innerHTML = `
           <div class="stats">
             <div class="stat-card">
-              <div class="stat-number">\${usersStore.users.length}</div>
+              <div class="stat-number">${usersStore.users.length}</div>
               <div class="stat-label">總用戶數</div>
             </div>
             <div class="stat-card">
-              <div class="stat-number">\${staffUsers.length}</div>
+              <div class="stat-number">${staffUsers.length}</div>
               <div class="stat-label">Staff 系統用戶</div>
             </div>
             <div class="stat-card">
-              <div class="stat-number">\${memberUsers.length}</div>
+              <div class="stat-number">${memberUsers.length}</div>
               <div class="stat-label">Member 系統用戶</div>
             </div>
             <div class="stat-card">
-              <div class="stat-number">\${adminUsers.length}</div>
+              <div class="stat-number">${adminUsers.length}</div>
               <div class="stat-label">Admin 角色</div>
             </div>
             <div class="stat-card">
-              <div class="stat-number">\${activeUsers.length}</div>
+              <div class="stat-number">${activeUsers.length}</div>
               <div class="stat-label">啟用中</div>
             </div>
           </div>
-        \`;
+        `;
         
         // Step 4: 顯示詳細表格
         let html = '<h3>📊 用戶詳細列表</h3>';
@@ -125,13 +125,13 @@
           html += '<th>ID</th><th>Email</th><th>姓名</th><th>角色</th><th>狀態</th>';
           html += '</tr></thead><tbody>';
           for (const user of staffUsers) {
-            html += \`<tr>
-              <td>\${user.id}</td>
-              <td>\${user.email}</td>
-              <td>\${user.fullName}</td>
-              <td>\${user.roleId}</td>
-              <td>\${user.active ? '✅ 啟用' : '❌ 停用'}</td>
-            </tr>\`;
+            html += `<tr>
+              <td>${user.id}</td>
+              <td>${user.email}</td>
+              <td>${user.fullName}</td>
+              <td>${user.roleId}</td>
+              <td>${user.active ? '✅ 啟用' : '❌ 停用'}</td>
+            </tr>`;
           }
           html += '</tbody></table>';
         }
@@ -147,15 +147,15 @@
             const phone = user.phone || '-';
             const nationalId = user.nationalId ? maskNationalId(user.nationalId) : '-';
             
-            html += \`<tr>
-              <td>\${user.id}</td>
-              <td>\${user.email}</td>
-              <td>\${user.fullName}</td>
-              <td>\${user.roleId}</td>
-              <td>\${phone}</td>
-              <td>\${nationalId}</td>
-              <td>\${user.active ? '✅ 啟用' : '❌ 停用'}</td>
-            </tr>\`;
+            html += `<tr>
+              <td>${user.id}</td>
+              <td>${user.email}</td>
+              <td>${user.fullName}</td>
+              <td>${user.roleId}</td>
+              <td>${phone}</td>
+              <td>${nationalId}</td>
+              <td>${user.active ? '✅ 啟用' : '❌ 停用'}</td>
+            </tr>`;
           }
           html += '</tbody></table>';
         }
@@ -170,16 +170,16 @@
         if (usersStore.users.length === 8) {
           result.innerHTML += '<div class="success">🎉 完美！成功載入所有 8 位用戶（4 staff + 4 members）</div>';
         } else if (usersStore.users.length > 0) {
-          result.innerHTML += \`<div class="info">ℹ️ 載入了 \${usersStore.users.length} 位用戶</div>\`;
+          result.innerHTML += `<div class="info">ℹ️ 載入了 ${usersStore.users.length} 位用戶</div>`;
         }
         
         // 顯示錯誤訊息（如果有）
         if (usersStore.errMsg) {
-          result.innerHTML += \`<div class="error">❌ 錯誤：\${usersStore.errMsg}</div>\`;
+          result.innerHTML += `<div class="error">❌ 錯誤：${usersStore.errMsg}</div>`;
         }
         
       } catch (err) {
-        result.innerHTML = \`<div class="error">❌ 測試失敗：\${err.message}</div>\`;
+        result.innerHTML = `<div class="error">❌ 測試失敗：${err.message}</div>`;
         console.error('Test error:', err);
       }
     };

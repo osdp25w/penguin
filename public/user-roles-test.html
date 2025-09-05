@@ -55,7 +55,7 @@
       const currentUserDiv = document.getElementById('currentUser');
       
       try {
-        result.innerHTML = \`<div class="info">正在以 \${account.desc} 身分登入...</div>\`;
+        result.innerHTML = `<div class="info">正在以 ${account.desc} 身分登入...</div>`;
         
         // 清除舊的登入
         localStorage.clear();
@@ -67,22 +67,22 @@
         await authStore.login(account.email, account.password);
         
         // 顯示當前用戶
-        currentUserDiv.innerHTML = \`
+        currentUserDiv.innerHTML = `
           <div class="current-user">
-            <strong>當前登入用戶：</strong>\${authStore.user?.name || authStore.user?.email}<br>
-            <strong>Email：</strong>\${authStore.user?.email}<br>
-            <strong>角色：</strong><span class="role-\${authStore.user?.roleId}">\${authStore.user?.roleId}</span><br>
-            <strong>是否為 Admin：</strong>\${authStore.isAdmin ? '是' : '否'}
+            <strong>當前登入用戶：</strong>${authStore.user?.name || authStore.user?.email}<br>
+            <strong>Email：</strong>${authStore.user?.email}<br>
+            <strong>角色：</strong><span class="role-${authStore.user?.roleId}">${authStore.user?.roleId}</span><br>
+            <strong>是否為 Admin：</strong>${authStore.isAdmin ? '是' : '否'}
           </div>
-        \`;
+        `;
         
-        result.innerHTML = \`<div class="success">✅ 登入成功！現在載入用戶列表...</div>\`;
+        result.innerHTML = `<div class="success">✅ 登入成功！現在載入用戶列表...</div>`;
         
         // 載入用戶列表
         await loadUserList();
         
       } catch (err) {
-        result.innerHTML = \`<div class="error">❌ 登入失敗: \${err.message}</div>\`;
+        result.innerHTML = `<div class="error">❌ 登入失敗: ${err.message}</div>`;
         console.error('Login error:', err);
       }
     };
@@ -111,7 +111,7 @@
         const memberUsers = users.filter(u => u.kind === 'member');
         
         let html = '<h3>用戶列表</h3>';
-        html += \`<div class="info">共載入 \${users.length} 位用戶 (Staff: \${staffUsers.length}, Members: \${memberUsers.length})</div>\`;
+        html += `<div class="info">共載入 ${users.length} 位用戶 (Staff: ${staffUsers.length}, Members: ${memberUsers.length})</div>`;
         
         // 顯示用戶表格
         html += '<table><thead><tr>';
@@ -124,23 +124,23 @@
           const phone = user.phone || '-';
           const maskedNationalId = user.nationalId ? maskNationalId(user.nationalId) : '-';
           
-          html += \`<tr>
-            <td>\${user.id}</td>
-            <td>\${user.kind || '-'}</td>
-            <td>\${user.email}</td>
-            <td>\${user.fullName}</td>
-            <td>\${phone}</td>
-            <td>\${maskedNationalId}</td>
-            <td><span class="\${roleClass}">\${user.roleId}</span></td>
-            <td>\${user.active ? '✅ 啟用' : '❌ 停用'}</td>
-          </tr>\`;
+          html += `<tr>
+            <td>${user.id}</td>
+            <td>${user.kind || '-'}</td>
+            <td>${user.email}</td>
+            <td>${user.fullName}</td>
+            <td>${phone}</td>
+            <td>${maskedNationalId}</td>
+            <td><span class="${roleClass}">${user.roleId}</span></td>
+            <td>${user.active ? '✅ 啟用' : '❌ 停用'}</td>
+          </tr>`;
         }
         html += '</tbody></table>';
         
         // 顯示可用角色
         html += '<h4>可用角色：</h4><ul>';
         for (const role of usersStore.roles) {
-          html += \`<li>\${role.id}: \${role.name}</li>\`;
+          html += `<li>${role.id}: ${role.name}</li>`;
         }
         html += '</ul>';
         
@@ -148,7 +148,7 @@
         result.innerHTML = '<div class="success">✅ 用戶列表載入成功</div>';
         
       } catch (err) {
-        result.innerHTML = \`<div class="error">❌ 載入用戶列表失敗: \${err.message}</div>\`;
+        result.innerHTML = `<div class="error">❌ 載入用戶列表失敗: ${err.message}</div>`;
         userListDiv.innerHTML = '';
         console.error('Load users error:', err);
       }
