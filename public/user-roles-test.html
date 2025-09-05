@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>用戶角色權限測試</title>
+  <style>
+    body { font-family: system-ui; padding: 20px; max-width: 1200px; margin: 0 auto; }
+    .login-section { background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+    .login-btn { padding: 10px 20px; margin: 5px; cursor: pointer; background: #4a90e2; color: white; border: none; border-radius: 5px; }
+    .login-btn:hover { background: #357abd; }
+    .success { background: #d4edda; color: #155724; padding: 10px; border-radius: 5px; margin: 10px 0; }
+    .error { background: #f8d7da; color: #721c24; padding: 10px; border-radius: 5px; margin: 10px 0; }
+    .info { background: #d1ecf1; color: #0c5460; padding: 10px; border-radius: 5px; margin: 10px 0; }
+    .warning { background: #fff3cd; color: #856404; padding: 10px; border-radius: 5px; margin: 10px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
+    th { background-color: #f8f9fa; font-weight: bold; }
+    .encrypted { color: #999; font-size: 0.9em; font-family: monospace; }
+    .role-admin { background: #dc3545; color: white; padding: 2px 8px; border-radius: 3px; }
+    .role-staff { background: #fd7e14; color: white; padding: 2px 8px; border-radius: 3px; }
+    .role-member { background: #28a745; color: white; padding: 2px 8px; border-radius: 3px; }
+    .role-visitor { background: #6c757d; color: white; padding: 2px 8px; border-radius: 3px; }
+    .current-user { background: #e7f3ff; padding: 10px; border-radius: 5px; margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <h1>用戶角色權限測試</h1>
+  
+  <div class="login-section">
+    <h3>測試不同角色的帳號</h3>
+    <button class="login-btn" onclick="loginAs('admin')">Admin 登入 (pony@admin1.com)</button>
+    <button class="login-btn" onclick="loginAs('staff')">Staff 登入 (pony@staff1.com)</button>
+    <button class="login-btn" onclick="loginAs('member')">Member 登入 (pony@tourist3.com)</button>
+    <button class="login-btn" onclick="clearSession()">清除登入</button>
+  </div>
+
+  <div id="currentUser"></div>
+  <div id="result"></div>
+  <div id="userList"></div>
+
+  <script type="module">
+    let authStore, usersStore;
+    
+    window.loginAs = async (role) => {
+      const accounts = {
+        admin: { email: 'pony@admin1.com', password: '2m8N625cvmf0', desc: 'Admin (管理員)' },
+        staff: { email: 'pony@staff1.com', password: '2m8N625cvmf0', desc: 'Staff (工作人員)' },
+        member: { email: 'pony@tourist3.com', password: '2m8N625cvmf0', desc: 'Member (一般使用者)' }
+      };
+      
+      const account = accounts[role];
+      if (!account) return;
+      
+      const result = document.getElementById('result');
+      const currentUserDiv = document.getElementById('currentUser');
+      
+      try {
+        result.innerHTML = \`<div class="info">正在以 \${account.desc} 身分登入...</div>\`;
+        
+        // 清除舊的登入
+        localStorage.clear();
+        sessionStorage.clear();
+        
+        // 登入
+        const { useAuth } = await import('/src/stores/auth.ts');
+        authStore = useAuth();
+        await authStore.login(account.email, account.password);
+        
+        // 顯示當前用戶
+        currentUserDiv.innerHTML = \`
+          <div class="current-user">
+            <strong>當前登入用戶：</strong>\${authStore.user?.name || authStore.user?.email}<br>
+            <strong>Email：</strong>\${authStore.user?.email}<br>
+            <strong>角色：</strong><span class="role-\${authStore.user?.roleId}">\${authStore.user?.roleId}</span><br>
+            <strong>是否為 Admin：</strong>\${authStore.isAdmin ? '是' : '否'}
+          </div>
+        \`;
+        
+        result.innerHTML = \`<div class="success">✅ 登入成功！現在載入用戶列表...</div>\`;
+        
+        // 載入用戶列表
+        await loadUserList();
+        
+      } catch (err) {
+        result.innerHTML = \`<div class="error">❌ 登入失敗: \${err.message}</div>\`;
+        console.error('Login error:', err);
+      }
+    };
+    
+    async function loadUserList() {
+      const userListDiv = document.getElementById('userList');
+      const result = document.getElementById('result');
+      
+      try {
+        const { useUsers } = await import('/src/stores/users.ts');
+        usersStore = useUsers();
+        
+        console.log('開始載入用戶列表...');
+        await usersStore.fetchAll();
+        
+        const users = usersStore.users;
+        console.log('載入的用戶數量:', users.length);
+        
+        if (users.length === 0) {
+          userListDiv.innerHTML = '<div class="warning">⚠️ 沒有載入到任何用戶資料</div>';
+          return;
+        }
+        
+        // 根據來源分組
+        const staffUsers = users.filter(u => u.kind === 'staff');
+        const memberUsers = users.filter(u => u.kind === 'member');
+        
+        let html = '<h3>用戶列表</h3>';
+        html += \`<div class="info">共載入 \${users.length} 位用戶 (Staff: \${staffUsers.length}, Members: \${memberUsers.length})</div>\`;
+        
+        // 顯示用戶表格
+        html += '<table><thead><tr>';
+        html += '<th>ID</th><th>類型</th><th>Email</th><th>姓名</th><th>手機</th><th>身份證</th><th>角色</th><th>狀態</th>';
+        html += '</tr></thead><tbody>';
+        
+        for (const user of users) {
+          const { maskNationalId } = await import('/src/lib/encryption.ts');
+          const roleClass = 'role-' + user.roleId;
+          const phone = user.phone || '-';
+          const maskedNationalId = user.nationalId ? maskNationalId(user.nationalId) : '-';
+          
+          html += \`<tr>
+            <td>\${user.id}</td>
+            <td>\${user.kind || '-'}</td>
+            <td>\${user.email}</td>
+            <td>\${user.fullName}</td>
+            <td>\${phone}</td>
+            <td>\${maskedNationalId}</td>
+            <td><span class="\${roleClass}">\${user.roleId}</span></td>
+            <td>\${user.active ? '✅ 啟用' : '❌ 停用'}</td>
+          </tr>\`;
+        }
+        html += '</tbody></table>';
+        
+        // 顯示可用角色
+        html += '<h4>可用角色：</h4><ul>';
+        for (const role of usersStore.roles) {
+          html += \`<li>\${role.id}: \${role.name}</li>\`;
+        }
+        html += '</ul>';
+        
+        userListDiv.innerHTML = html;
+        result.innerHTML = '<div class="success">✅ 用戶列表載入成功</div>';
+        
+      } catch (err) {
+        result.innerHTML = \`<div class="error">❌ 載入用戶列表失敗: \${err.message}</div>\`;
+        userListDiv.innerHTML = '';
+        console.error('Load users error:', err);
+      }
+    }
+    
+    window.clearSession = () => {
+      localStorage.clear();
+      sessionStorage.clear();
+      document.getElementById('currentUser').innerHTML = '<div class="info">已清除登入狀態</div>';
+      document.getElementById('result').innerHTML = '';
+      document.getElementById('userList').innerHTML = '';
+    };
+  </script>
+</body>
+</html>

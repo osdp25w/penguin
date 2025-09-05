@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>快速 Member API 測試</title>
+  <style>
+    body { font-family: system-ui; padding: 20px; }
+    button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>快速 Member API 測試</h1>
+  <button onclick="testMemberAPI()">測試 Member ID 1 資料</button>
+  <div id="result"></div>
+
+  <script>
+    async function testMemberAPI() {
+      const result = document.getElementById('result');
+      result.innerHTML = '正在測試...';
+      
+      try {
+        // 先登入獲得 token
+        const loginRes = await fetch('/koala/api/account/auth/login/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: 'pony_member_real1',
+            password: 'gAAAAABm2BKJQkywC7LdRRb4PBV8T7S3E_7-qEZWnhVhKdNrT3R2Hqf8OOpQ_GRwQKJmX0dn3m3t4gT8C7KvkZVDcXLwE2Hn_A=='
+          })
+        });
+        
+        const loginData = await loginRes.json();
+        console.log('登入回應:', loginData);
+        
+        if (!loginData.data?.tokens?.access_token) {
+          throw new Error('登入失敗');
+        }
+        
+        const token = loginData.data.tokens.access_token;
+        
+        // 調用 Member API
+        const memberRes = await fetch('/koala/api/account/members/1/', {
+          method: 'GET',
+          headers: { 
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json' 
+          }
+        });
+        
+        const memberData = await memberRes.json();
+        console.log('Member API 回應:', memberData);
+        
+        let html = '<h3>Member API 測試結果：</h3>';
+        html += '<h4>完整回應：</h4>';
+        html += '<pre>' + JSON.stringify(memberData, null, 2) + '</pre>';
+        
+        html += '<h4>關鍵欄位檢查：</h4>';
+        const data = memberData.data || memberData;
+        html += '<ul>';
+        html += '<li><strong>phone:</strong> ' + (data?.phone || '❌ 無') + '</li>';
+        html += '<li><strong>national_id:</strong> ' + (data?.national_id || '❌ 無') + '</li>';
+        html += '<li><strong>full_name:</strong> ' + (data?.full_name || '❌ 無') + '</li>';
+        html += '<li><strong>email:</strong> ' + (data?.email || '❌ 無') + '</li>';
+        html += '<li><strong>username:</strong> ' + (data?.username || '❌ 無') + '</li>';
+        html += '<li><strong>type:</strong> ' + (data?.type || '❌ 無') + '</li>';
+        html += '</ul>';
+        
+        result.innerHTML = html;
+        
+      } catch (err) {
+        result.innerHTML = '<div style="color: red;">錯誤: ' + err.message + '</div>';
+        console.error('API 測試錯誤:', err);
+      }
+    }
+  </script>
+</body>
+</html>

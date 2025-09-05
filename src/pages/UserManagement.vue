@@ -28,11 +28,13 @@
       <table class="min-w-full text-left text-sm">
         <thead class="bg-white/5 text-gray-900 sticky top-0">
           <tr>
-            <th class="px-4 py-2 w-[200px] font-medium">Email</th>
-            <th class="px-4 py-2 w-[140px] font-medium">姓名</th>
-            <th class="px-4 py-2 w-[110px] font-medium">角色</th>
+            <th class="px-4 py-2 w-[180px] font-medium">Email</th>
+            <th class="px-4 py-2 w-[120px] font-medium">姓名</th>
+            <th class="px-4 py-2 w-[100px] font-medium">手機</th>
+            <th class="px-4 py-2 w-[100px] font-medium">身份證號</th>
+            <th class="px-4 py-2 w-[80px] font-medium">角色</th>
             <th class="px-4 py-2 text-center w-[70px] font-medium">狀態</th>
-            <th class="px-4 py-2 w-[140px]"></th>
+            <th class="px-4 py-2 w-[160px]"></th>
           </tr>
         </thead>
         <tbody>
@@ -60,6 +62,22 @@
                 />
               </td>
               <td class="px-3 py-1">
+                <input
+                  v-model="draft.phone"
+                  class="input"
+                  type="tel"
+                  placeholder="手機號碼"
+                />
+              </td>
+              <td class="px-3 py-1">
+                <input
+                  v-model="draft.nationalId"
+                  class="input"
+                  type="text"
+                  placeholder="身份證號"
+                />
+              </td>
+              <td class="px-3 py-1">
                 <select v-model="draft.roleId" class="input">
                   <option
                     v-for="r in store.roles"
@@ -83,6 +101,8 @@
             <template v-else>
               <td class="px-4 py-2 font-mono text-gray-900">{{ u.email }}</td>
               <td class="px-4 py-2 text-gray-900">{{ u.fullName }}</td>
+              <td class="px-4 py-2 text-gray-900">{{ u.phone || '-' }}</td>
+              <td class="px-4 py-2 text-gray-900">{{ u.nationalId ? maskNationalId(u.nationalId) : '-' }}</td>
               <td class="px-4 py-2 text-gray-900">{{ u.roleName }}</td>
               <td class="px-4 py-2 text-center">
                 <span :class="u.active ? 'text-emerald-400' : 'text-rose-400'">
@@ -181,6 +201,7 @@ import { onMounted, ref, reactive } from 'vue'
 import { Dialog, DialogPanel }      from '@headlessui/vue'
 import { Plus, RefreshCw }          from 'lucide-vue-next'
 import { useUsers }                 from '@/stores/users'
+import { maskNationalId } from '@/lib/encryption'
 import type { User, Role } from '@/types'
 
 // store
@@ -190,8 +211,13 @@ onMounted(() => store.fetchAll())
 // 編輯
 const editingId = ref<string>('')
 type UserRow = (typeof store.usersWithRole)[number]
-const draft = reactive<Pick<UserRow, 'id'|'email'|'fullName'|'roleId'|'active'>>({
-  id: '', email: '', fullName: '', roleId: '', active: true
+const draft = reactive<Pick<UserRow, 'id'|'email'|'fullName'|'roleId'|'active'> & {
+  phone?: string
+  nationalId?: string
+  password?: string
+}>({
+  id: '', email: '', fullName: '', roleId: '', active: true,
+  phone: '', nationalId: '', password: ''
 })
 function beginEdit(u: UserRow) {
   editingId.value = u.id

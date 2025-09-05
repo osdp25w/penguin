@@ -69,7 +69,7 @@ const routes: RouteRecordRaw[] = [
   /* ── 錯誤頁面 ── */
   {
     path: '/403',
-    component: { template: '<div class="grid h-screen place-content-center text-2xl font-bold text-rose-600">403 Forbidden</div>' }
+    component: () => import('@/pages/Forbidden.vue')
   },
 
   /* ── 其他路徑重導到首頁 ── */
@@ -93,8 +93,13 @@ router.beforeEach((to) => {
 
   /* 檢查管理員權限 */
   if (to.meta.requiresAdmin) {
-    const role = auth.user?.roleId || sessionStorage.getItem('role')
-    if (role !== 'admin') return '/403'
+    let isAdmin = auth.user?.roleId === 'admin'
+    if (!isAdmin) {
+      // 與 auth store 的 ROLE_KEY 對齊（'penguin.role'）
+      const role = sessionStorage.getItem('penguin.role') || localStorage.getItem('penguin.role')
+      isAdmin = role === 'admin'
+    }
+    if (!isAdmin) return '/403'
   }
 
   /* 設定頁面標題 */

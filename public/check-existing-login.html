@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>檢查現有登入</title>
+  <style>
+    body { font-family: system-ui; padding: 20px; }
+    button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    .result { margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 5px; }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+    .info { background: #d1ecf1; color: #0c5460; }
+    .warning { background: #fff3cd; color: #856404; }
+  </style>
+</head>
+<body>
+  <h1>🔍 檢查現有登入狀態</h1>
+  <p><strong>步驟：</strong></p>
+  <ol>
+    <li>請先在主應用 (https://localhost:5174/) 中登入 pony_member_real1</li>
+    <li>登入成功後，回到這個頁面點擊下方按鈕</li>
+  </ol>
+  
+  <button id="checkBtn">檢查現有登入和 API 資料</button>
+  <div id="result" class="result"></div>
+
+  <script>
+    document.getElementById('checkBtn').addEventListener('click', async () => {
+      const result = document.getElementById('result');
+      result.innerHTML = '<div class="info">🔄 正在檢查現有登入...</div>';
+      
+      try {
+        let html = '';
+        
+        // 檢查 localStorage 中的資料
+        const token = localStorage.getItem('penguin.jwt');
+        const storedProfile = localStorage.getItem('penguin.user');
+        
+        if (!token) {
+          result.innerHTML = '<div class="warning"><h3>⚠️ 未找到登入 Token</h3><p>請先在主應用中登入 pony_member_real1</p></div>';
+          return;
+        }
+        
+        console.log('找到 token:', token.substring(0, 30) + '...');
+        
+        // 解析存儲的 profile
+        let profile = null;
+        if (storedProfile) {
+          try {
+            profile = JSON.parse(storedProfile);
+            console.log('存儲的 profile:', profile);
+          } catch (e) {
+            console.error('解析 profile 失敗:', e);
+          }
+        }
+        
+        // 使用現有 token 調用 Member API
+        const memberId = profile?.id || profile?.user_id || '1';
+        console.log('使用 Member ID:', memberId);
+        
+        const memberRes = await fetch('/koala/api/account/members/' + memberId + '/', {
+          method: 'GET',
+          headers: { 
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json' 
+          }
+        });
+        
+        console.log('Member API 狀態:', memberRes.status);
+        
+        if (!memberRes.ok) {
+          const errorText = await memberRes.text();
+          throw new Error('Member API 調用失敗 (' + memberRes.status + '): ' + errorText);
+        }
+        
+        const memberData = await memberRes.json();
+        console.log('Member API 完整回應:', memberData);
+        
+        const memberInfo = memberData.data || memberData;
+        console.log('處理後的 Member 資料:', memberInfo);
+        
+        // 顯示結果
+        html += '<div class="success"><h3>✅ 成功獲取資料</h3></div>';
+        
+        // 分析存儲的 Profile
+        html += '<h4>💾 localStorage 中的 Profile：</h4>';
+        if (profile) {
+          html += '<ul>';
+          html += '<li><strong>id:</strong> ' + (profile.id || profile.user_id || '❌ 無') + '</li>';
+          html += '<li><strong>username:</strong> ' + (profile.username || '❌ 無') + '</li>';
+          html += '<li><strong>full_name:</strong> ' + (profile.full_name || '❌ 無') + '</li>';
+          html += '<li><strong>email:</strong> ' + (profile.email || '❌ 無') + '</li>';
+          html += '<li><strong>phone:</strong> ' + (profile.phone || '❌ 無此欄位') + '</li>';
+          html += '<li><strong>national_id:</strong> ' + (profile.national_id || '❌ 無此欄位') + '</li>';
+          html += '</ul>';
+        } else {
+          html += '<p>❌ 沒有存儲的 profile 資料</p>';
+        }
+        
+        // 分析 Member API 資料
+        html += '<h4>🔍 Member API 回應分析：</h4>';
+        html += '<ul>';
+        html += '<li><strong>API 狀態:</strong> ' + memberRes.status + ' (成功)</li>';
+        html += '<li><strong>回應結構:</strong> ' + (memberData.data ? 'data 包裝' : '直接回應') + '</li>';
+        html += '<li><strong>phone:</strong> ' + (memberInfo?.phone || '❌ 無此欄位') + '</li>';
+        html += '<li><strong>national_id:</strong> ' + (memberInfo?.national_id || '❌ 無此欄位') + '</li>';
+        html += '<li><strong>full_name:</strong> ' + (memberInfo?.full_name || '❌ 無此欄位') + '</li>';
+        html += '<li><strong>email:</strong> ' + (memberInfo?.email || '❌ 無此欄位') + '</li>';
+        html += '<li><strong>username:</strong> ' + (memberInfo?.username || '❌ 無此欄位') + '</li>';
+        html += '<li><strong>type:</strong> ' + (memberInfo?.type || '❌ 無此欄位') + '</li>';
+        html += '</ul>';
+        
+        // 關鍵診斷
+        html += '<h4>🩺 關鍵診斷：</h4>';
+        const profileHasPhone = profile?.phone;
+        const profileHasNationalId = profile?.national_id;
+        const apiHasPhone = memberInfo?.phone;
+        const apiHasNationalId = memberInfo?.national_id;
+        
+        html += '<ul>';
+        if (!apiHasPhone && !apiHasNationalId) {
+          html += '<li>❌ <strong>根本問題:</strong> Member API 沒有返回 phone 和 national_id 欄位</li>';
+          html += '<li>💡 <strong>原因:</strong> 可能是後端資料庫沒有這些資料，或 API 序列化器沒有包含這些欄位</li>';
+          html += '<li>🔧 <strong>解決方案:</strong> 需要檢查後端實作和資料庫內容</li>';
+        } else if (apiHasPhone && apiHasNationalId) {
+          html += '<li>✅ <strong>API 資料正常:</strong> Member API 有返回 phone 和 national_id</li>';
+          if (!profileHasPhone || !profileHasNationalId) {
+            html += '<li>⚠️ <strong>前端處理問題:</strong> API 有資料但登入時沒有正確保存</li>';
+            html += '<li>🔧 <strong>解決方案:</strong> 檢查 auth store 的 login 和 fetchFullUserProfile 方法</li>';
+          } else {
+            html += '<li>✅ <strong>資料完整:</strong> API 和本地都有資料，問題可能在個人資料模態框</li>';
+            html += '<li>🔧 <strong>解決方案:</strong> 檢查 EditProfileModal.vue 的資料綁定</li>';
+          }
+        } else {
+          html += '<li>⚠️ <strong>部分資料:</strong> 只有部分欄位有資料</li>';
+          if (apiHasPhone && !apiHasNationalId) {
+            html += '<li>💡 phone 有資料但 national_id 沒有</li>';
+          }
+          if (!apiHasPhone && apiHasNationalId) {
+            html += '<li>💡 national_id 有資料但 phone 沒有</li>';
+          }
+        }
+        html += '</ul>';
+        
+        // 顯示原始資料
+        html += '<details style="margin-top: 20px;"><summary><h4>📄 原始 localStorage Profile</h4></summary>';
+        html += '<pre style="background: white; padding: 10px; border: 1px solid #ddd; overflow-x: auto;">';
+        html += JSON.stringify(profile, null, 2);
+        html += '</pre></details>';
+        
+        html += '<details><summary><h4>📄 原始 Member API 回應</h4></summary>';
+        html += '<pre style="background: white; padding: 10px; border: 1px solid #ddd; overflow-x: auto; max-height: 400px;">';
+        html += JSON.stringify(memberData, null, 2);
+        html += '</pre></details>';
+        
+        result.innerHTML = html;
+        
+      } catch (err) {
+        console.error('檢查錯誤:', err);
+        result.innerHTML += '<div class="error"><h3>❌ 檢查失敗</h3><p>' + err.message + '</p></div>';
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>Member 個人資料除錯</title>
+  <style>
+    body { font-family: system-ui; padding: 20px; max-width: 1000px; margin: 0 auto; }
+    .test-section { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+    button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    button:hover { background: #0056b3; }
+    .success { background: #d4edda; color: #155724; padding: 15px; border-radius: 5px; margin: 10px 0; }
+    .error { background: #f8d7da; color: #721c24; padding: 15px; border-radius: 5px; margin: 10px 0; }
+    .info { background: #d1ecf1; color: #0c5460; padding: 15px; border-radius: 5px; margin: 10px 0; }
+    .warning { background: #fff3cd; color: #856404; padding: 15px; border-radius: 5px; margin: 10px 0; }
+    .code-block { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 15px; font-family: monospace; white-space: pre-wrap; max-height: 400px; overflow-y: auto; }
+    .user-info { background: #e7f3ff; padding: 15px; border-radius: 5px; margin: 10px 0; }
+    .step { margin: 10px 0; padding: 10px; border-left: 3px solid #007bff; }
+  </style>
+</head>
+<body>
+  <h1>🔍 Member 個人資料除錯</h1>
+  
+  <div class="test-section">
+    <h3>📋 除錯步驟</h3>
+    <p>逐步檢查 pony_member_real1 的個人資料載入過程</p>
+  </div>
+
+  <div>
+    <button onclick="startDebug()">開始除錯 pony_member_real1</button>
+    <button onclick="clearAll()">清除資料</button>
+  </div>
+
+  <div id="result"></div>
+
+  <script type="module">
+    const result = document.getElementById('result');
+    
+    let authStore = null;
+    
+    async function startDebug() {
+      try {
+        // 清理
+        localStorage.clear();
+        sessionStorage.clear();
+        result.innerHTML = '<div class="info">🔄 開始除錯流程...</div>';
+        
+        let html = '';
+        
+        // 步驟 1: 檢查登入
+        html += '<div class="step"><h4>步驟 1: 登入 pony_member_real1</h4>';
+        
+        const { useAuth } = await import('/src/stores/auth.ts');
+        authStore = useAuth();
+        
+        try {
+          await authStore.login('pony_member_real1', '2m8N625cvmf0');
+          html += '<div class="success">✅ 登入成功</div>';
+        } catch (loginErr) {
+          html += \`<div class="error">❌ 登入失敗: \${loginErr.message}</div>\`;
+          result.innerHTML = html + '</div>';
+          return;
+        }
+        
+        // 步驟 2: 檢查登入後的用戶資料
+        html += '<h5>登入後的用戶資料:</h5>';
+        html += \`<div class="code-block">\${JSON.stringify(authStore.user, null, 2)}</div>\`;
+        html += '</div>';
+        
+        // 步驟 3: 檢查 localStorage
+        html += '<div class="step"><h4>步驟 3: 檢查 localStorage 中的 profile</h4>';
+        const storedProfile = localStorage.getItem('penguin.user');
+        if (storedProfile) {
+          const parsed = JSON.parse(storedProfile);
+          html += '<h5>存儲的 Profile:</h5>';
+          html += \`<div class="code-block">\${JSON.stringify(parsed, null, 2)}</div>\`;
+          
+          html += '<h5>重要欄位檢查:</h5>';
+          html += '<ul>';
+          html += \`<li><strong>phone:</strong> \${parsed.phone || '❌ 無'}</li>\`;
+          html += \`<li><strong>national_id:</strong> \${parsed.national_id || '❌ 無'}</li>\`;
+          html += \`<li><strong>full_name:</strong> \${parsed.full_name || '❌ 無'}</li>\`;
+          html += \`<li><strong>email:</strong> \${parsed.email || '❌ 無'}</li>\`;
+          html += '</ul>';
+        } else {
+          html += '<div class="warning">⚠️ localStorage 中沒有 profile 資料</div>';
+        }
+        html += '</div>';
+        
+        // 步驟 4: 手動呼叫 fetchFullUserProfile
+        html += '<div class="step"><h4>步驟 4: 手動載入完整用戶資料</h4>';
+        try {
+          await authStore.fetchFullUserProfile();
+          html += '<div class="success">✅ 完整用戶資料載入完成</div>';
+          
+          html += '<h5>更新後的用戶資料:</h5>';
+          html += \`<div class="code-block">\${JSON.stringify(authStore.user, null, 2)}</div>\`;
+          
+          html += '<h5>關鍵欄位檢查:</h5>';
+          html += '<ul>';
+          html += \`<li><strong>phone:</strong> \${authStore.user?.phone || '❌ 仍然無'}</li>\`;
+          html += \`<li><strong>idNumber:</strong> \${authStore.user?.idNumber || '❌ 仍然無'}</li>\`;
+          html += \`<li><strong>name:</strong> \${authStore.user?.name || '❌ 仍然無'}</li>\`;
+          html += \`<li><strong>email:</strong> \${authStore.user?.email || '❌ 仍然無'}</li>\`;
+          html += '</ul>';
+        } catch (fetchErr) {
+          html += \`<div class="error">❌ 載入完整用戶資料失敗: \${fetchErr.message}</div>\`;
+        }
+        html += '</div>';
+        
+        // 步驟 5: 嘗試直接呼叫 Member API
+        html += '<div class="step"><h4>步驟 5: 直接呼叫 Member API</h4>';
+        try {
+          const { Koala } = await import('/src/services/koala.ts');
+          const memberId = authStore.user?.id;
+          
+          if (memberId) {
+            html += \`<p>嘗試載入 Member ID: \${memberId}</p>\`;
+            const memberData = await Koala.getMember(memberId);
+            
+            html += '<h5>直接 API 回應:</h5>';
+            html += \`<div class="code-block">\${JSON.stringify(memberData, null, 2)}</div>\`;
+            
+            html += '<h5>API 欄位檢查:</h5>';
+            html += '<ul>';
+            html += \`<li><strong>phone:</strong> \${memberData?.phone || '❌ API 無'}</li>\`;
+            html += \`<li><strong>national_id:</strong> \${memberData?.national_id || '❌ API 無'}</li>\`;
+            html += \`<li><strong>full_name:</strong> \${memberData?.full_name || '❌ API 無'}</li>\`;
+            html += '</ul>';
+          } else {
+            html += '<div class="warning">⚠️ 無法獲取 Member ID</div>';
+          }
+        } catch (apiErr) {
+          html += \`<div class="error">❌ 直接呼叫 Member API 失敗: \${apiErr.message}</div>\`;
+        }
+        html += '</div>';
+        
+        // 步驟 6: 總結
+        html += '<div class="step"><h4>步驟 6: 總結</h4>';
+        const hasPhone = authStore.user?.phone;
+        const hasIdNumber = authStore.user?.idNumber;
+        
+        if (hasPhone && hasIdNumber) {
+          html += '<div class="success">🎉 個人資料顯示正常！</div>';
+        } else {
+          html += '<div class="warning">⚠️ 個人資料顯示有問題：</div>';
+          html += '<ul>';
+          if (!hasPhone) html += '<li>❌ 缺少電話號碼</li>';
+          if (!hasIdNumber) html += '<li>❌ 缺少身份證號</li>';
+          html += '</ul>';
+        }
+        html += '</div>';
+        
+        result.innerHTML = html;
+        
+      } catch (err) {
+        result.innerHTML += \`<div class="error">❌ 除錯過程失敗：\${err.message}</div>\`;
+        console.error('Debug error:', err);
+      }
+    };
+    
+    function clearAll() {
+      localStorage.clear();
+      sessionStorage.clear();
+      result.innerHTML = '';
+      authStore = null;
+    }
+    
+    // 將函數暴露到全局作用域
+    window.startDebug = startDebug;
+    window.clearAll = clearAll;
+  </script>
+</body>
+</html>

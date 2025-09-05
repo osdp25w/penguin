@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin 權限測試</title>
+  <style>
+    body { font-family: system-ui; padding: 20px; max-width: 800px; margin: 0 auto; }
+    input { width: 100%; padding: 8px; margin: 5px 0; }
+    button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+    button:hover { background: #e0e0e0; }
+    #result { margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 5px; white-space: pre-wrap; }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+    .info { background: #d1ecf1; color: #0c5460; }
+  </style>
+</head>
+<body>
+  <h1>Admin 權限測試</h1>
+  
+  <div>
+    <input id="email" placeholder="Email" value="pony@admin1.com">
+    <input id="password" type="password" placeholder="密碼" value="2m8N625cvmf0">
+    <div>
+      <button onclick="testLogin()">測試登入</button>
+      <button onclick="testStaffAPI()">測試 Staff API</button>
+      <button onclick="clearAuth()">清除認證</button>
+    </div>
+  </div>
+
+  <div id="result"></div>
+
+  <script type="module">
+    const result = document.getElementById('result');
+    
+    window.testLogin = async () => {
+      try {
+        result.textContent = '正在測試 Admin 登入...\n';
+        result.className = '';
+        
+        // Import auth store
+        const { useAuth } = await import('/src/stores/auth.ts');
+        const authStore = useAuth();
+        
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        
+        result.textContent += `Email: ${email}\n`;
+        result.textContent += `密碼: ${password.substring(0, 3)}***\n\n`;
+        
+        await authStore.login(email, password);
+        
+        result.textContent += '✅ 登入成功!\n\n';
+        result.textContent += `User ID: ${authStore.user?.id}\n`;
+        result.textContent += `Name: ${authStore.user?.name}\n`;
+        result.textContent += `Email: ${authStore.user?.email}\n`;
+        result.textContent += `Role ID: ${authStore.user?.roleId}\n`;
+        result.textContent += `Is Admin: ${authStore.isAdmin ? '是' : '否'}\n`;
+        result.textContent += `Is Login: ${authStore.isLogin ? '是' : '否'}\n\n`;
+        
+        // Show raw profile data
+        const profileData = JSON.parse(localStorage.getItem('penguin.user') || '{}');
+        result.textContent += '原始 Profile 資料:\n';
+        result.textContent += JSON.stringify(profileData, null, 2);
+        
+        result.className = authStore.isAdmin ? 'success' : 'info';
+      } catch (err) {
+        result.textContent += `\n❌ 登入失敗: ${err.message}\n`;
+        result.className = 'error';
+        console.error('Login error:', err);
+      }
+    };
+    
+    window.testStaffAPI = async () => {
+      try {
+        result.textContent = '正在測試 Staff API 權限...\n';
+        result.className = '';
+        
+        const token = localStorage.getItem('penguin.jwt');
+        if (!token) {
+          result.textContent += '❌ 請先登入!\n';
+          result.className = 'error';
+          return;
+        }
+        
+        result.textContent += '使用 JWT token 呼叫 /api/account/staff/...\n\n';
+        
+        const response = await fetch('/koala/api/account/staff/', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.code === 2000) {
+          result.textContent += `✅ Staff API 呼叫成功! (HTTP ${response.status})\n\n`;
+          result.textContent += `返回 ${data.data?.length || 0} 筆 staff 資料\n\n`;
+          result.textContent += 'API 回應:\n';
+          result.textContent += JSON.stringify(data, null, 2);
+          result.className = 'success';
+        } else {
+          result.textContent += `❌ Staff API 呼叫失敗 (HTTP ${response.status})\n\n`;
+          result.textContent += 'API 回應:\n';
+          result.textContent += JSON.stringify(data, null, 2);
+          result.className = 'error';
+        }
+      } catch (err) {
+        result.textContent += `\n❌ 錯誤: ${err.message}\n`;
+        result.className = 'error';
+        console.error('API test error:', err);
+      }
+    };
+    
+    window.clearAuth = () => {
+      localStorage.removeItem('penguin.jwt');
+      localStorage.removeItem('penguin.refresh');
+      localStorage.removeItem('penguin.user');
+      sessionStorage.removeItem('penguin.role');
+      result.textContent = '✅ 認證資料已清除\n';
+      result.className = 'info';
+    };
+  </script>
+</body>
+</html>

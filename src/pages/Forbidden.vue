@@ -1,0 +1,15 @@
+<template>
+  <div class="grid h-[70vh] place-content-center text-center">
+    <div class="text-4xl font-extrabold text-rose-600">403</div>
+    <p class="mt-2 text-lg text-gray-800">Forbidden</p>
+    <p class="mt-1 text-gray-500">您沒有權限存取此頁面</p>
+    <router-link to="/" class="mt-6 inline-block rounded bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-500">
+      回到首頁
+    </router-link>
+  </div>
+</template>
+
+<script setup lang="ts">
+// Simple forbidden page
+</script>
+

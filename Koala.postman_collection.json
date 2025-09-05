@@ -1,0 +1,1391 @@
+{
+	"info": {
+		"_postman_id": "e0b6cb74-f6a9-4c73-b504-85f176739c9e",
+		"name": "Koala",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "47889687",
+		"_collection_link": "https://lab3-spotify.postman.co/workspace/Osdp25w~e3bcdb23-5473-44a4-8b4b-fee48d18fdff/collection/15456587-e0b6cb74-f6a9-4c73-b504-85f176739c9e?action=share&source=collection_link&creator=47889687"
+	},
+	"item": [
+		{
+			"name": "Member",
+			"item": [
+				{
+					"name": "Auth",
+					"item": [
+						{
+							"name": "login",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Login successful\", function () {",
+											"    const response = pm.response.json();",
+											"    ",
+											"    if (response.code === 2000) {",
+											"        console.log(`Login with ${response.data.profile.username} successfully`);",
+											"        ",
+											"        // 設置 access token 和 refresh token",
+											"        pm.environment.set(\"member_access_token\", response.data.tokens.access_token);",
+											"        pm.environment.set(\"member_refresh_token\", response.data.tokens.refresh_token);",
+											"        ",
+											"        console.log(\"Tokens saved to environment variables\");",
+											"    } else {",
+											"        console.error(`Login failed. Response code:`, response.code);",
+											"    }",
+											"});"
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "// {\n//   \"email\": \"{{member_real_email}}\",\n//   \"password\": \"{{member_encrypted_password}}\"\n// }\n\n\n{\n  \"email\": \"{{member_tourist_email}}\",\n  \"password\": \"{{member_encrypted_password}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/auth/login/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"auth",
+										"login",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X POST http://localhost:8000/api/auth/login/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"encrypted_credentials\": \"gAAAAABoqaSNnGWOiu3MSlEiiTdyXe7JEvA-CljvUafx7VyqJ\n  eeGa2U6EAeOp4-uOIO91X19kkfK_cuNRMCaGsx8W1KtXfIZHCUwB1_KF86Vw5Z0AkNdpWg=\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "refresh token",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"refresh_token\": \"{{member_refresh_token}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/auth/refresh/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"auth",
+										"refresh",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X POST\n  http://localhost:8000/account/auth/refresh/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"refresh_token\": \"your_refresh_token_here\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "logout",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/auth/logout/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"auth",
+										"logout",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X POST\n  http://localhost:8000/account/auth/logout/ \\\n    -H \"Authorization: Bearer \n  your_access_token_here\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Member",
+					"item": [
+						{
+							"name": "update member",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"type\": \"real\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/members/7/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"members",
+										"7",
+										""
+									]
+								},
+								"description": "Generated from cURL:  curl -X POST\n  http://localhost:8000/account/members/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"testuser\",\n      \"email\": \"testuser@example.com\",\n      \"password\": \"password123\",\n      \"full_name\": \"Test User\",\n      \"phone\": \"0912345678\",\n      \"type\": \"tourist\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "delete member",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"type\": \"real\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/members/7/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"members",
+										"7",
+										""
+									]
+								},
+								"description": "Generated from cURL:  curl -X POST\n  http://localhost:8000/account/members/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"testuser\",\n      \"email\": \"testuser@example.com\",\n      \"password\": \"password123\",\n      \"full_name\": \"Test User\",\n      \"phone\": \"0912345678\",\n      \"type\": \"tourist\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "list all members",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer your_access_token_here"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/members/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"members",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X GET http://localhost:8000/api/account/members/ \\\n    -H \"Authorization: Bearer your_access_token_here\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "retrieve a member",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer your_access_token_here"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/members/13/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"members",
+										"13",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X GET http://localhost:8000/api/account/members/ \\\n    -H \"Authorization: Bearer your_access_token_here\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "check email available",
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true
+							},
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n \"email\": \"test@example.com\"\n}\n\n\n// {\n//  \"email\": \"pony@tourist3.com\"\n// }",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/register/check-availability/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"register",
+										"check-availability",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X POST http://localhost:8000/account/register/check-availability/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"testuser\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "touist member registration",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"username\": \"newtourist\",\n  \"email\": \"newtourist@example.com\",\n  \"password\": \"gAAAAABospJTWqrrsrP3f7Q2N3NCq49nVACu5tQzu6fIudgWp73ta0rfvaIcYj3IjljOGrnYwznPTzMjvCDzG6k2gX_nZ1qSbg==\",\n  \"full_name\": \"新用戶\",\n  \"phone\": \"0912345678\",\n  \"type\": \"tourist\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/register/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"register",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X POST http://localhost:8000/account/register/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"newuser\",\n      \"email\": \"newuser@example.com\",\n      \"password\": \"password123\",\n      \"confirm_password\": \"password123\",\n      \"full_name\": \"新用戶\",\n      \"phone\": \"0912345678\",\n      \"type\": \"tourist\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "real member registration",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"username\": \"newreal\",\n  \"email\": \"newreal@example.com\",\n  \"password\": \"gAAAAABospOUpLbfZ0gIMEa3mvV5DGRVP52HoFYVZm6lEVo34fNKy-CCYREK9T8yTHiBWYQI6URTMhznZTr4DVdEs5ufLhO-5w==\",\n  \"full_name\": \"新用戶\",\n  \"phone\": \"0912345678\",\n  \"national_id\": \"gAAAAABospQbPeDf2eiQ5QmGsWVsDfb3yg-2DXdxRcWn9otdaZZ8yjsRCbCfNKl9S55u_nLfW_drXJR-fwLSncry57RKxFtUVw==\",\n  \"type\": \"real\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/register/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"register",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X POST http://localhost:8000/api/account/register/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"newuser\",\n      \"email\": \"newuser@example.com\",\n      \"password\": \"password123\",\n      \"full_name\": \"新用戶\",\n      \"phone\": \"0912345678\",\n      \"national_id\": \"A123456789\",\n      \"type\": \"real\"\n    }'"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Staff",
+					"item": [
+						{
+							"name": "list all staffs",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/staff/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"staff",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl --location 'http://localhost:8000/api/account/staff/' \\\n  --header 'Authorization: Bearer \n  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU2NjM2MzA2LCJpYXQiOjE3NTY1NDk5MDYsImp0a\n  SI6IjQ0YTBkNjllYzVlNTQzZTk5ZjEyMDA3OTA5ZjFiNjE5IiwidXNlcl9pZCI6NTF9.vugWmBh4KQIKXzXAN-78wLs_POy--jP1eL-eS0RDBBE' \\\n  --header 'Content-Type: application/json'"
+							},
+							"response": []
+						},
+						{
+							"name": "retrieve a staff",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/staff/8/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"staff",
+										"8",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl --location 'http://localhost:8000/api/account/staff/{staff_id}/' \\\n  --header 'Authorization: Bearer \n  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU2NjM2MzA2LCJpYXQiOjE3NTY1NDk5MDYsImp0a\n  SI6IjQ0YTBkNjllYzVlNTQzZTk5ZjEyMDA3OTA5ZjFiNjE5IiwidXNlcl9pZCI6NTF9.vugWmBh4KQIKXzXAN-78wLs_POy--jP1eL-eS0RDBBE' \\\n  --header 'Content-Type: application/json'"
+							},
+							"response": []
+						},
+						{
+							"name": "update staff",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"username\": \"pony_admin2\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/staff/8/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"staff",
+										"8",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl --location --request PATCH 'http://localhost:8000/api/account/staff/{staff_id}/' \\\n  --header 'Authorization: Bearer \n  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU2NjM2MzA2LCJpYXQiOjE3NTY1NDk5MDYsImp0a\n  SI6IjQ0YTBkNjllYzVlNTQzZTk5ZjEyMDA3OTA5ZjFiNjE5IiwidXNlcl9pZCI6NTF9.vugWmBh4KQIKXzXAN-78wLs_POy--jP1eL-eS0RDBBE' \\\n  --header 'Content-Type: application/json' \\\n  --data '{\n      \"email\": \"updated@example.com\",\n      \"type\": \"admin\"\n  }'"
+							},
+							"response": []
+						},
+						{
+							"name": "delete staff",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/staff/5/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"staff",
+										"5",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl --location --request DELETE 'http://localhost:8000/api/account/staff/{staff_id}/' \\\n  --header 'Authorization: Bearer \n  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU2NjM2MzA2LCJpYXQiOjE3NTY1NDk5MDYsImp0a\n  SI6IjQ0YTBkNjllYzVlNTQzZTk5ZjEyMDA3OTA5ZjFiNjE5IiwidXNlcl_pZCI6NTF9.vugWmBh4KQIKXzXAN-78wLs_POy--jP1eL-eS0RDBBE'"
+							},
+							"response": []
+						}
+					]
+				}
+			],
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"exec": [
+							"// pm.sendRequest({",
+							"//     url: `${pm.environment.get('base_url')}/api/account/auth/login/`,",
+							"//     method: 'POST',",
+							"//     header: {",
+							"//         'accept': 'application/json, text/plain, */*',",
+							"//         'accept-language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',",
+							"//         'cache-control': 'no-cache',",
+							"//         'content-type': 'application/json',",
+							"//         'pragma': 'no-cache',",
+							"//         'priority': 'u=1, i',",
+							"//         'sec-ch-ua': '\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"138\", \"Google Chrome\";v=\"138\"',",
+							"//         'sec-ch-ua-mobile': '?0',",
+							"//         'sec-ch-ua-platform': '\"macOS\"',",
+							"//         'sec-fetch-dest': 'empty',",
+							"//         'sec-fetch-mode': 'cors',",
+							"//         'sec-fetch-site': 'same-site',",
+							"//         'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'",
+							"//     },",
+							"//     body: {",
+							"//         mode: 'urlencoded',",
+							"//         urlencoded: [",
+							"//             { key: 'email', value: pm.environment.get('member_email'), disabled: false },",
+							"//             { key: 'password', value: pm.environment.get('member_encrypted_password'), disabled: false },",
+							"//         ]",
+							"//     }",
+							"// }, function (err, response) {",
+							"//     if (!err && response.code === 200) {",
+							"//         const jsonData = response.json();",
+							"//         console.log(`Login with ${pm.environment.get('member_email')} successfully`);",
+							"//         pm.environment.set(\"member_access_token\", jsonData.data.tokens.access_token);",
+							"//         pm.environment.set(\"member_refresh_token\", jsonData.data.tokens.refresh_token);",
+							"//     } else {",
+							"//         console.error(`Login with ${pm.environment.get('member_email')} failed:`, err || response.text());",
+							"//     }",
+							"// });"
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"exec": [
+							""
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "Staff",
+			"item": [
+				{
+					"name": "Auth",
+					"item": [
+						{
+							"name": "login",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Login successful\", function () {",
+											"    const response = pm.response.json();",
+											"    ",
+											"    if (response.code === 2000) {",
+											"        console.log(`Login with ${response.data.profile.username} successfully`);",
+											"        ",
+											"        // 設置 access token 和 refresh token",
+											"        pm.environment.set(\"staff_access_token\", response.data.tokens.access_token);",
+											"        pm.environment.set(\"staff_refresh_token\", response.data.tokens.refresh_token);",
+											"        ",
+											"        console.log(\"Tokens saved to environment variables\");",
+											"    } else {",
+											"        console.error(`Login failed. Response code:`, response.code);",
+											"    }",
+											"});"
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "// {\n//   \"email\": \"{{staff_staff_email}}\",\n//   \"password\": \"{{staff_encrypted_password}}\"\n// }\n\n\n{\n  \"email\": \"{{staff_admin_email}}\",\n  \"password\": \"{{staff_encrypted_password}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/auth/login/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"auth",
+										"login",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X POST http://localhost:8000/api/auth/login/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"encrypted_credentials\": \"gAAAAABoqaSNnGWOiu3MSlEiiTdyXe7JEvA-CljvUafx7VyqJ\n  eeGa2U6EAeOp4-uOIO91X19kkfK_cuNRMCaGsx8W1KtXfIZHCUwB1_KF86Vw5Z0AkNdpWg=\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "refresh token",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"refresh_token\": \"{{staff_refresh_token}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/auth/refresh/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"auth",
+										"refresh",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X POST\n  http://localhost:8000/account/auth/refresh/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"refresh_token\": \"your_refresh_token_here\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "logout",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/auth/logout/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"auth",
+										"logout",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X POST\n  http://localhost:8000/account/auth/logout/ \\\n    -H \"Authorization: Bearer \n  your_access_token_here\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Member",
+					"item": [
+						{
+							"name": "update member",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"type\": \"real\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/members/7/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"members",
+										"7",
+										""
+									]
+								},
+								"description": "Generated from cURL:  curl -X POST\n  http://localhost:8000/account/members/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"testuser\",\n      \"email\": \"testuser@example.com\",\n      \"password\": \"password123\",\n      \"full_name\": \"Test User\",\n      \"phone\": \"0912345678\",\n      \"type\": \"tourist\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "delete member",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"type\": \"real\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/members/7/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"members",
+										"7",
+										""
+									]
+								},
+								"description": "Generated from cURL:  curl -X POST\n  http://localhost:8000/account/members/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"testuser\",\n      \"email\": \"testuser@example.com\",\n      \"password\": \"password123\",\n      \"full_name\": \"Test User\",\n      \"phone\": \"0912345678\",\n      \"type\": \"tourist\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "list all members",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer your_access_token_here"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/members/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"members",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X GET http://localhost:8000/api/account/members/ \\\n    -H \"Authorization: Bearer your_access_token_here\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "retrieve a member",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer your_access_token_here"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/members/13/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"members",
+										"13",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X GET http://localhost:8000/api/account/members/ \\\n    -H \"Authorization: Bearer your_access_token_here\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "check email available",
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n \"email\": \"test@example.com\"\n}\n\n\n// {\n//  \"email\": \"pony@tourist3.com\"\n// }",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/register/check-availability/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"register",
+										"check-availability",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X POST http://localhost:8000/account/register/check-availability/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"testuser\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "touist member registration",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"username\": \"newtourist\",\n  \"email\": \"newtourist@example.com\",\n  \"password\": \"gAAAAABospJTWqrrsrP3f7Q2N3NCq49nVACu5tQzu6fIudgWp73ta0rfvaIcYj3IjljOGrnYwznPTzMjvCDzG6k2gX_nZ1qSbg==\",\n  \"full_name\": \"新用戶\",\n  \"phone\": \"0912345678\",\n  \"type\": \"tourist\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/register/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"register",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X POST http://localhost:8000/account/register/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"newuser\",\n      \"email\": \"newuser@example.com\",\n      \"password\": \"password123\",\n      \"confirm_password\": \"password123\",\n      \"full_name\": \"新用戶\",\n      \"phone\": \"0912345678\",\n      \"type\": \"tourist\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "real member registration",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"username\": \"newreal\",\n  \"email\": \"newreal@example.com\",\n  \"password\": \"gAAAAABospOUpLbfZ0gIMEa3mvV5DGRVP52HoFYVZm6lEVo34fNKy-CCYREK9T8yTHiBWYQI6URTMhznZTr4DVdEs5ufLhO-5w==\",\n  \"full_name\": \"新用戶\",\n  \"phone\": \"0912345678\",\n  \"national_id\": \"gAAAAABospQbPeDf2eiQ5QmGsWVsDfb3yg-2DXdxRcWn9otdaZZ8yjsRCbCfNKl9S55u_nLfW_drXJR-fwLSncry57RKxFtUVw==\",\n  \"type\": \"real\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/register/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"register",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X POST http://localhost:8000/api/account/register/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"newuser\",\n      \"email\": \"newuser@example.com\",\n      \"password\": \"password123\",\n      \"full_name\": \"新用戶\",\n      \"phone\": \"0912345678\",\n      \"national_id\": \"A123456789\",\n      \"type\": \"real\"\n    }'"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Staff",
+					"item": [
+						{
+							"name": "list all staffs",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/staff/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"staff",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl --location 'http://localhost:8000/api/account/staff/' \\\n  --header 'Authorization: Bearer \n  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU2NjM2MzA2LCJpYXQiOjE3NTY1NDk5MDYsImp0a\n  SI6IjQ0YTBkNjllYzVlNTQzZTk5ZjEyMDA3OTA5ZjFiNjE5IiwidXNlcl9pZCI6NTF9.vugWmBh4KQIKXzXAN-78wLs_POy--jP1eL-eS0RDBBE' \\\n  --header 'Content-Type: application/json'"
+							},
+							"response": []
+						},
+						{
+							"name": "retrieve a staff",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/staff/8/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"staff",
+										"8",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl --location 'http://localhost:8000/api/account/staff/{staff_id}/' \\\n  --header 'Authorization: Bearer \n  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU2NjM2MzA2LCJpYXQiOjE3NTY1NDk5MDYsImp0a\n  SI6IjQ0YTBkNjllYzVlNTQzZTk5ZjEyMDA3OTA5ZjFiNjE5IiwidXNlcl9pZCI6NTF9.vugWmBh4KQIKXzXAN-78wLs_POy--jP1eL-eS0RDBBE' \\\n  --header 'Content-Type: application/json'"
+							},
+							"response": []
+						},
+						{
+							"name": "update staff",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"username\": \"pony_admin2\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/staff/8/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"staff",
+										"8",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl --location --request PATCH 'http://localhost:8000/api/account/staff/{staff_id}/' \\\n  --header 'Authorization: Bearer \n  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU2NjM2MzA2LCJpYXQiOjE3NTY1NDk5MDYsImp0a\n  SI6IjQ0YTBkNjllYzVlNTQzZTk5ZjEyMDA3OTA5ZjFiNjE5IiwidXNlcl9pZCI6NTF9.vugWmBh4KQIKXzXAN-78wLs_POy--jP1eL-eS0RDBBE' \\\n  --header 'Content-Type: application/json' \\\n  --data '{\n      \"email\": \"updated@example.com\",\n      \"type\": \"admin\"\n  }'"
+							},
+							"response": []
+						},
+						{
+							"name": "delete staff",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/staff/5/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"staff",
+										"5",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl --location --request DELETE 'http://localhost:8000/api/account/staff/{staff_id}/' \\\n  --header 'Authorization: Bearer \n  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU2NjM2MzA2LCJpYXQiOjE3NTY1NDk5MDYsImp0a\n  SI6IjQ0YTBkNjllYzVlNTQzZTk5ZjEyMDA3OTA5ZjFiNjE5IiwidXNlcl_pZCI6NTF9.vugWmBh4KQIKXzXAN-78wLs_POy--jP1eL-eS0RDBBE'"
+							},
+							"response": []
+						}
+					]
+				}
+			],
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"exec": [
+							"// pm.sendRequest({",
+							"//     url: `${pm.environment.get('base_url')}/api/account/auth/login/`,",
+							"//     method: 'POST',",
+							"//     header: {",
+							"//         'accept': 'application/json, text/plain, */*',",
+							"//         'accept-language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',",
+							"//         'cache-control': 'no-cache',",
+							"//         'content-type': 'application/json',",
+							"//         'pragma': 'no-cache',",
+							"//         'priority': 'u=1, i',",
+							"//         'sec-ch-ua': '\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"138\", \"Google Chrome\";v=\"138\"',",
+							"//         'sec-ch-ua-mobile': '?0',",
+							"//         'sec-ch-ua-platform': '\"macOS\"',",
+							"//         'sec-fetch-dest': 'empty',",
+							"//         'sec-fetch-mode': 'cors',",
+							"//         'sec-fetch-site': 'same-site',",
+							"//         'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'",
+							"//     },",
+							"//     body: {",
+							"//         mode: 'urlencoded',",
+							"//         urlencoded: [",
+							"//             { key: 'email', value: pm.environment.get('staff_email'), disabled: false },",
+							"//             { key: 'password', value: pm.environment.get('staff_encrypted_password'), disabled: false },",
+							"//         ]",
+							"//     }",
+							"// }, function (err, response) {",
+							"//     if (!err && response.code === 200) {",
+							"//         const jsonData = response.json();",
+							"//         console.log(`Login with ${pm.environment.get('staff_email')} successfully`);",
+							"//         pm.environment.set(\"staff_access_token\", jsonData.data.tokens.access_token);",
+							"//         pm.environment.set(\"staff_refresh_token\", jsonData.data.tokens.refresh_token);",
+							"//     } else {",
+							"//         console.error(`Login with ${pm.environment.get('staff_email')} failed:`, err || response.text());",
+							"//     }",
+							"// });"
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"exec": [
+							""
+						]
+					}
+				}
+			]
+		}
+	]
+}

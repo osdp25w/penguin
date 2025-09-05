@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>簡單測試</title>
+  <style>
+    body { font-family: system-ui; padding: 20px; }
+    button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    .result { margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 5px; }
+  </style>
+</head>
+<body>
+  <h1>簡單個人資料測試</h1>
+  <button onclick="testLogin()">測試 pony_member_real1 登入</button>
+  <div id="result"></div>
+
+  <script type="module">
+    async function testLogin() {
+      const result = document.getElementById('result');
+      result.innerHTML = '正在測試...';
+      
+      try {
+        // 清理
+        localStorage.clear();
+        sessionStorage.clear();
+        
+        // 初始化 Pinia
+        const { createPinia } = await import('pinia');
+        const { createApp } = await import('vue');
+        
+        const app = createApp({});
+        const pinia = createPinia();
+        app.use(pinia);
+        
+        // 動態載入模組
+        const { useAuth } = await import('/src/stores/auth.ts');
+        const authStore = useAuth();
+        
+        // 登入
+        await authStore.login('pony_member_real1', '2m8N625cvmf0');
+        
+        // 顯示結果
+        const user = authStore.user;
+        let html = '<h3>登入成功！用戶資料：</h3>';
+        html += '<pre>' + JSON.stringify(user, null, 2) + '</pre>';
+        
+        // 檢查關鍵欄位
+        html += '<h3>關鍵欄位檢查：</h3>';
+        html += '<ul>';
+        html += '<li>姓名: ' + (user?.name || '❌ 無') + '</li>';
+        html += '<li>Email: ' + (user?.email || '❌ 無') + '</li>'; 
+        html += '<li>電話: ' + (user?.phone || '❌ 無') + '</li>';
+        html += '<li>身份證: ' + (user?.idNumber || '❌ 無') + '</li>';
+        html += '<li>角色: ' + (user?.roleId || '❌ 無') + '</li>';
+        html += '</ul>';
+        
+        result.innerHTML = html;
+        
+      } catch (err) {
+        result.innerHTML = '錯誤: ' + err.message;
+        console.error(err);
+      }
+    }
+    
+    // 暴露函數到全局
+    window.testLogin = testLogin;
+  </script>
+</body>
+</html>

@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>用戶編輯功能測試</title>
+  <style>
+    body { font-family: system-ui; padding: 20px; max-width: 800px; margin: 0 auto; }
+    .form-group { margin: 15px 0; }
+    label { display: inline-block; width: 120px; font-weight: bold; }
+    input, select { width: 200px; padding: 8px; margin-left: 10px; }
+    button { padding: 10px 20px; margin: 10px 5px; cursor: pointer; }
+    button:hover { background: #e0e0e0; }
+    .success { background: #d4edda; color: #155724; padding: 10px; border-radius: 5px; }
+    .error { background: #f8d7da; color: #721c24; padding: 10px; border-radius: 5px; }
+    .info { background: #d1ecf1; color: #0c5460; padding: 10px; border-radius: 5px; }
+    .user-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    .user-table th, .user-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    .user-table th { background-color: #f8f9fa; }
+    .masked { font-family: monospace; color: #666; }
+  </style>
+</head>
+<body>
+  <h1>用戶編輯功能測試</h1>
+  
+  <div class="form-group">
+    <button onclick="loginAdmin()">以 Admin 登入</button>
+    <button onclick="loadUsers()">載入用戶列表</button>
+    <button onclick="testEncryption()">測試加解密功能</button>
+  </div>
+
+  <div id="result"></div>
+
+  <div id="userForm" style="display: none;">
+    <h3>編輯用戶資料</h3>
+    <div class="form-group">
+      <label>Email:</label>
+      <input id="email" type="email" readonly>
+    </div>
+    <div class="form-group">
+      <label>姓名:</label>
+      <input id="fullName" type="text">
+    </div>
+    <div class="form-group">
+      <label>手機:</label>
+      <input id="phone" type="tel" placeholder="例：0987654321">
+    </div>
+    <div class="form-group">
+      <label>身份證號:</label>
+      <input id="nationalId" type="text" placeholder="例：A123456789">
+    </div>
+    <div class="form-group">
+      <label>新密碼:</label>
+      <input id="password" type="password" placeholder="留空則不變更">
+    </div>
+    <div class="form-group">
+      <label>角色:</label>
+      <select id="roleId">
+        <option value="admin">管理員</option>
+        <option value="staff">工作人員</option>
+        <option value="user">一般使用者</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>狀態:</label>
+      <input id="active" type="checkbox"> 啟用
+    </div>
+    <div class="form-group">
+      <button onclick="saveUser()">保存變更</button>
+      <button onclick="hideForm()">取消</button>
+    </div>
+  </div>
+
+  <script type="module">
+    const result = document.getElementById('result');
+    let currentUsers = [];
+    let authStore;
+
+    window.loginAdmin = async () => {
+      try {
+        result.innerHTML = '<div class="info">正在登入...</div>';
+        
+        const { useAuth } = await import('/src/stores/auth.ts');
+        authStore = useAuth();
+        
+        await authStore.login('pony@admin1.com', '2m8N625cvmf0');
+        
+        result.innerHTML = '<div class="success">✅ Admin 登入成功!</div>';
+      } catch (err) {
+        result.innerHTML = \`<div class="error">❌ 登入失敗: \${err.message}</div>\`;
+      }
+    };
+
+    window.loadUsers = async () => {
+      try {
+        if (!authStore?.isAdmin) {
+          result.innerHTML = '<div class="error">❌ 請先以 Admin 身分登入!</div>';
+          return;
+        }
+
+        result.innerHTML = '<div class="info">正在載入用戶...</div>';
+        
+        const { useUsers } = await import('/src/stores/users.ts');
+        const usersStore = useUsers();
+        
+        await usersStore.fetchAll();
+        currentUsers = usersStore.users;
+        
+        if (currentUsers.length === 0) {
+          result.innerHTML = '<div class="info">沒有找到用戶資料</div>';
+          return;
+        }
+
+        // 顯示用戶表格
+        let html = '<div class="success">✅ 成功載入用戶資料</div>';
+        html += '<table class="user-table"><thead><tr>';
+        html += '<th>ID</th><th>Email</th><th>姓名</th><th>手機</th><th>身份證</th><th>角色</th><th>狀態</th><th>操作</th>';
+        html += '</tr></thead><tbody>';
+        
+        for (const user of currentUsers) {
+          const { maskPhone, maskNationalId } = await import('/src/lib/encryption.ts');
+          html += \`<tr>
+            <td>\${user.id}</td>
+            <td>\${user.email}</td>
+            <td>\${user.fullName}</td>
+            <td class="masked">\${maskPhone(user.phone || '')}</td>
+            <td class="masked">\${maskNationalId(user.nationalId || '')}</td>
+            <td>\${user.roleId}</td>
+            <td>\${user.active ? '啟用' : '停用'}</td>
+            <td><button onclick="editUser('\${user.id}')">編輯</button></td>
+          </tr>\`;
+        }
+        html += '</tbody></table>';
+        
+        result.innerHTML = html;
+      } catch (err) {
+        result.innerHTML = \`<div class="error">❌ 載入失敗: \${err.message}</div>\`;
+        console.error(err);
+      }
+    };
+
+    window.editUser = async (userId) => {
+      const user = currentUsers.find(u => u.id === userId);
+      if (!user) return;
+      
+      // 填入表單
+      document.getElementById('email').value = user.email;
+      document.getElementById('fullName').value = user.fullName;
+      document.getElementById('phone').value = user.phone || '';
+      document.getElementById('nationalId').value = user.nationalId || '';
+      document.getElementById('password').value = '';
+      document.getElementById('roleId').value = user.roleId;
+      document.getElementById('active').checked = user.active;
+      
+      // 如果身份證號看起來是加密的，嘗試解密顯示
+      if (user.nationalId) {
+        try {
+          const { decryptNationalId, looksEncrypted } = await import('/src/lib/encryption.ts');
+          if (looksEncrypted(user.nationalId)) {
+            const decrypted = await decryptNationalId(user.nationalId);
+            document.getElementById('nationalId').value = decrypted;
+          }
+        } catch (err) {
+          console.warn('Failed to decrypt national ID:', err);
+        }
+      }
+      
+      document.getElementById('userForm').style.display = 'block';
+      document.getElementById('userForm').dataset.userId = userId;
+    };
+
+    window.saveUser = async () => {
+      try {
+        const userId = document.getElementById('userForm').dataset.userId;
+        const user = currentUsers.find(u => u.id === userId);
+        if (!user) return;
+
+        result.innerHTML = '<div class="info">正在保存...</div>';
+
+        // 收集表單資料
+        const formData = {
+          fullName: document.getElementById('fullName').value,
+          phone: document.getElementById('phone').value,
+          nationalId: document.getElementById('nationalId').value,
+          password: document.getElementById('password').value,
+          roleId: document.getElementById('roleId').value,
+          active: document.getElementById('active').checked
+        };
+
+        // 加密敏感資料
+        const { encryptNationalId, encryptPassword } = await import('/src/lib/encryption.ts');
+        
+        const updateData = {
+          ...user,
+          fullName: formData.fullName,
+          phone: formData.phone,
+          roleId: formData.roleId,
+          active: formData.active
+        };
+
+        // 加密身份證號（如果有填寫）
+        if (formData.nationalId.trim()) {
+          updateData.nationalId = await encryptNationalId(formData.nationalId.trim());
+        }
+
+        // 準備更新 API 的資料（模擬）
+        const apiData = {
+          email: user.email,
+          full_name: formData.fullName,
+          type: formData.roleId
+        };
+
+        // 如果有填寫密碼，加密它
+        if (formData.password.trim()) {
+          apiData.password = await encryptPassword(formData.password.trim());
+        }
+
+        console.log('API 資料 (加密後):', apiData);
+        console.log('本地資料 (加密後):', updateData);
+
+        // 更新本地資料
+        Object.assign(user, updateData);
+
+        result.innerHTML = '<div class="success">✅ 用戶資料已更新 (僅限本地，API 更新需要後端支援)</div>';
+        document.getElementById('userForm').style.display = 'none';
+        
+        // 重新載入列表
+        setTimeout(() => window.loadUsers(), 1000);
+
+      } catch (err) {
+        result.innerHTML = \`<div class="error">❌ 保存失敗: \${err.message}</div>\`;
+        console.error('Save error:', err);
+      }
+    };
+
+    window.hideForm = () => {
+      document.getElementById('userForm').style.display = 'none';
+    };
+
+    window.testEncryption = async () => {
+      try {
+        result.innerHTML = '<div class="info">正在測試加解密...</div>';
+
+        const { encryptNationalId, decryptNationalId, encryptPassword, maskNationalId, maskPhone } = await import('/src/lib/encryption.ts');
+
+        const testData = {
+          nationalId: 'A123456789',
+          phone: '0987654321',
+          password: 'mySecretPassword123'
+        };
+
+        // 測試身份證號加解密
+        const encryptedId = await encryptNationalId(testData.nationalId);
+        const decryptedId = await decryptNationalId(encryptedId);
+
+        // 測試密碼加密
+        const encryptedPwd = await encryptPassword(testData.password);
+
+        // 測試遮罩
+        const maskedId = maskNationalId(testData.nationalId);
+        const maskedPhone = maskPhone(testData.phone);
+
+        let html = '<div class="success">✅ 加解密測試成功</div>';
+        html += '<h4>測試結果：</h4>';
+        html += \`<p><strong>原始身份證：</strong>\${testData.nationalId}</p>\`;
+        html += \`<p><strong>加密身份證：</strong><span class="masked">\${encryptedId}</span></p>\`;
+        html += \`<p><strong>解密身份證：</strong>\${decryptedId}</p>\`;
+        html += \`<p><strong>遮罩身份證：</strong>\${maskedId}</p>\`;
+        html += \`<p><strong>遮罩手機：</strong>\${maskedPhone}</p>\`;
+        html += \`<p><strong>加密密碼：</strong><span class="masked">\${encryptedPwd}</span></p>\`;
+
+        result.innerHTML = html;
+
+      } catch (err) {
+        result.innerHTML = \`<div class="error">❌ 測試失敗: \${err.message}</div>\`;
+        console.error('Encryption test error:', err);
+      }
+    };
+  </script>
+</body>
+</html>

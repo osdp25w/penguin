@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>Token API 測試</title>
+  <style>
+    body { font-family: system-ui; padding: 20px; }
+    button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    .result { margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 5px; }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+    .warning { background: #fff3cd; color: #856404; }
+  </style>
+</head>
+<body>
+  <h1>使用現有 Token 測試 Member API</h1>
+  <p>請先在主應用中登入 pony_member_real1，然後點擊下方按鈕</p>
+  <button id="testBtn">使用現有 Token 測試 Member API</button>
+  <div id="result" class="result"></div>
+
+  <script>
+    document.getElementById('testBtn').addEventListener('click', async () => {
+      const result = document.getElementById('result');
+      result.innerHTML = '正在檢查...';
+      
+      try {
+        // 檢查是否有 token
+        const token = localStorage.getItem('penguin.jwt');
+        if (!token) {
+          result.innerHTML = '<div class="warning"><h3>⚠️ 找不到 Token</h3><p>請先在主應用中登入 pony_member_real1</p></div>';
+          return;
+        }
+        
+        console.log('使用 token:', token.substring(0, 20) + '...');
+        
+        // 調用 Member API
+        console.log('呼叫 Member API...');
+        const memberRes = await fetch('/koala/api/account/members/1/', {
+          method: 'GET',
+          headers: { 
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json' 
+          }
+        });
+        
+        console.log('Member API 狀態:', memberRes.status);
+        
+        if (!memberRes.ok) {
+          const errorText = await memberRes.text();
+          throw new Error('API 調用失敗: ' + memberRes.status + ' - ' + errorText);
+        }
+        
+        const memberData = await memberRes.json();
+        console.log('Member API 完整回應:', memberData);
+        
+        const data = memberData.data || memberData;
+        console.log('實際資料:', data);
+        console.log('phone:', data?.phone);
+        console.log('national_id:', data?.national_id);
+        console.log('full_name:', data?.full_name);
+        
+        // 顯示結果
+        let html = '<div class="success"><h3>✅ Member API 測試成功</h3></div>';
+        html += '<h4>關鍵欄位檢查結果：</h4>';
+        html += '<ul>';
+        html += '<li><strong>phone:</strong> ' + (data?.phone || '❌ 無此欄位') + '</li>';
+        html += '<li><strong>national_id:</strong> ' + (data?.national_id || '❌ 無此欄位') + '</li>';
+        html += '<li><strong>full_name:</strong> ' + (data?.full_name || '❌ 無此欄位') + '</li>';
+        html += '<li><strong>email:</strong> ' + (data?.email || '❌ 無此欄位') + '</li>';
+        html += '<li><strong>username:</strong> ' + (data?.username || '❌ 無此欄位') + '</li>';
+        html += '<li><strong>type:</strong> ' + (data?.type || '❌ 無此欄位') + '</li>';
+        html += '</ul>';
+        
+        // 檢查是否有身份證號且加密
+        if (data?.national_id) {
+          html += '<h4>🔍 身份證號分析：</h4>';
+          html += '<ul>';
+          html += '<li><strong>原始值:</strong> ' + data.national_id + '</li>';
+          html += '<li><strong>是否加密:</strong> ' + (data.national_id.startsWith('gAAAAA') ? '✅ 是（Fernet 加密）' : '❌ 否（明文）') + '</li>';
+          if (data.national_id.length > 20) {
+            html += '<li><strong>長度:</strong> ' + data.national_id.length + ' 字元（看起來像加密資料）</li>';
+          }
+          html += '</ul>';
+        }
+        
+        html += '<h4>完整 API 回應：</h4>';
+        html += '<pre style="background: white; padding: 10px; border: 1px solid #ddd; overflow-x: auto; max-height: 300px;">';
+        html += JSON.stringify(memberData, null, 2);
+        html += '</pre>';
+        
+        result.innerHTML = html;
+        
+      } catch (err) {
+        console.error('API 測試錯誤:', err);
+        result.innerHTML = '<div class="error"><h3>❌ API 測試失敗</h3><p>' + err.message + '</p></div>';
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>直接 API 測試</title>
+  <style>
+    body { font-family: system-ui; padding: 20px; }
+    button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    .result { margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 5px; }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+    .info { background: #d1ecf1; color: #0c5460; }
+    .step { margin: 10px 0; padding: 10px; border-left: 3px solid #007bff; background: #f8f9fa; }
+  </style>
+</head>
+<body>
+  <h1>🔍 直接 API 測試</h1>
+  <p>直接使用 fetch 調用 API，不依賴任何框架</p>
+  <button id="testBtn">開始 API 測試</button>
+  <div id="result" class="result"></div>
+
+  <script>
+    document.getElementById('testBtn').addEventListener('click', async () => {
+      const result = document.getElementById('result');
+      result.innerHTML = '<div class="info">🔄 開始 API 測試流程...</div>';
+      
+      try {
+        let html = '';
+        
+        // 步驟 1: 加密密碼
+        html += '<div class="step"><strong>步驟 1:</strong> 加密密碼</div>';
+        result.innerHTML = html;
+        
+        const encryptRes = await fetch('/local/fernet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: '2m8N625cvmf0' })
+        });
+        
+        if (!encryptRes.ok) {
+          throw new Error('密碼加密失敗: ' + encryptRes.status);
+        }
+        
+        const encryptData = await encryptRes.json();
+        const encryptedPassword = encryptData.token;
+        console.log('加密後密碼:', encryptedPassword);
+        
+        // 步驟 2: 登入
+        html += '<div class="step"><strong>步驟 2:</strong> 登入獲取 Token</div>';
+        result.innerHTML = html;
+        
+        const loginRes = await fetch('/koala/api/account/auth/login/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: 'pony_member_real1',
+            password: encryptedPassword
+          })
+        });
+        
+        if (!loginRes.ok) {
+          throw new Error('登入失敗: ' + loginRes.status);
+        }
+        
+        const loginData = await loginRes.json();
+        console.log('登入回應:', loginData);
+        
+        if (loginData.code !== 2000) {
+          throw new Error('登入失敗: ' + loginData.msg);
+        }
+        
+        const token = loginData.data.tokens.access_token;
+        const profile = loginData.data.profile;
+        
+        // 步驟 3: 檢查登入回應中的 profile
+        html += '<div class="step"><strong>步驟 3:</strong> 檢查登入回應中的 profile</div>';
+        result.innerHTML = html;
+        
+        console.log('登入 profile:', profile);
+        console.log('登入 profile phone:', profile?.phone);
+        console.log('登入 profile national_id:', profile?.national_id);
+        
+        // 步驟 4: 調用 Member API
+        html += '<div class="step"><strong>步驟 4:</strong> 調用 Member API</div>';
+        result.innerHTML = html;
+        
+        const memberId = profile?.id || profile?.user_id || '1';
+        console.log('使用 Member ID:', memberId);
+        
+        const memberRes = await fetch('/koala/api/account/members/' + memberId + '/', {
+          method: 'GET',
+          headers: { 
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json' 
+          }
+        });
+        
+        if (!memberRes.ok) {
+          throw new Error('Member API 調用失敗: ' + memberRes.status);
+        }
+        
+        const memberData = await memberRes.json();
+        console.log('Member API 完整回應:', memberData);
+        
+        const memberInfo = memberData.data || memberData;
+        console.log('Member 資料:', memberInfo);
+        console.log('Member phone:', memberInfo?.phone);
+        console.log('Member national_id:', memberInfo?.national_id);
+        
+        // 顯示結果
+        html += '<div class="success"><h3>✅ API 測試完成</h3></div>';
+        
+        // 登入 Profile 分析
+        html += '<h4>🔍 登入回應 Profile 檢查：</h4>';
+        html += '<ul>';
+        html += '<li><strong>id:</strong> ' + (profile?.id || profile?.user_id || '❌ 無') + '</li>';
+        html += '<li><strong>username:</strong> ' + (profile?.username || '❌ 無') + '</li>';
+        html += '<li><strong>full_name:</strong> ' + (profile?.full_name || '❌ 無') + '</li>';
+        html += '<li><strong>email:</strong> ' + (profile?.email || '❌ 無') + '</li>';
+        html += '<li><strong>phone:</strong> ' + (profile?.phone || '❌ 無此欄位') + '</li>';
+        html += '<li><strong>national_id:</strong> ' + (profile?.national_id || '❌ 無此欄位') + '</li>';
+        html += '<li><strong>type:</strong> ' + (profile?.type || '❌ 無') + '</li>';
+        html += '</ul>';
+        
+        // Member API 分析
+        html += '<h4>🔍 Member API 回應檢查：</h4>';
+        html += '<ul>';
+        html += '<li><strong>phone:</strong> ' + (memberInfo?.phone || '❌ 無此欄位') + '</li>';
+        html += '<li><strong>national_id:</strong> ' + (memberInfo?.national_id || '❌ 無此欄位') + '</li>';
+        html += '<li><strong>full_name:</strong> ' + (memberInfo?.full_name || '❌ 無此欄位') + '</li>';
+        html += '<li><strong>email:</strong> ' + (memberInfo?.email || '❌ 無此欄位') + '</li>';
+        html += '<li><strong>username:</strong> ' + (memberInfo?.username || '❌ 無此欄位') + '</li>';
+        html += '<li><strong>type:</strong> ' + (memberInfo?.type || '❌ 無此欄位') + '</li>';
+        html += '</ul>';
+        
+        // 問題診斷
+        html += '<h4>🩺 問題診斷：</h4>';
+        const loginHasPhone = profile?.phone;
+        const loginHasNationalId = profile?.national_id;
+        const apiHasPhone = memberInfo?.phone;
+        const apiHasNationalId = memberInfo?.national_id;
+        
+        html += '<ul>';
+        if (!loginHasPhone && !apiHasPhone) {
+          html += '<li>❌ <strong>phone 問題:</strong> 登入回應和 Member API 都沒有 phone 欄位</li>';
+        } else if (loginHasPhone && !apiHasPhone) {
+          html += '<li>⚠️ <strong>phone 問題:</strong> 登入有 phone，但 Member API 沒有</li>';
+        } else if (!loginHasPhone && apiHasPhone) {
+          html += '<li>⚠️ <strong>phone 問題:</strong> 登入沒有 phone，但 Member API 有</li>';
+        } else {
+          html += '<li>✅ <strong>phone 正常:</strong> 兩個 API 都有 phone 欄位</li>';
+        }
+        
+        if (!loginHasNationalId && !apiHasNationalId) {
+          html += '<li>❌ <strong>national_id 問題:</strong> 登入回應和 Member API 都沒有 national_id 欄位</li>';
+        } else if (loginHasNationalId && !apiHasNationalId) {
+          html += '<li>⚠️ <strong>national_id 問題:</strong> 登入有 national_id，但 Member API 沒有</li>';
+        } else if (!loginHasNationalId && apiHasNationalId) {
+          html += '<li>⚠️ <strong>national_id 問題:</strong> 登入沒有 national_id，但 Member API 有</li>';
+        } else {
+          html += '<li>✅ <strong>national_id 正常:</strong> 兩個 API 都有 national_id 欄位</li>';
+        }
+        html += '</ul>';
+        
+        // 建議
+        html += '<h4>💡 建議解決方案：</h4>';
+        html += '<ul>';
+        if (!loginHasPhone && !apiHasPhone) {
+          html += '<li>檢查後端資料庫中是否有儲存 phone 資料</li>';
+          html += '<li>檢查後端 API 序列化器是否包含 phone 欄位</li>';
+        }
+        if (!loginHasNationalId && !apiHasNationalId) {
+          html += '<li>檢查後端資料庫中是否有儲存 national_id 資料</li>';
+          html += '<li>檢查後端 API 序列化器是否包含 national_id 欄位</li>';
+        }
+        if ((loginHasPhone || apiHasPhone) && (loginHasNationalId || apiHasNationalId)) {
+          html += '<li>檢查前端 auth store 的資料處理邏輯</li>';
+          html += '<li>檢查個人資料模態框的資料綁定</li>';
+        }
+        html += '</ul>';
+        
+        // 顯示完整回應
+        html += '<details style="margin-top: 20px;"><summary><h4>📄 完整登入回應</h4></summary>';
+        html += '<pre style="background: white; padding: 10px; border: 1px solid #ddd; overflow-x: auto; max-height: 300px;">';
+        html += JSON.stringify(loginData, null, 2);
+        html += '</pre></details>';
+        
+        html += '<details><summary><h4>📄 完整 Member API 回應</h4></summary>';
+        html += '<pre style="background: white; padding: 10px; border: 1px solid #ddd; overflow-x: auto; max-height: 300px;">';
+        html += JSON.stringify(memberData, null, 2);
+        html += '</pre></details>';
+        
+        result.innerHTML = html;
+        
+      } catch (err) {
+        console.error('API 測試錯誤:', err);
+        result.innerHTML += '<div class="error"><h3>❌ API 測試失敗</h3><p>' + err.message + '</p></div>';
+      }
+    });
+  </script>
+</body>
+</html>

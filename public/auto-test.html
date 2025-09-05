@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>自動登入測試</title>
+  <style>
+    body { font-family: system-ui; padding: 20px; }
+    button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    .result { margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 5px; }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+    .info { background: #d1ecf1; color: #0c5460; }
+    .step { margin: 10px 0; padding: 10px; border-left: 3px solid #007bff; background: #f8f9fa; }
+  </style>
+</head>
+<body>
+  <h1>🤖 自動登入並測試 Member API</h1>
+  <p>這個測試會自動使用 auth store 登入並檢查個人資料資料</p>
+  <button id="testBtn">開始自動測試</button>
+  <div id="result" class="result"></div>
+
+  <script type="module">
+    document.getElementById('testBtn').addEventListener('click', async () => {
+      const result = document.getElementById('result');
+      result.innerHTML = '<div class="info">🔄 開始自動測試流程...</div>';
+      
+      try {
+        let html = '';
+        
+        // 步驟 1: 清理並初始化 Pinia
+        html += '<div class="step"><strong>步驟 1:</strong> 初始化 Pinia 和清理資料</div>';
+        result.innerHTML = html;
+        
+        localStorage.clear();
+        sessionStorage.clear();
+        
+        // 初始化 Pinia
+        const { createPinia } = await import('pinia');
+        const { createApp } = await import('vue');
+        
+        const app = createApp({});
+        const pinia = createPinia();
+        app.use(pinia);
+        
+        // 步驟 2: 登入
+        html += '<div class="step"><strong>步驟 2:</strong> 使用 auth store 登入 pony_member_real1</div>';
+        result.innerHTML = html;
+        
+        const { useAuth } = await import('/src/stores/auth.ts');
+        const authStore = useAuth();
+        
+        await authStore.login('pony_member_real1', '2m8N625cvmf0');
+        console.log('登入成功，用戶資料:', authStore.user);
+        
+        // 步驟 3: 檢查登入後的用戶資料
+        html += '<div class="step"><strong>步驟 3:</strong> 檢查登入後的用戶資料</div>';
+        result.innerHTML = html;
+        
+        const user = authStore.user;
+        console.log('用戶 phone:', user?.phone);
+        console.log('用戶 idNumber:', user?.idNumber);
+        
+        // 步驟 4: 直接調用 Member API
+        html += '<div class="step"><strong>步驟 4:</strong> 直接調用 Member API</div>';
+        result.innerHTML = html;
+        
+        const { Koala } = await import('/src/services/koala.ts');
+        const memberId = user?.id || '1';
+        
+        console.log('調用 getMember API，ID:', memberId);
+        const memberData = await Koala.getMember(memberId);
+        console.log('Member API 原始回應:', memberData);
+        
+        const data = memberData?.data || memberData;
+        console.log('處理後的資料:', data);
+        
+        // 顯示最終結果
+        html += '<div class="success"><h3>✅ 自動測試完成</h3></div>';
+        
+        html += '<h4>🔍 登入後的用戶資料（auth store）：</h4>';
+        html += '<ul>';
+        html += '<li><strong>id:</strong> ' + (user?.id || '❌ 無') + '</li>';
+        html += '<li><strong>name:</strong> ' + (user?.name || '❌ 無') + '</li>';
+        html += '<li><strong>email:</strong> ' + (user?.email || '❌ 無') + '</li>';
+        html += '<li><strong>phone:</strong> ' + (user?.phone || '❌ 無') + '</li>';
+        html += '<li><strong>idNumber:</strong> ' + (user?.idNumber || '❌ 無') + '</li>';
+        html += '<li><strong>roleId:</strong> ' + (user?.roleId || '❌ 無') + '</li>';
+        html += '</ul>';
+        
+        html += '<h4>🔍 Member API 直接回應：</h4>';
+        html += '<ul>';
+        html += '<li><strong>phone:</strong> ' + (data?.phone || '❌ API 無此欄位') + '</li>';
+        html += '<li><strong>national_id:</strong> ' + (data?.national_id || '❌ API 無此欄位') + '</li>';
+        html += '<li><strong>full_name:</strong> ' + (data?.full_name || '❌ API 無此欄位') + '</li>';
+        html += '<li><strong>email:</strong> ' + (data?.email || '❌ API 無此欄位') + '</li>';
+        html += '<li><strong>username:</strong> ' + (data?.username || '❌ API 無此欄位') + '</li>';
+        html += '</ul>';
+        
+        // 診斷問題
+        html += '<h4>🩺 問題診斷：</h4>';
+        html += '<ul>';
+        
+        const hasAuthPhone = user?.phone;
+        const hasAuthIdNumber = user?.idNumber;
+        const hasApiPhone = data?.phone;
+        const hasApiNationalId = data?.national_id;
+        
+        if (!hasApiPhone && !hasApiNationalId) {
+          html += '<li>❌ <strong>根本原因:</strong> API 沒有返回 phone 和 national_id 欄位</li>';
+          html += '<li>💡 <strong>可能解決方案:</strong> 檢查後端資料庫或 API 實作</li>';
+        } else if (hasApiPhone && hasApiNationalId && !hasAuthPhone && !hasAuthIdNumber) {
+          html += '<li>❌ <strong>根本原因:</strong> API 有資料但 auth store 處理邏輯有問題</li>';
+          html += '<li>💡 <strong>可能解決方案:</strong> 修復 fetchFullUserProfile 或 login 方法</li>';
+        } else if (hasAuthPhone && hasAuthIdNumber) {
+          html += '<li>✅ <strong>資料正常:</strong> auth store 中有電話和身份證號</li>';
+          html += '<li>💡 <strong>檢查:</strong> 個人資料模態框的顯示邏輯</li>';
+        }
+        
+        html += '</ul>';
+        
+        // 顯示完整的 API 回應（摺疊）
+        html += '<details style="margin-top: 20px;"><summary><h4>📄 完整 API 回應（點擊展開）</h4></summary>';
+        html += '<pre style="background: white; padding: 10px; border: 1px solid #ddd; overflow-x: auto; max-height: 400px;">';
+        html += JSON.stringify(memberData, null, 2);
+        html += '</pre></details>';
+        
+        result.innerHTML = html;
+        
+      } catch (err) {
+        console.error('自動測試錯誤:', err);
+        result.innerHTML += '<div class="error"><h3>❌ 自動測試失敗</h3><p>' + err.message + '</p><p>請查看控制台了解詳細錯誤</p></div>';
+      }
+    });
+  </script>
+</body>
+</html>
