@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: penguin
+data:
+  config.public.js: |
+    // Public runtime config (non-sensitive)
+    window.CONFIG = Object.assign(window.CONFIG || {}, {
+      // Use same-origin; client paths already include "/api/..."
+      API_BASE: ''
+    });

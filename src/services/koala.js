@@ -6,7 +6,8 @@ export const Koala = {
     async login(email, password) {
         var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
         let toSend = password;
-        const loginKey = (_b = (_a = import.meta) === null || _a === void 0 ? void 0 : _a.env) === null || _b === void 0 ? void 0 : _b.VITE_KOALA_LOGIN_KEY;
+        const rt = (globalThis || window).CONFIG || {};
+        const loginKey = (rt === null || rt === void 0 ? void 0 : rt.KOALA_LOGIN_KEY) || ((_b = (_a = import.meta) === null || _a === void 0 ? void 0 : _a.env) === null || _b === void 0 ? void 0 : _b.VITE_KOALA_LOGIN_KEY);
         const forceTs = (_d = (_c = import.meta) === null || _c === void 0 ? void 0 : _c.env) === null || _d === void 0 ? void 0 : _d.VITE_KOALA_FORCE_FERNET_TS;
         const forceIv = (_f = (_e = import.meta) === null || _e === void 0 ? void 0 : _e.env) === null || _f === void 0 ? void 0 : _f.VITE_KOALA_FORCE_FERNET_IV;
         const forceCompat = String(((_h = (_g = import.meta) === null || _g === void 0 ? void 0 : _g.env) === null || _h === void 0 ? void 0 : _h.VITE_KOALA_FORCE_FERNET_COMPAT) || '').toLowerCase() === '1' || String(((_k = (_j = import.meta) === null || _j === void 0 ? void 0 : _j.env) === null || _k === void 0 ? void 0 : _k.VITE_KOALA_FORCE_FERNET_COMPAT) || '').toLowerCase() === 'true';

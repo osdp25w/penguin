@@ -17,6 +17,10 @@ spec:
         - name: web
           image: osdp25w/penguin:latest
           imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: frontend-config
+              mountPath: /usr/share/nginx/html/config
+              readOnly: true
           ports:
             - containerPort: 80
           readinessProbe:
@@ -34,6 +38,20 @@ spec:
             limits:
               cpu: "250m"
               memory: "256Mi"
+      volumes:
+        - name: frontend-config
+          projected:
+            sources:
+              - configMap:
+                  name: frontend-config
+                  items:
+                    - key: config.public.js
+                      path: config.public.js
+              - secret:
+                  name: frontend-secret
+                  items:
+                    - key: config.secret.js
+                      path: config.secret.js
 ---
 apiVersion: v1
 kind: Service

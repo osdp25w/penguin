@@ -3,17 +3,18 @@
 const ACCESS_KEY = 'penguin.jwt';
 const REFRESH_KEY = 'penguin.refresh';
 const USER_KEY = 'penguin.user';
+function runtime() { try { return (globalThis || window).CONFIG || {}; } catch { return {}; } }
 function getBaseUrl() {
     var _a, _b;
+    const rt = runtime();
     const envBase = ((_b = (_a = import.meta) === null || _a === void 0 ? void 0 : _a.env) === null || _b === void 0 ? void 0 : _b.VITE_KOALA_BASE_URL) || (import.meta.env === null || import.meta.env === void 0 ? void 0 : import.meta.env.VITE_API_BASE);
-    // Dev: default '/koala' proxy; Prod: default same-origin
     if (import.meta && import.meta.env && import.meta.env.DEV) {
         let base = envBase !== null && envBase !== void 0 ? envBase : '/koala';
         if (/^https?:/i.test(base))
             base = '/koala';
-        return base.replace(/\/$/, '');
+        return String(base).replace(/\/$/, '');
     }
-    const base = (envBase !== null && envBase !== void 0 ? envBase : '').replace(/\/$/, '');
+    const base = (rt.API_BASE || envBase || '').replace(/\/$/, '');
     return base;
 }
 function getAccessToken() {
@@ -52,8 +53,14 @@ export function clearAuthStorage() {
 async function request(path, opts = {}) {
     var _a, _b;
     const base = getBaseUrl();
-    // Accept full URL or path starting with '/'
-    let url = /^https?:/.test(path) ? path : `${base}${path.startsWith('/') ? '' : '/'}${path}`;
+    // Accept full URL; if path starts with '/api', don't prepend base
+    let url;
+    if (/^https?:/i.test(path))
+        url = path;
+    else if (path.startsWith('/api'))
+        url = path;
+    else
+        url = `${base}${path.startsWith('/') ? '' : '/'}${path}`;
     // Last-resort rewrite: if running from local/LAN dev and URL points to Koala domain, rewrite to proxy
     try {
         const isLocal = typeof window !== 'undefined' && /^http:\/\/(localhost|127\.0\.0\.1|10\.|172\.(1[6-9]|2\d|3[0-1])|192\.168\.)/i.test(window.location.origin);
@@ -92,7 +99,8 @@ async function request(path, opts = {}) {
         return undefined;
     const data = await res.json();
     // Auto-decrypt sensitive values if a key is provided
-    const sensitiveKey = (_b = (_a = import.meta) === null || _a === void 0 ? void 0 : _a.env) === null || _b === void 0 ? void 0 : _b.VITE_KOALA_SENSITIVE_KEY;
+    const rt = runtime();
+    const sensitiveKey = (rt === null || rt === void 0 ? void 0 : rt.KOALA_SENSITIVE_KEY) || ((_b = (_a = import.meta) === null || _a === void 0 ? void 0 : _a.env) === null || _b === void 0 ? void 0 : _b.VITE_KOALA_SENSITIVE_KEY);
     if (sensitiveKey) {
         try {
             const dec = await decryptSensitiveDeep(data, sensitiveKey);

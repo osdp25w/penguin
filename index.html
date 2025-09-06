@@ -8,6 +8,9 @@
   </head>
   <body>
     <div id="app"></div>
+    <!-- Runtime config (public + secret) loaded before app -->
+    <script src="/config/config.public.js?v=%CONFIG_VERSION%"></script>
+    <script src="/config/config.secret.js?v=%CONFIG_VERSION%"></script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

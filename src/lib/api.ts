@@ -5,19 +5,21 @@ const ACCESS_KEY = 'penguin.jwt'
 const REFRESH_KEY = 'penguin.refresh'
 const USER_KEY   = 'penguin.user'
 
-function getBaseUrl() {
-  // Prefer explicit env var
-  const envBase = (import.meta as any)?.env?.VITE_KOALA_BASE_URL || (import.meta as any)?.env?.VITE_API_BASE
+function runtime(): any {
+  try { return (globalThis as any)?.CONFIG || {} } catch { return {} }
+}
 
-  // Dev: default to '/koala' proxy to avoid CORS
+function getBaseUrl() {
+  const rt = runtime()
+  const envBase = (import.meta as any)?.env?.VITE_KOALA_BASE_URL || (import.meta as any)?.env?.VITE_API_BASE
+  // Development: prefer local proxy to avoid CORS
   if ((import.meta as any)?.env?.DEV) {
     let base = envBase ?? '/koala'
     if (/^https?:/i.test(base)) base = '/koala'
-    return base.replace(/\/$/, '')
+    return String(base).replace(/\/$/, '')
   }
-
-  // Prod: default to same-origin (""), so '/api' 走前端容器內 Nginx 反代到 koala
-  const base = (envBase ?? '').replace(/\/$/, '')
+  // Production: prefer runtime config (same-origin by default)
+  const base = (rt.API_BASE ?? envBase ?? '').replace(/\/$/, '')
   return base
 }
 
@@ -48,8 +50,19 @@ type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
 
 async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const base = getBaseUrl()
-  // Accept full URL or path starting with '/'
-  let url = /^https?:/.test(path) ? path : `${base}${path.startsWith('/') ? '' : '/'}${path}`
+  // Accept full URL; for absolute API paths ('/api/...') don't prepend base
+  let url: string
+  if (/^https?:/i.test(path)) url = path
+  else if (path.startsWith('/api')) {
+    // Check if base already contains /api to avoid duplication
+    if (base && base.includes('/api')) {
+      // Remove /api from path to avoid duplication
+      url = `${base}${path.replace('/api', '')}`
+    } else {
+      url = path
+    }
+  }
+  else url = `${base}${path.startsWith('/') ? '' : '/'}${path}`
   // Last-resort rewrite: if running from local/LAN dev and URL points to Koala domain, rewrite to proxy
   try {
     const isLocal = typeof window !== 'undefined' && /^https?:\/\/(localhost|127\.0\.0\.1|10\.|172\.(1[6-9]|2\d|3[0-1])|192\.168\.)/i.test(window.location.origin)
@@ -91,7 +104,8 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const data = await res.json()
 
   // Auto-decrypt sensitive values if a key is provided
-  const sensitiveKey = (import.meta as any)?.env?.VITE_KOALA_SENSITIVE_KEY as string | undefined
+  const rt = runtime()
+  const sensitiveKey = (rt.KOALA_SENSITIVE_KEY as string | undefined) || ((import.meta as any)?.env?.VITE_KOALA_SENSITIVE_KEY as string | undefined)
   if (sensitiveKey) {
     try {
       const dec = await decryptSensitiveDeep(data, sensitiveKey)

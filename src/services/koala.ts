@@ -34,7 +34,8 @@ export const Koala = {
   // Auth
   async login(email: string, password: string) {
     let toSend = password
-    const loginKey = import.meta?.env?.VITE_KOALA_LOGIN_KEY as string | undefined
+    const rt: any = (globalThis as any)?.CONFIG || {}
+    const loginKey = (rt.KOALA_LOGIN_KEY as string | undefined) || (import.meta as any)?.env?.VITE_KOALA_LOGIN_KEY as string | undefined
     const forceTs = import.meta?.env?.VITE_KOALA_FORCE_FERNET_TS as any
     const forceIv = import.meta?.env?.VITE_KOALA_FORCE_FERNET_IV as string | undefined
     const forceCompat = String(import.meta?.env?.VITE_KOALA_FORCE_FERNET_COMPAT || '').toLowerCase() === '1' || String(import.meta?.env?.VITE_KOALA_FORCE_FERNET_COMPAT || '').toLowerCase() === 'true'

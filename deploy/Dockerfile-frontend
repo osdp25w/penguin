@@ -19,7 +19,10 @@ ENV VITE_KOALA_LOGIN_KEY=${VITE_KOALA_LOGIN_KEY}
 ENV VITE_KOALA_SENSITIVE_KEY=${VITE_KOALA_SENSITIVE_KEY}
 
 # Build static assets (skip type-check to avoid CI fail)
-RUN npm run build:docker
+ARG CONFIG_VERSION=dev
+# Stamp config version into index.html to bypass edge/browser cache
+RUN sed -i "s/%CONFIG_VERSION%/${CONFIG_VERSION}/g" index.html \
+  && npm run build:docker
 
 # Serve with Nginx
 FROM nginx:1.27-alpine

@@ -16,6 +16,7 @@ steps:
         - VITE_ENABLE_MOCK=false
         - VITE_KOALA_LOGIN_KEY=${VITE_KOALA_LOGIN_KEY}
         - VITE_KOALA_SENSITIVE_KEY=${VITE_KOALA_SENSITIVE_KEY}
+        - CONFIG_VERSION=${DRONE_COMMIT_SHA}
       username:
         from_secret: DOCKER_USERNAME_osdp25w
       password:
