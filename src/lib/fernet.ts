@@ -56,41 +56,7 @@ async function importHmacKey(key: Uint8Array): Promise<CryptoKey> {
   return crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
 }
 
-export async function fernetEncrypt(plaintext: string, base64UrlKey: string): Promise<string> {
-  if (!('crypto' in globalThis) || !('subtle' in crypto)) {
-    throw new Error('WebCrypto not available in this environment')
-  }
-  const keyBytes = b64uToBytes(base64UrlKey)
-  if (keyBytes.length !== 32) throw new Error('Invalid Fernet key length')
-
-  // Split into signing and encryption keys (16 + 16 bytes)
-  const signingKey = keyBytes.slice(0, 16)
-  const encryptionKey = keyBytes.slice(16)
-
-  const aesKey = await importAesKey(encryptionKey)
-  const macKey = await importHmacKey(signingKey)
-
-  // Prepare header
-  const version = new Uint8Array([0x80])
-  const ts = Math.floor(Date.now() / 1000)
-  const timestamp = u64be(ts)
-  const iv = crypto.getRandomValues(new Uint8Array(16))
-
-  // Encode and pad
-  const enc = new TextEncoder()
-  const padded = pkcs7Pad(enc.encode(plaintext))
-
-  // Encrypt
-  const ctBuf = await crypto.subtle.encrypt({ name: 'AES-CBC', iv }, aesKey, padded)
-  const ciphertext = new Uint8Array(ctBuf)
-
-  const msg = concatBytes(version, timestamp, iv, ciphertext)
-  const hmacBuf = await crypto.subtle.sign('HMAC', macKey, msg)
-  const hmac = new Uint8Array(hmacBuf)
-
-  const token = concatBytes(msg, hmac)
-  return bytesToB64u(token)
-}
+// fernetEncrypt 已移除 - 所有加密都通過伺服器端點進行
 
 export function looksLikeFernet(token: string): boolean {
   // Quick heuristic: Fernet tokens are base64url and often start with 'gAAAAA'

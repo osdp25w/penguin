@@ -1,7 +1,7 @@
 // src/lib/encryption.ts
 // 處理敏感資料和密碼的加解密功能
 
-import { fernetEncrypt, fernetDecrypt } from './fernet'
+import { fernetDecrypt } from './fernet' // fernetEncrypt 已禁用，使用伺服器端加密
 
 /**
  * 加密國民身份證號 (使用 VITE_KOALA_SENSITIVE_KEY)
@@ -13,27 +13,30 @@ export async function encryptNationalId(nationalId: string): Promise<string> {
   }
   
   try {
-    // 在開發環境優先使用本地端點
-    if (import.meta.env.DEV) {
-      const response = await fetch('/local/fernet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          text: nationalId,
-          key: sensitiveKey // 使用敏感資料金鑰
-        })
+    // 強制使用伺服器端加密 (禁用 WebCrypto)
+    const endpoint = import.meta.env.DEV ? '/local/fernet' : '/api/fernet/encrypt'
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        text: nationalId,
+        key: import.meta.env.DEV ? sensitiveKey : undefined // 生產環境使用伺服器端的 key
       })
-      if (response.ok) {
-        const data = await response.json()
-        if (data.token) return data.token
-      }
+    })
+    
+    if (!response.ok) {
+      throw new Error(`Server encryption failed: ${response.status}`)
     }
     
-    // 回退到 WebCrypto
-    return await fernetEncrypt(nationalId, sensitiveKey)
+    const data = await response.json()
+    if (!data.token) {
+      throw new Error('Server returned no token')
+    }
+    
+    return data.token
   } catch (error) {
     console.error('Failed to encrypt national ID:', error)
-    throw new Error('無法加密身份證號')
+    throw new Error('無法加密身份證號 - 伺服器加密端點不可用')
   }
 }
 
@@ -79,32 +82,37 @@ export async function decryptNationalId(encryptedNationalId: string): Promise<st
  */
 export async function encryptPassword(password: string): Promise<string> {
   const loginKey = import.meta?.env?.VITE_KOALA_LOGIN_KEY
-  if (!loginKey) {
-    throw new Error('VITE_KOALA_LOGIN_KEY not configured')
+  
+  // 在生產環境中，不需要前端的 loginKey（伺服器端會使用自己的 key）
+  if (import.meta.env.DEV && !loginKey) {
+    throw new Error('VITE_KOALA_LOGIN_KEY not configured in development')
   }
   
   try {
-    // 在開發環境優先使用本地端點
-    if (import.meta.env.DEV) {
-      const response = await fetch('/local/fernet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          text: password,
-          key: loginKey // 使用登入金鑰
-        })
+    // 強制使用伺服器端加密 (禁用 WebCrypto)
+    const endpoint = import.meta.env.DEV ? '/local/fernet' : '/api/fernet/encrypt'
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        text: password,
+        key: import.meta.env.DEV ? loginKey : undefined // 生產環境使用伺服器端的 key
       })
-      if (response.ok) {
-        const data = await response.json()
-        if (data.token) return data.token
-      }
+    })
+    
+    if (!response.ok) {
+      throw new Error(`Server encryption failed: ${response.status}`)
     }
     
-    // 回退到 WebCrypto
-    return await fernetEncrypt(password, loginKey)
+    const data = await response.json()
+    if (!data.token) {
+      throw new Error('Server returned no token')
+    }
+    
+    return data.token
   } catch (error) {
     console.error('Failed to encrypt password:', error)
-    throw new Error('無法加密密碼')
+    throw new Error('無法加密密碼 - 伺服器加密端點不可用')
   }
 }
 

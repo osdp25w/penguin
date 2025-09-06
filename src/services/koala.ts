@@ -1,6 +1,6 @@
 // src/services/koala.ts
 import { http, saveUserProfile, apiStorage } from '@/lib/api'
-import { fernetEncrypt, looksLikeFernet } from '@/lib/fernet'
+import { looksLikeFernet } from '@/lib/fernet'
 
 // Minimal types inferred from Postman examples
 export interface KoalaLoginResponse {
@@ -43,7 +43,7 @@ export const Koala = {
     if (loginKey && password && !looksLikeFernet(password)) {
       // Helper: ensure we never fall back to sending plaintext
       const mustBeToken = async (): Promise<string> => {
-        // DEV + forced ts/iv: deterministic replay is mandatory
+        // DEV + forced ts/iv: deterministic replay (optional for local testing)
         if (import.meta.env.DEV && forceTs && forceIv) {
           const r = await fetch('/local/fernet/replay', {
             method: 'POST',
@@ -59,49 +59,33 @@ export const Koala = {
           return j.token as string
         }
 
-        // In development, prioritize local endpoint for reliability
-        if (import.meta.env.DEV) {
-          try {
-            const r = await fetch('/local/fernet', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ text: password })
-            })
-            if (r.ok) {
-              const j = await r.json()
-              if (j?.token && j.token !== password) {
-                console.log('[Fernet] Encrypted via local endpoint')
-                return j.token
-              }
-            } else {
-              console.warn('Local encrypt not ok:', r.status)
-            }
-          } catch (err) {
-            console.warn('Local encrypt endpoint failed:', err)
-          }
-        }
-
-        // Try WebCrypto (for production or if local endpoint fails)
+        // Use server-side encryption only (Node crypto implementation) for full parity
         try {
-          const token = await fernetEncrypt(password, loginKey)
-          if (token && token !== password) {
-            console.log('[Fernet] Encrypted via WebCrypto')
-            return token
+          const r = await fetch('/api/fernet/encrypt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: password })
+          })
+          if (r.ok) {
+            const j = await r.json()
+            if (j?.token && j.token !== password) {
+              console.log('[Fernet] Encrypted via server endpoint: /api/fernet/encrypt')
+              return j.token
+            }
+          } else {
+            console.warn('Server encrypt not ok:', r.status)
           }
-        } catch (e) {
-          console.warn('WebCrypto encrypt failed:', e)
-          // In production, this is critical
-          if (!import.meta.env.DEV) {
-            throw new Error('無法加密密碼，請確認瀏覽器支援 HTTPS')
-          }
+        } catch (err) {
+          console.warn('Server encrypt endpoint failed:', err)
         }
 
-        throw new Error('ENCRYPTION_FAILED: Unable to encrypt password')
+        // No fallback — enforce server-side encryption
+        throw new Error('ENCRYPTION_FAILED: Server encryption unavailable')
       }
 
       try {
         const token = await mustBeToken()
-        // Ensure base64url padding to length % 4 == 0
+        // Ensure urlsafe base64 is properly padded to length % 4 == 0
         const padLen = (4 - (token.length % 4)) % 4
         toSend = token + (padLen ? '='.repeat(padLen) : '')
         console.log('[Fernet] Password encrypted successfully')

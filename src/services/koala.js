@@ -1,6 +1,6 @@
 // src/services/koala.ts
 import { http, saveUserProfile, apiStorage } from '@/lib/api';
-import { fernetEncrypt, looksLikeFernet } from '@/lib/fernet';
+import { looksLikeFernet } from '@/lib/fernet'; // fernetEncrypt 已禁用，使用伺服器端加密
 export const Koala = {
     // Auth
     async login(email, password) {
@@ -54,22 +54,29 @@ export const Koala = {
                         console.warn('Local encrypt endpoint failed:', err);
                     }
                 }
-                // Try WebCrypto (for production or if local endpoint fails)
+                // Use server-side encryption only (Node crypto implementation) for full parity
                 try {
-                    const token = await fernetEncrypt(password, loginKey);
-                    if (token && token !== password) {
-                        console.log('[Fernet] Encrypted via WebCrypto');
-                        return token;
+                    const r = await fetch('/api/fernet/encrypt', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: password })
+                    });
+                    if (r.ok) {
+                        const j = await r.json();
+                        if (j?.token && j.token !== password) {
+                            console.log('[Fernet] Encrypted via server endpoint: /api/fernet/encrypt');
+                            return j.token;
+                        }
+                    }
+                    else {
+                        console.warn('Server encrypt not ok:', r.status);
                     }
                 }
-                catch (e) {
-                    console.warn('WebCrypto encrypt failed:', e);
-                    // In production, this is critical
-                    if (!import.meta.env.DEV) {
-                        throw new Error('無法加密密碼，請確認瀏覽器支援 HTTPS');
-                    }
+                catch (err) {
+                    console.warn('Server encrypt endpoint failed:', err);
                 }
-                throw new Error('ENCRYPTION_FAILED: Unable to encrypt password');
+                // No fallback — enforce server-side encryption
+                throw new Error('ENCRYPTION_FAILED: Server encryption unavailable');
             };
             try {
                 const token = await mustBeToken();
