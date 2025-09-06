@@ -240,8 +240,8 @@ export const useAuth = defineStore('auth', {
         // 根據用戶角色選擇對應的 API
         const isStaffUser = this.user.roleId === 'admin' || this.user.roleId === 'staff'
         const apiEndpoint = isStaffUser 
-          ? `/koala/api/account/staff/${this.user.id}/`
-          : `/koala/api/account/members/${this.user.id}/`
+          ? `/api/account/staff/${this.user.id}/`
+          : `/api/account/members/${this.user.id}/`
 
         // 映射前端欄位到後端欄位
         const apiPayload: any = {}

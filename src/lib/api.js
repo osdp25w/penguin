@@ -4,15 +4,17 @@ const ACCESS_KEY = 'penguin.jwt';
 const REFRESH_KEY = 'penguin.refresh';
 const USER_KEY = 'penguin.user';
 function getBaseUrl() {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
-    // Prefer explicit env var; in dev, default to proxy '/koala' to avoid CORS
-    const envBase = ((_b = (_a = import.meta) === null || _a === void 0 ? void 0 : _a.env) === null || _b === void 0 ? void 0 : _b.VITE_KOALA_BASE_URL) || ((_d = (_c = import.meta) === null || _c === void 0 ? void 0 : _c.env) === null || _d === void 0 ? void 0 : _d.VITE_API_BASE);
-    let base = envBase || (((_f = (_e = import.meta) === null || _e === void 0 ? void 0 : _e.env) === null || _f === void 0 ? void 0 : _f.DEV) ? '/koala' : 'https://koala.osdp25w.xyz');
-    // In dev, force using proxy path to avoid CORS even if env mistakenly set to absolute URL
-    if (((_h = (_g = import.meta) === null || _g === void 0 ? void 0 : _g.env) === null || _h === void 0 ? void 0 : _h.DEV) && /^https?:/i.test(base)) {
-        base = '/koala';
+    var _a, _b;
+    const envBase = ((_b = (_a = import.meta) === null || _a === void 0 ? void 0 : _a.env) === null || _b === void 0 ? void 0 : _b.VITE_KOALA_BASE_URL) || (import.meta.env === null || import.meta.env === void 0 ? void 0 : import.meta.env.VITE_API_BASE);
+    // Dev: default '/koala' proxy; Prod: default same-origin
+    if (import.meta && import.meta.env && import.meta.env.DEV) {
+        let base = envBase !== null && envBase !== void 0 ? envBase : '/koala';
+        if (/^https?:/i.test(base))
+            base = '/koala';
+        return base.replace(/\/$/, '');
     }
-    return base.replace(/\/$/, '');
+    const base = (envBase !== null && envBase !== void 0 ? envBase : '').replace(/\/$/, '');
+    return base;
 }
 function getAccessToken() {
     try {

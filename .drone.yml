@@ -1,0 +1,48 @@
+kind: pipeline
+type: kubernetes
+name: penguin-deploy
+
+steps:
+  - name: build-and-push
+    image: plugins/docker
+    settings:
+      repo: osdp25w/penguin
+      tags:
+        - latest
+        - ${DRONE_COMMIT_SHA}
+      dockerfile: deploy/Dockerfile-frontend
+      build_args:
+        - VITE_KOALA_BASE_URL=/api
+        - VITE_ENABLE_MOCK=false
+        - VITE_KOALA_LOGIN_KEY=${VITE_KOALA_LOGIN_KEY}
+        - VITE_KOALA_SENSITIVE_KEY=${VITE_KOALA_SENSITIVE_KEY}
+      username:
+        from_secret: DOCKER_USERNAME_osdp25w
+      password:
+        from_secret: DOCKER_PASSWORD_osdp25w
+    environment:
+      VITE_KOALA_LOGIN_KEY:
+        from_secret: VITE_KOALA_LOGIN_KEY
+      VITE_KOALA_SENSITIVE_KEY:
+        from_secret: VITE_KOALA_SENSITIVE_KEY
+
+  - name: deploy-to-k8s
+    image: sinlead/drone-kubectl
+    settings:
+      kubernetes_server:
+        from_secret: K8S_SERVER
+      kubernetes_token:
+        from_secret: K8S_TOKEN
+      kubernetes_cert:
+        from_secret: K8S_CA
+      namespace: penguin
+      startTimeout: 240
+    commands:
+      - kubectl -n penguin set image deployment/frontend web=osdp25w/penguin:${DRONE_COMMIT_SHA}
+      - kubectl -n penguin rollout status deployment/frontend --timeout=120s
+
+trigger:
+  branch:
+    - master
+  event:
+    - push

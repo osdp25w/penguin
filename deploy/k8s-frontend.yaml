@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
-  namespace: koala
+  namespace: penguin
 spec:
   replicas: 2
   selector:
@@ -14,33 +14,32 @@ spec:
         app: frontend
     spec:
       containers:
-      - name: web
-        # TODO: replace with your image, e.g. osdp25w/penguin-frontend:latest
-        image: your-namespace/your-frontend:latest
-        imagePullPolicy: IfNotPresent
-        ports:
-        - containerPort: 80
-        readinessProbe:
-          httpGet: { path: /, port: 80 }
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        livenessProbe:
-          httpGet: { path: /, port: 80 }
-          initialDelaySeconds: 15
-          periodSeconds: 20
-        resources:
-          requests:
-            cpu: "50m"
-            memory: "64Mi"
-          limits:
-            cpu: "250m"
-            memory: "256Mi"
+        - name: web
+          image: osdp25w/penguin:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet: { path: /, port: 80 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /, port: 80 }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: frontend
-  namespace: koala
+  namespace: penguin
 spec:
   selector:
     app: frontend
@@ -52,22 +51,17 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: app-ingress
-  namespace: koala
+  namespace: penguin
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: letsencrypt
 spec:
   ingressClassName: nginx
   rules:
-  - host: app.example.com  # TODO: replace with your domain
+  - host: penguin.osdp25w.xyz
     http:
       paths:
-      - path: /api
-        pathType: Prefix
-        backend:
-          service:
-            name: koala
-            port:
-              number: 8000
       - path: /
         pathType: Prefix
         backend:
@@ -76,6 +70,5 @@ spec:
             port:
               number: 80
   tls:
-  - hosts: ["app.example.com"]   # TODO: replace with your domain
-    secretName: app-example-com-tls
-
+  - hosts: ["penguin.osdp25w.xyz"]
+    secretName: penguin-tls-secret

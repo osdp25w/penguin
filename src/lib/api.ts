@@ -6,14 +6,19 @@ const REFRESH_KEY = 'penguin.refresh'
 const USER_KEY   = 'penguin.user'
 
 function getBaseUrl() {
-  // Prefer explicit env var; in dev, default to proxy '/koala' to avoid CORS
-  const envBase = import.meta?.env?.VITE_KOALA_BASE_URL || import.meta?.env?.VITE_API_BASE
-  let base = envBase || (import.meta?.env?.DEV ? '/koala' : 'https://koala.osdp25w.xyz')
-  // In dev, force using proxy path to avoid CORS even if env mistakenly set to absolute URL
-  if (import.meta?.env?.DEV && /^https?:/i.test(base)) {
-    base = '/koala'
+  // Prefer explicit env var
+  const envBase = (import.meta as any)?.env?.VITE_KOALA_BASE_URL || (import.meta as any)?.env?.VITE_API_BASE
+
+  // Dev: default to '/koala' proxy to avoid CORS
+  if ((import.meta as any)?.env?.DEV) {
+    let base = envBase ?? '/koala'
+    if (/^https?:/i.test(base)) base = '/koala'
+    return base.replace(/\/$/, '')
   }
-  return base.replace(/\/$/, '')
+
+  // Prod: default to same-origin (""), so '/api' 走前端容器內 Nginx 反代到 koala
+  const base = (envBase ?? '').replace(/\/$/, '')
+  return base
 }
 
 function getAccessToken(): string | null {
