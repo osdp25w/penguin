@@ -1,0 +1,40 @@
+kind: pipeline
+type: docker
+name: frontend-deploy
+
+steps:
+  - name: build
+    image: plugins/docker
+    settings:
+      repo: your-namespace/your-frontend  # TODO: replace with your registry/image
+      tags:
+        - latest
+        - ${DRONE_COMMIT_SHA}
+      dockerfile: deploy/Dockerfile-frontend
+      build_args:
+        - VITE_KOALA_BASE_URL=/api
+        - VITE_ENABLE_MOCK=false
+      username:
+        from_secret: DOCKER_USERNAME_osdp25w
+      password:
+        from_secret: DOCKER_PASSWORD_osdp25w
+
+  - name: deploy
+    image: sinlead/drone-kubectl
+    environment:
+      KUBERNETES_SERVER:
+        from_secret: K8S_SERVER
+      KUBERNETES_TOKEN:
+        from_secret: K8S_TOKEN
+      KUBERNETES_CERTIFICATE_AUTHORITY:
+        from_secret: K8S_CA
+    commands:
+      - kubectl -n koala set image deployment/frontend web=your-namespace/your-frontend:${DRONE_COMMIT_SHA}
+      - kubectl -n koala rollout status deployment/frontend --timeout=120s
+
+trigger:
+  branch:
+    - master
+  event:
+    - push
+

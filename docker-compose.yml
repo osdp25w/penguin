@@ -1,10 +1,65 @@
 version: "3.9"
 services:
-  frontend:
-    build: .
-    container_name: penguin_front
+  # Development service - matches npm run dev exactly
+  dev:
+    build:
+      context: .
+      target: dev  # Use dev stage from Dockerfile
+    container_name: penguin_dev
     ports:
-      - "8081:80"          # Nginx 80 -> host 8080
+      - "5173:5173"  # Vite dev server port
+    volumes:
+      - .:/app  # Mount source code for hot reload
+      - /app/node_modules  # Prevent overwriting node_modules
+      - ./cert:/app/cert  # Share certificates
+    environment:
+      - TZ=Asia/Taipei
+      - HOST=0.0.0.0  # Listen on all interfaces
+      # Pass all VITE_ environment variables
+      - VITE_BASE_URL=${VITE_BASE_URL:-/api/v1}
+      - VITE_GOOGLE_MAPS_KEY=${VITE_GOOGLE_MAPS_KEY}
+      - VITE_ENABLE_MOCK=${VITE_ENABLE_MOCK:-true}
+      - VITE_SEED_MOCK=${VITE_SEED_MOCK:-1}
+      - VITE_KOALA_BASE_URL=${VITE_KOALA_BASE_URL:-/koala}
+      - VITE_KOALA_LOGIN_KEY=${VITE_KOALA_LOGIN_KEY}
+      - VITE_KOALA_SENSITIVE_KEY=${VITE_KOALA_SENSITIVE_KEY}
+      - VITE_MAP_PROVIDER=${VITE_MAP_PROVIDER:-maplibre}
+      - VITE_EMAP_LAYER=${VITE_EMAP_LAYER:-EMAP}
+      - VITE_EMAP_MATRIXSET=${VITE_EMAP_MATRIXSET:-GoogleMapsCompatible}
+      - VITE_MAP_CENTER=${VITE_MAP_CENTER:-23.8,121.6}
+      - VITE_MAP_ZOOM=${VITE_MAP_ZOOM:-10}
+      - VITE_SEED_REGION=${VITE_SEED_REGION:-hualien}
+      - VITE_AUTO_CERT=${VITE_AUTO_CERT:-1}  # Auto-generate certificates with local IPs
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+
+  # Production service - optimized static serving
+  production:
+    build:
+      context: .
+      target: production  # Use production stage from Dockerfile
+    container_name: penguin_production
+    ports:
+      - "8081:80"  # Nginx on port 80 -> host 8081
     environment:
       - TZ=Asia/Taipei
     restart: unless-stopped
+
+  # Optional: Production with SSL/TLS (requires certificates)
+  production-ssl:
+    build:
+      context: .
+      target: production
+    container_name: penguin_production_ssl
+    ports:
+      - "443:443"
+      - "80:80"  # Redirect HTTP to HTTPS
+    volumes:
+      - ./cert:/etc/nginx/ssl:ro  # Mount SSL certificates
+      - ./nginx-ssl.conf:/etc/nginx/conf.d/default.conf:ro  # Use SSL config instead of default
+    environment:
+      - TZ=Asia/Taipei
+    restart: unless-stopped
+    profiles:
+      - ssl  # Only start with --profile ssl

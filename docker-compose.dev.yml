@@ -1,0 +1,16 @@
+# Development-only override for docker-compose.yml
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up dev
+version: "3.9"
+services:
+  dev:
+    # Load environment variables from .env file
+    env_file:
+      - .env
+    # Additional development tools
+    command: npm run dev -- --host 0.0.0.0
+    networks:
+      - penguin-dev
+
+networks:
+  penguin-dev:
+    driver: bridge

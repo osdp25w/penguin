@@ -47,7 +47,7 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   let url = /^https?:/.test(path) ? path : `${base}${path.startsWith('/') ? '' : '/'}${path}`
   // Last-resort rewrite: if running from local/LAN dev and URL points to Koala domain, rewrite to proxy
   try {
-    const isLocal = typeof window !== 'undefined' && /^http:\/\/(localhost|127\.0\.0\.1|10\.|172\.(1[6-9]|2\d|3[0-1])|192\.168\.)/i.test(window.location.origin)
+    const isLocal = typeof window !== 'undefined' && /^https?:\/\/(localhost|127\.0\.0\.1|10\.|172\.(1[6-9]|2\d|3[0-1])|192\.168\.)/i.test(window.location.origin)
     if (isLocal && /^https?:\/\/koala\.osdp25w\.xyz\//i.test(url)) {
       const u = new URL(url)
       url = `/koala${u.pathname}${u.search}`
