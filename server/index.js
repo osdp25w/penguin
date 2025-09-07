@@ -22,6 +22,50 @@ const pkcs7pad = (b) => {
   return Buffer.concat([b, Buffer.alloc(padLen, padLen)]);
 };
 
+const pkcs7unpad = (b) => {
+  const padLen = b[b.length - 1];
+  if (padLen < 1 || padLen > 16) throw new Error('Invalid padding');
+  for (let i = b.length - padLen; i < b.length; i++) {
+    if (b[i] !== padLen) throw new Error('Invalid padding');
+  }
+  return b.subarray(0, b.length - padLen);
+};
+
+function fernetDecrypt(keyB64u, tokenB64u) {
+  const key = b64uToBuf(keyB64u);
+  if (key.length !== 32) throw new Error('Invalid Fernet key length');
+  const signKey = key.subarray(0, 16);
+  const encKey = key.subarray(16, 32);
+  
+  const tokenBuf = b64uToBuf(tokenB64u);
+  if (tokenBuf.length < 57) throw new Error('Invalid token length');
+  
+  // Parse token structure: version(1) + timestamp(8) + iv(16) + ciphertext + mac(32)
+  const version = tokenBuf[0];
+  if (version !== 0x80) throw new Error('Invalid token version');
+  
+  const tsBuf = tokenBuf.subarray(1, 9);
+  const iv = tokenBuf.subarray(9, 25);
+  const ct = tokenBuf.subarray(25, tokenBuf.length - 32);
+  const mac = tokenBuf.subarray(tokenBuf.length - 32);
+  
+  // Verify HMAC
+  const body = tokenBuf.subarray(0, tokenBuf.length - 32);
+  const expectedMac = crypto.createHmac('sha256', signKey).update(body).digest();
+  
+  if (!mac.equals(expectedMac)) {
+    throw new Error('HMAC verification failed');
+  }
+  
+  // Decrypt
+  const decipher = crypto.createDecipheriv('aes-128-cbc', encKey, iv);
+  decipher.setAutoPadding(false);
+  const padded = Buffer.concat([decipher.update(ct), decipher.final()]);
+  const plaintext = pkcs7unpad(padded);
+  
+  return plaintext.toString('utf8');
+}
+
 function fernetEncrypt(keyB64u, text) {
   const key = b64uToBuf(keyB64u);               // 32 bytes
   if (key.length !== 32) throw new Error('Invalid Fernet key length');
@@ -61,6 +105,38 @@ app.post('/api/fernet/encrypt', (req, res) => {
     res.json({ token });
   } catch (error) {
     console.error('Encryption error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Fernet 解密端點（批量解密，支持不同金鑰）
+app.post('/api/fernet/decrypt', (req, res) => {
+  try {
+    const { tokens, key } = req.body;
+
+    if (!tokens || !Array.isArray(tokens)) {
+      return res.status(400).json({ error: 'Missing tokens array' });
+    }
+
+    // 在開發環境使用前端提供的金鑰，生產環境使用服務器端金鑰
+    const decryptKey = key || process.env.KOALA_SENSITIVE_KEY;
+    
+    if (!decryptKey) {
+      return res.status(500).json({ error: 'Server key not configured' });
+    }
+
+    const values = tokens.map(token => {
+      try {
+        return fernetDecrypt(decryptKey, token);
+      } catch (error) {
+        console.error('Decrypt error for token:', token.substring(0, 20) + '...', error.message);
+        return token; // 解密失敗時返回原始值
+      }
+    });
+
+    res.json({ values });
+  } catch (error) {
+    console.error('Batch decryption error:', error);
     res.status(500).json({ error: error.message });
   }
 });

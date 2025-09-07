@@ -59,8 +59,8 @@ async function importHmacKey(key: Uint8Array): Promise<CryptoKey> {
 // fernetEncrypt 已移除 - 所有加密都通過伺服器端點進行
 
 export function looksLikeFernet(token: string): boolean {
-  // Quick heuristic: Fernet tokens are base64url and often start with 'gAAAAA'
-  return /^[A-Za-z0-9_-]+={0,2}$/.test(token) && token.startsWith('gAAAAA')
+  // Quick heuristic: Fernet tokens are base64url and start with 'gA' (version 0x80)
+  return /^[A-Za-z0-9_-]+={0,2}$/.test(token) && token.startsWith('gA') && token.length > 60
 }
 
 function pkcs7Unpad(data: Uint8Array): Uint8Array {

@@ -3,18 +3,27 @@
 const ACCESS_KEY = 'penguin.jwt';
 const REFRESH_KEY = 'penguin.refresh';
 const USER_KEY = 'penguin.user';
-function runtime() { try { return (globalThis || window).CONFIG || {}; } catch { return {}; } }
+function runtime() {
+    try {
+        return (globalThis === null || globalThis === void 0 ? void 0 : globalThis.CONFIG) || {};
+    }
+    catch (_a) {
+        return {};
+    }
+}
 function getBaseUrl() {
-    var _a, _b;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     const rt = runtime();
-    const envBase = ((_b = (_a = import.meta) === null || _a === void 0 ? void 0 : _a.env) === null || _b === void 0 ? void 0 : _b.VITE_KOALA_BASE_URL) || (import.meta.env === null || import.meta.env === void 0 ? void 0 : import.meta.env.VITE_API_BASE);
-    if (import.meta && import.meta.env && import.meta.env.DEV) {
+    const envBase = ((_b = (_a = import.meta) === null || _a === void 0 ? void 0 : _a.env) === null || _b === void 0 ? void 0 : _b.VITE_KOALA_BASE_URL) || ((_d = (_c = import.meta) === null || _c === void 0 ? void 0 : _c.env) === null || _d === void 0 ? void 0 : _d.VITE_API_BASE);
+    // Development: prefer local proxy to avoid CORS
+    if ((_f = (_e = import.meta) === null || _e === void 0 ? void 0 : _e.env) === null || _f === void 0 ? void 0 : _f.DEV) {
         let base = envBase !== null && envBase !== void 0 ? envBase : '/koala';
         if (/^https?:/i.test(base))
             base = '/koala';
         return String(base).replace(/\/$/, '');
     }
-    const base = (rt.API_BASE || envBase || '').replace(/\/$/, '');
+    // Production: prefer runtime config (same-origin by default)
+    const base = ((_h = (_g = rt.API_BASE) !== null && _g !== void 0 ? _g : envBase) !== null && _h !== void 0 ? _h : '').replace(/\/$/, '');
     return base;
 }
 function getAccessToken() {
@@ -53,17 +62,25 @@ export function clearAuthStorage() {
 async function request(path, opts = {}) {
     var _a, _b;
     const base = getBaseUrl();
-    // Accept full URL; if path starts with '/api', don't prepend base
+    // Accept full URL; for absolute API paths ('/api/...') don't prepend base
     let url;
     if (/^https?:/i.test(path))
         url = path;
-    else if (path.startsWith('/api'))
-        url = path;
+    else if (path.startsWith('/api')) {
+        // Check if base already contains /api to avoid duplication
+        if (base && base.includes('/api')) {
+            // Remove /api from path to avoid duplication
+            url = `${base}${path.replace('/api', '')}`;
+        }
+        else {
+            url = path;
+        }
+    }
     else
         url = `${base}${path.startsWith('/') ? '' : '/'}${path}`;
     // Last-resort rewrite: if running from local/LAN dev and URL points to Koala domain, rewrite to proxy
     try {
-        const isLocal = typeof window !== 'undefined' && /^http:\/\/(localhost|127\.0\.0\.1|10\.|172\.(1[6-9]|2\d|3[0-1])|192\.168\.)/i.test(window.location.origin);
+        const isLocal = typeof window !== 'undefined' && /^https?:\/\/(localhost|127\.0\.0\.1|10\.|172\.(1[6-9]|2\d|3[0-1])|192\.168\.)/i.test(window.location.origin);
         if (isLocal && /^https?:\/\/koala\.osdp25w\.xyz\//i.test(url)) {
             const u = new URL(url);
             url = `/koala${u.pathname}${u.search}`;
@@ -100,7 +117,7 @@ async function request(path, opts = {}) {
     const data = await res.json();
     // Auto-decrypt sensitive values if a key is provided
     const rt = runtime();
-    const sensitiveKey = (rt === null || rt === void 0 ? void 0 : rt.KOALA_SENSITIVE_KEY) || ((_b = (_a = import.meta) === null || _a === void 0 ? void 0 : _a.env) === null || _b === void 0 ? void 0 : _b.VITE_KOALA_SENSITIVE_KEY);
+    const sensitiveKey = rt.KOALA_SENSITIVE_KEY || ((_b = (_a = import.meta) === null || _a === void 0 ? void 0 : _a.env) === null || _b === void 0 ? void 0 : _b.VITE_KOALA_SENSITIVE_KEY);
     if (sensitiveKey) {
         try {
             const dec = await decryptSensitiveDeep(data, sensitiveKey);
@@ -129,36 +146,31 @@ async function decryptSensitiveDeep(input, key) {
     collect(input);
     if (tokens.size === 0)
         return input;
-    const isSecure = globalThis.isSecureContext === true;
+    // 強制使用服務器端解密，禁用 WebCrypto
     const mapping = new Map();
-    if (isSecure) {
-        for (const t of tokens) {
-            try {
-                mapping.set(t, await fernetDecrypt(t, key));
-            }
-            catch ( /* keep raw */_a) { /* keep raw */ }
+    try {
+        // 使用服務器端解密端點
+        const endpoint = '/api/fernet/decrypt';
+        const r = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                tokens: Array.from(tokens),
+                key: import.meta.env.DEV ? key : undefined // 生產環境使用服務器端金鑰
+            })
+        });
+        if (r.ok) {
+            const j = await r.json();
+            const arr = (j === null || j === void 0 ? void 0 : j.values) || [];
+            Array.from(tokens).forEach((tok, i) => {
+                const dec = arr[i];
+                if (typeof dec === 'string')
+                    mapping.set(tok, dec);
+            });
         }
     }
-    else if (import.meta.env.DEV) {
-        try {
-            const r = await fetch('/local/fernet/decrypt', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tokens: Array.from(tokens), key })
-            });
-            if (r.ok) {
-                const j = await r.json();
-                const arr = (j === null || j === void 0 ? void 0 : j.values) || [];
-                Array.from(tokens).forEach((tok, i) => {
-                    const dec = arr[i];
-                    if (typeof dec === 'string')
-                        mapping.set(tok, dec);
-                });
-            }
-        }
-        catch (_b) {
-            // fallthrough
-        }
+    catch (_a) {
+        // 解密失敗，保持原始值
     }
     const replace = (val) => {
         if (typeof val === 'string' && mapping.has(val))

@@ -26,6 +26,11 @@ spec:
             secretKeyRef:
               name: penguin-fernet-secret
               key: KOALA_LOGIN_KEY
+        - name: KOALA_SENSITIVE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: penguin-fernet-secret
+              key: KOALA_SENSITIVE_KEY
         resources:
           requests:
             memory: "64Mi"

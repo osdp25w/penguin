@@ -1,14 +1,15 @@
 // src/lib/encryption.ts
 // 處理敏感資料和密碼的加解密功能
-import { fernetDecrypt } from './fernet'; // fernetEncrypt 已禁用，使用伺服器端加密
+// 完全使用伺服器端加解密，不使用 WebCrypto
 /**
  * 加密國民身份證號 (使用 VITE_KOALA_SENSITIVE_KEY)
  */
 export async function encryptNationalId(nationalId) {
     var _a, _b;
     const sensitiveKey = (_b = (_a = import.meta) === null || _a === void 0 ? void 0 : _a.env) === null || _b === void 0 ? void 0 : _b.VITE_KOALA_SENSITIVE_KEY;
-    if (!sensitiveKey) {
-        throw new Error('VITE_KOALA_SENSITIVE_KEY not configured');
+    // 在生產環境中，不需要前端的 sensitiveKey（伺服器端會使用自己的 key）
+    if (import.meta.env.DEV && !sensitiveKey) {
+        throw new Error('VITE_KOALA_SENSITIVE_KEY not configured in development');
     }
     try {
         // 強制使用伺服器端加密 (禁用 WebCrypto)
@@ -41,29 +42,29 @@ export async function encryptNationalId(nationalId) {
 export async function decryptNationalId(encryptedNationalId) {
     var _a, _b;
     const sensitiveKey = (_b = (_a = import.meta) === null || _a === void 0 ? void 0 : _a.env) === null || _b === void 0 ? void 0 : _b.VITE_KOALA_SENSITIVE_KEY;
-    if (!sensitiveKey) {
-        throw new Error('VITE_KOALA_SENSITIVE_KEY not configured');
+    // 在生產環境中，不需要前端的 sensitiveKey（伺服器端會使用自己的 key）
+    if (import.meta.env.DEV && !sensitiveKey) {
+        throw new Error('VITE_KOALA_SENSITIVE_KEY not configured in development');
     }
     try {
-        // 在開發環境優先使用本地端點
-        if (import.meta.env.DEV) {
-            const response = await fetch('/local/fernet/decrypt', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    tokens: [encryptedNationalId],
-                    key: sensitiveKey
-                })
-            });
-            if (response.ok) {
-                const data = await response.json();
-                if (data.values && data.values[0]) {
-                    return data.values[0];
-                }
+        // 強制使用伺服器端解密（與加密邏輯保持一致）
+        const endpoint = import.meta.env.DEV ? '/local/fernet/decrypt' : '/api/fernet/decrypt';
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                tokens: [encryptedNationalId],
+                key: import.meta.env.DEV ? sensitiveKey : undefined // 生產環境使用伺服器端的 key
+            })
+        });
+        if (response.ok) {
+            const data = await response.json();
+            if (data.values && data.values[0]) {
+                return data.values[0];
             }
         }
-        // 回退到 WebCrypto
-        return await fernetDecrypt(encryptedNationalId, sensitiveKey);
+        // 如果解密失敗，拋出錯誤
+        throw new Error('Server decryption failed');
     }
     catch (error) {
         console.error('Failed to decrypt national ID:', error);
@@ -77,8 +78,9 @@ export async function decryptNationalId(encryptedNationalId) {
 export async function encryptPassword(password) {
     var _a, _b;
     const loginKey = (_b = (_a = import.meta) === null || _a === void 0 ? void 0 : _a.env) === null || _b === void 0 ? void 0 : _b.VITE_KOALA_LOGIN_KEY;
-    if (!loginKey) {
-        throw new Error('VITE_KOALA_LOGIN_KEY not configured');
+    // 在生產環境中，不需要前端的 loginKey（伺服器端會使用自己的 key）
+    if (import.meta.env.DEV && !loginKey) {
+        throw new Error('VITE_KOALA_LOGIN_KEY not configured in development');
     }
     try {
         // 強制使用伺服器端加密 (禁用 WebCrypto)
