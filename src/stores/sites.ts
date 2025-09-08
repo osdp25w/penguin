@@ -41,17 +41,16 @@ export const useSites = defineStore('sites', () => {
   })
 
   async function fetchSites(): Promise<void> {
+    // 使用假資料，停用 API 讀取
     loading.value = true
     error.value = null
     
     try {
-      const response = await fetch(`/api/v1/sites?region=${filters.value.region}`)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      
-      const data = await response.json()
-      list.value = SiteListSchema.parse(data)
+      const mod = await import('@/mocks/handlers/sites')
+      list.value = mod?.getDemoSites ? mod.getDemoSites(filters.value.region) : []
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Unknown error'
+      console.error('載入站點假資料失敗:', err)
+      error.value = '站點載入失敗（假資料）'
       list.value = []
     } finally {
       loading.value = false

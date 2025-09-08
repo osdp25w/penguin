@@ -126,7 +126,7 @@
           <!-- Sidebar Footer -->
           <div class="p-4 border-t border-gray-200">
             <div class="text-xs text-gray-700 text-center">
-              © 2024 嘉大數據平台
+              © 2025 嘉大數據平台
             </div>
           </div>
         </div>

@@ -16,7 +16,7 @@ spec:
       containers:
         - name: web
           image: osdp25w/penguin:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           volumeMounts:
             - name: frontend-config
               mountPath: /usr/share/nginx/html/config

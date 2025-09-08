@@ -55,9 +55,6 @@
         title="上線車輛"
         :value="summary.online"
         unit="台"
-        :change="5.2"
-        trend="up"
-        period="昨日"
         icon="i-ph-bicycle"
         color="green"
       />
@@ -66,9 +63,6 @@
         title="離線車輛"
         :value="summary.offline"
         unit="台"
-        :change="-2.1"
-        trend="down"
-        period="昨日"
         icon="i-ph-warning-circle"
         color="red"
       />
@@ -77,9 +71,6 @@
         title="今日總里程"
         :value="summary.distance"
         unit="公里"
-        :change="12.8"
-        trend="up"
-        period="昨日"
         icon="i-ph-map-pin"
         color="blue"
         format="number"
@@ -90,9 +81,6 @@
         title="減碳效益"
         :value="summary.carbon"
         unit="kg CO₂"
-        :change="8.5"
-        trend="up"
-        period="昨日"
         icon="i-ph-tree"
         color="green"
         format="number"
@@ -158,6 +146,7 @@ import { reactive, ref, onMounted } from 'vue'
 import { Button, Card, KpiCard, EmptyState } from '@/design/components'
 import SocTrend from '@/components/charts/SocTrend.vue'
 import CarbonBar from '@/components/charts/CarbonBar.vue'
+import { http } from '@/lib/api'
 
 // Reactive data
 const startDate = ref(getDefaultStartDate())
@@ -244,13 +233,18 @@ const refreshData = async () => {
   isLoading.value = true
   socLoading.value = true
   carbonLoading.value = true
-  
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 1500))
-  
-  isLoading.value = false
-  socLoading.value = false
-  carbonLoading.value = false
+
+  try {
+    await Promise.all([
+      fetchDailyOverview(startDate.value, endDate.value),               // KPI 卡
+      fetchHourlyOverviewForSoc(endDate.value || startDate.value),      // SoC 走勢（單日按小時）
+      fetchDailyOverviewRangeForCarbon(startDate.value, endDate.value), // 減碳量（區間按日）
+    ])
+  } finally {
+    isLoading.value = false
+    socLoading.value = false
+    carbonLoading.value = false
+  }
 }
 
 const updateData = () => {
@@ -275,8 +269,139 @@ const updateData = () => {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
     console.log('日期範圍天數:', diffDays)
     
-    // In real app, fetch data from API based on date range
-    // Example API call: fetchData({ startDate: startDate.value, endDate: endDate.value })
+    // 實際調用 API 獲取資料
+    refreshData()
+  }
+}
+
+// 取得每日總覽統計（使用 Koala 新增的 /api/statistic/daily-overview/，與登入相同 http 包裝）
+async function fetchDailyOverview(start: string, end: string) {
+  const day = end || start
+  try {
+    const url = `/api/statistic/daily-overview/?collected_time=${encodeURIComponent(day)}`
+    const response = await http.get<any>(url)
+
+    // 處理 Koala API 回應格式：{ code: 2000, msg: "success", data: [...] }
+    const data = response?.data || response
+    const rec = Array.isArray(data) ? (data[0] || {}) : (data || {})
+
+    const num = (obj: any, candidates: string[], def = 0) => {
+      for (const k of candidates) {
+        if (obj && obj[k] != null && !isNaN(Number(obj[k]))) return Number(obj[k])
+      }
+      return def
+    }
+
+    summary.online   = num(rec, ['online_bikes_count', 'online', 'online_vehicles', 'online_count'], summary.online)
+    summary.offline  = num(rec, ['offline_bikes_count', 'offline', 'offline_vehicles', 'offline_count'], summary.offline)
+    summary.distance = num(rec, ['total_distance_km', 'distance', 'total_distance', 'km', 'mileage'], summary.distance)
+    summary.carbon   = num(rec, ['carbon_reduction_kg', 'carbon', 'carbon_saved', 'co2', 'co2_kg'], summary.carbon)
+    
+    console.log('Daily overview updated:', { online: summary.online, offline: summary.offline, distance: summary.distance, carbon: summary.carbon })
+  } catch (e) {
+    console.warn('fetchDailyOverview failed:', e)
+  }
+}
+
+// 時段：單日（按小時）電池 SoC 走勢
+async function fetchHourlyOverviewForSoc(day: string) {
+  if (!day) return
+  try {
+    const url = `/api/statistic/hourly-overview/?collected_time__date=${encodeURIComponent(day)}`
+    const response = await http.get<any>(url)
+    
+    // 處理 Koala API 回應格式：{ code: 2000, msg: "success", data: [...] }
+    const data = response?.data || response
+    const arr = Array.isArray(data) ? data : (data?.results || [])
+
+    const toHour = (v: any): number | null => {
+      if (v == null) return null
+      if (typeof v === 'number') return v
+      const s = String(v)
+      // 處理 ISO 格式：'2025-09-07T13:00:00+08:00'
+      if (s.includes('T') && s.includes(':')) {
+        const match = s.match(/T(\d{2}):\d{2}/)
+        if (match) return Number(match[1])
+      }
+      // 常見格式：'13:00:00' 或 '13'
+      if (/^\d{2}:\d{2}:?/.test(s)) return Number(s.slice(0,2))
+      const n = Number(s)
+      return isNaN(n) ? null : n
+    }
+
+    const pickNum = (o: any, keys: string[], def = 0) => {
+      for (const k of keys) {
+        const v = o?.[k]
+        if (v != null && !isNaN(Number(v))) return Number(v)
+      }
+      return def
+    }
+
+    // 嘗試取出 hour 與 soc 值
+    const items = arr.map((it: any) => ({
+      hour: toHour(it?.hour ?? it?.collected_time ?? it?.timestamp),
+      soc : pickNum(it, ['average_soc','avg_soc','soc_avg','mean_soc','soc'], 0),
+    })).filter((x: any) => x.hour != null)
+
+    items.sort((a: any, b: any) => (a.hour as number) - (b.hour as number))
+
+    socLabels.splice(0, socLabels.length, ...items.map((x: any) => String(x.hour).padStart(2,'0') + 'h'))
+    socValues.splice(0, socValues.length, ...items.map((x: any) => x.soc))
+    
+    console.log('SoC data updated:', { labels: socLabels, values: socValues })
+  } catch (e) {
+    console.warn('fetchHourlyOverviewForSoc failed:', e)
+    // 保留原本靜態資料，不中斷頁面
+  }
+}
+
+// 區間：多日（按日）減碳量
+async function fetchDailyOverviewRangeForCarbon(start: string, end: string) {
+  if (!start || !end) return
+  try {
+    const url = `/api/statistic/daily-overview/?collected_time__gte=${encodeURIComponent(start)}&collected_time__lte=${encodeURIComponent(end)}`
+    const response = await http.get<any>(url)
+    
+    // 處理 Koala API 回應格式：{ code: 2000, msg: "success", data: [...] }
+    const data = response?.data || response
+    const arr = Array.isArray(data) ? data : (data?.results || [])
+
+    const getStr = (o: any, keys: string[]): string | null => {
+      for (const k of keys) {
+        const v = o?.[k]
+        if (typeof v === 'string' && v) return v
+      }
+      return null
+    }
+    const pickNum = (o: any, keys: string[], def = 0) => {
+      for (const k of keys) {
+        const v = o?.[k]
+        if (v != null && !isNaN(Number(v))) return Number(v)
+      }
+      return def
+    }
+    const fmtMD = (s: string) => {
+      const d = new Date(s)
+      if (isNaN(d.getTime())) return s
+      const mm = String(d.getMonth()+1).padStart(2,'0')
+      const dd = String(d.getDate()).padStart(2,'0')
+      return `${mm}-${dd}`
+    }
+
+    const items = arr.map((it: any) => ({
+      day: getStr(it, ['collected_time','date','day']) || '',
+      carbon: pickNum(it, ['carbon_reduction_kg','carbon','carbon_saved','co2','co2_kg'], 0)
+    })).filter((x: any) => x.day)
+
+    items.sort((a: any, b: any) => new Date(a.day).getTime() - new Date(b.day).getTime())
+
+    carbonLabels.splice(0, carbonLabels.length, ...items.map((x: any) => fmtMD(x.day)))
+    carbonValues.splice(0, carbonValues.length, ...items.map((x: any) => x.carbon))
+    
+    console.log('Carbon data updated:', { labels: carbonLabels, values: carbonValues })
+  } catch (e) {
+    console.warn('fetchDailyOverviewRangeForCarbon failed:', e)
+    // 保留原本靜態資料，不中斷頁面
   }
 }
 
@@ -386,6 +511,6 @@ const downloadCSV = (content: string, filename: string) => {
 
 onMounted(() => {
   // Initial data load
-  updateData()
+  refreshData()
 })
 </script>

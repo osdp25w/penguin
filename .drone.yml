@@ -14,6 +14,7 @@ steps:
       build_args:
         - VITE_KOALA_BASE_URL=/api
         - VITE_ENABLE_MOCK=false
+        - VITE_SEED_MOCK=1
         - VITE_KOALA_LOGIN_KEY=${VITE_KOALA_LOGIN_KEY}
         - VITE_KOALA_SENSITIVE_KEY=${VITE_KOALA_SENSITIVE_KEY}
         - CONFIG_VERSION=${DRONE_COMMIT_SHA}

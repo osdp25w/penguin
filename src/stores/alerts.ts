@@ -25,33 +25,16 @@ export const useAlerts = defineStore('alerts', {
   actions: {
     /* 讀取所有「未關閉」警報 ------------------------------------ */
     async fetchOpen () {
+      // 使用假資料，停用 API 讀取
       try {
         this.isLoading = true
         this.errMsg = ''
-        
-        const res = await fetch('/api/v1/alerts?resolved=false')
-        
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`)
-        }
-        
-        const ct = res.headers.get('content-type') || ''
-        if (!ct.includes('application/json')) throw new Error('非 JSON 回應（可能是路由或代理設定問題）')
-        const data = await res.json()
-        this.list = AlertListSchema.parse(data)
+        const mod = await import('@/mocks/handlers/alerts')
+        this.list = mod?.getDemoAlerts ? mod.getDemoAlerts('open') : []
       } catch (e: any) {
-        console.error('Alerts fetch error:', e)
-        this.errMsg = e.message ?? '警報載入失敗'
-        // 後備：若啟用 mock，直接使用本地生成資料（在非安全來源或子路徑時 Service Worker 可能無法啟動）
-        try {
-          if (import.meta.env.VITE_ENABLE_MOCK === 'true') {
-            const mod = await import('@/mocks/handlers/alerts')
-            if (mod?.getDemoAlerts) {
-              this.list = mod.getDemoAlerts('open')
-              this.errMsg = ''
-            }
-          }
-        } catch {}
+        console.error('載入警報假資料失敗:', e)
+        this.errMsg = '警報載入失敗（假資料）'
+        this.list = []
       } finally {
         this.isLoading = false
       }
@@ -82,16 +65,11 @@ export const useAlerts = defineStore('alerts', {
 
     /* 關閉 / 確認單筆警報 --------------------------------------- */
     async acknowledge (id: string) {
-      await fetch(`/api/v1/alerts/${id}`, {
-        method : 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body   : JSON.stringify({ state: 'closed' })
-      })
-      // 前端同步移除
+      // 停用 API：直接在前端移除
       this.list = this.list.filter(a => a.id !== id)
 
-      // 再次抓取，保險起見與後端對齊
-      this.fetchOpen()
+      // 重新載入假資料（可選）
+      // await this.fetchOpen()
     },
 
     /* === 私有：由感測數據判斷是否生成警報 ==================== */
@@ -152,22 +130,14 @@ export const useAlerts = defineStore('alerts', {
     /** Fetch alerts by site ID */
     async fetchBySiteSince(siteId: string, since?: string) {
       if (!siteId) return
-      
       this.loadingBySite[siteId] = true
       this.errorBySite[siteId] = null
-      
       try {
-        const params = new URLSearchParams({ siteId })
-        if (since) params.append('since', since)
-        
-        const response = await fetch(`/api/v1/alerts?${params}`)
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        
-        const data = await response.json()
-        this.bySite[siteId] = AlertListSchema.parse(data)
-      } catch (err: any) {
-        this.errorBySite[siteId] = err.message || 'Unknown error'
+        const mod = await import('@/mocks/handlers/alerts')
+        this.bySite[siteId] = mod?.getDemoAlerts ? mod.getDemoAlerts('open') : []
+      } catch (e) {
         this.bySite[siteId] = []
+        this.errorBySite[siteId] = '載入站點警報假資料失敗'
       } finally {
         this.loadingBySite[siteId] = false
       }

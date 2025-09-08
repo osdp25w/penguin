@@ -27,18 +27,23 @@ export const useVehicles = defineStore('vehicles', {
   actions: {
     /** 分頁抓取 */
     async fetchPage({ page = 1, size = DEFAULT_PAGE_SIZE } = {}) {
+      // 使用假資料，停用 API 讀取
       this.loading = true
       try {
-        const res = await fetch(`/api/v1/vehicles?page=${page}&size=${size}`)
-        if (!res.ok) throw new Error(res.statusText)
-        const { items, total } = await res.json()
-        this.items    = items
-        this.total    = total
-        this.page     = page
+        const mod = await import('@/mocks/handlers/vehicles')
+        console.log('Vehicles mock 模組載入:', !!mod, !!mod?.getDemoVehiclesList)
+        const mockData = mod?.getDemoVehiclesList ? (mod.getDemoVehiclesList() as any) : []
+        console.log('Vehicles mock 資料:', mockData.length, '輛')
+        this.items = mockData.slice(0, size)
+        this.total = mockData.length
+        this.page = page
         this.pageSize = size
-        this.errMsg   = ''
+        this.errMsg = ''
       } catch (e: any) {
-        this.errMsg = e.message || '取得車輛清單失敗'
+        console.error('載入車輛分頁假資料失敗:', e)
+        this.errMsg = '取得車輛清單失敗（假資料）'
+        this.items = []
+        this.total = 0
       } finally {
         this.loading = false
       }
@@ -72,14 +77,12 @@ export const useVehicles = defineStore('vehicles', {
       this.errorBySite[siteId] = null
       
       try {
-        const response = await fetch(`/api/v1/vehicles?siteId=${siteId}`)
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        
-        const data = await response.json()
-        this.bySite[siteId] = data
+        const mod = await import('@/mocks/handlers/vehicles')
+        this.bySite[siteId] = mod?.getDemoVehiclesList ? (mod.getDemoVehiclesList({ siteId }) as any) : []
+        this.errorBySite[siteId] = null
       } catch (err: any) {
-        this.errorBySite[siteId] = err.message || 'Unknown error'
         this.bySite[siteId] = []
+        this.errorBySite[siteId] = '載入站點車輛假資料失敗'
       } finally {
         this.loadingBySite[siteId] = false
       }
@@ -107,39 +110,16 @@ export const useVehicles = defineStore('vehicles', {
       status?: string;
       soh_lt?: number;
     }) {
+      // 使用假資料，停用 API 讀取
       this.loading = true
       try {
-        const searchParams = new URLSearchParams()
-        if (params?.siteId) searchParams.set('siteId', params.siteId)
-        if (params?.keyword) searchParams.set('keyword', params.keyword)
-        if (params?.status) searchParams.set('status', params.status)
-        if (params?.soh_lt) searchParams.set('soh_lt', params.soh_lt.toString())
-
-        const response = await fetch(`/api/v1/vehicles/list?${searchParams}`)
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        const ct = response.headers.get('content-type') || ''
-        if (!ct.includes('application/json')) throw new Error('非 JSON 回應（可能是路由或代理設定問題）')
-        const data = await response.json()
-        this.vehicles = data
+        const mod = await import('@/mocks/handlers/vehicles')
+        this.vehicles = mod?.getDemoVehiclesList ? (mod.getDemoVehiclesList(params) as any) : []
         this.errMsg = ''
       } catch (err: any) {
-        this.errMsg = err.message || '獲取車輛列表失敗'
-        // 後備：若啟用 mock，直接使用本地生成資料（在非安全來源或子路徑時 Service Worker 可能無法啟動）
-        try {
-          if (import.meta.env.VITE_ENABLE_MOCK === 'true') {
-            const mod = await import('@/mocks/handlers/vehicles')
-            if (mod?.getDemoVehiclesList) {
-              this.vehicles = mod.getDemoVehiclesList(params)
-              this.errMsg = ''
-            } else {
-              this.vehicles = []
-            }
-          } else {
-            this.vehicles = []
-          }
-        } catch {
-          this.vehicles = []
-        }
+        console.error('載入車輛假資料失敗:', err)
+        this.vehicles = []
+        this.errMsg = '獲取車輛列表失敗（假資料）'
       } finally {
         this.loading = false
       }
@@ -147,15 +127,8 @@ export const useVehicles = defineStore('vehicles', {
 
     /** 獲取車輛電池詳細資訊 */
     async fetchBatteryMetrics(vehicleId: string) {
-      try {
-        const response = await fetch(`/api/v1/metrics/vehicle/${vehicleId}/battery`)
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        
-        return await response.json()
-      } catch (err: any) {
-        console.error('Fetch battery metrics error:', err)
-        return null
-      }
+      // 停用 API：回傳 null 或可改讀假資料
+      return null
     },
 
     /** 更新車輛狀態 */
