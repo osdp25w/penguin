@@ -1,39 +1,54 @@
-import { ref, computed, onMounted, nextTick } from 'vue';
+import { ref, computed, onMounted, nextTick, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { Button } from '@/design/components';
 import { useVehicles } from '@/stores/vehicles';
 import { useSites } from '@/stores/sites';
+import { usePaging } from '@/composables/usePaging';
+import { useBikeMeta } from '@/stores/bikeMeta';
+import { useTelemetry } from '@/stores/telemetry';
 import VehicleDetailModal from '@/components/modals/VehicleDetailModal.vue';
+import CreateVehicleModal from '@/components/modals/CreateVehicleModal.vue';
+import VehicleBadges from '@/components/VehicleBadges.vue';
+import PaginationBar from '@/components/PaginationBar.vue';
+import { useBikeErrors } from '@/stores/bikeErrors';
 // Stores
 const vehiclesStore = useVehicles();
 const sitesStore = useSites();
+const bikeMeta = useBikeMeta();
+const telemetry = useTelemetry();
+const route = useRoute();
+const router = useRouter();
+const bikeErrors = useBikeErrors();
 // Reactive data
 const sparklineRefs = ref({});
 const selectedVehicle = ref(null);
+const showCreateModal = ref(false);
 const filters = ref({
     siteId: '',
     status: '',
-    keyword: ''
+    keyword: '',
+    lowBattery: false
+});
+// 分頁功能
+const paging = usePaging({
+    fetcher: async ({ limit, offset }) => {
+        return await vehiclesStore.fetchVehiclesPaged({
+            limit,
+            offset,
+            ...filters.value
+        });
+    },
+    syncToUrl: true,
+    queryPrefix: 'vehicles'
 });
 // Computed
-const vehicles = computed(() => vehiclesStore.vehicles);
-const sites = computed(() => sitesStore.sites);
-const filteredVehicles = computed(() => {
-    let result = vehicles.value;
-    if (filters.value.siteId) {
-        result = result.filter(v => v.siteId === filters.value.siteId);
-    }
-    if (filters.value.status) {
-        result = result.filter(v => v.status === filters.value.status);
-    }
-    if (filters.value.keyword) {
-        const keyword = filters.value.keyword.toLowerCase();
-        result = result.filter(v => v.id.toLowerCase().includes(keyword) ||
-            getSiteName(v.siteId).toLowerCase().includes(keyword));
-    }
-    return result;
-});
+const vehicles = computed(() => paging.data.value);
+// 兼容不同 store 寫法：優先 list，退回 sites
+const siteOptions = computed(() => { var _a, _b; return (_b = (_a = sitesStore.list) !== null && _a !== void 0 ? _a : sitesStore.sites) !== null && _b !== void 0 ? _b : []; });
+// 分頁模式下不需要前端過濾，直接使用分頁資料
+const filteredVehicles = computed(() => vehicles.value);
 const stats = computed(() => {
-    const total = vehicles.value.length;
+    const total = paging.total.value;
     const available = vehicles.value.filter(v => v.status === 'available' || v.status === '可租借').length;
     const inUse = vehicles.value.filter(v => v.status === 'in-use' || v.status === '使用中').length;
     const needsAttention = vehicles.value.filter(v => {
@@ -45,7 +60,8 @@ const stats = computed(() => {
             v.portStatus,
             v.mqttStatus
         ].some(status => status === 'error' || status === 'offline');
-        return battery < 20 || hasIssues;
+        const hasErrorLog = bikeErrors.hasCritical(String(v.id));
+        return battery < 20 || hasIssues || hasErrorLog;
     }).length;
     return { total, available, inUse, needsAttention };
 });
@@ -54,7 +70,7 @@ const refreshData = async () => {
     console.log('刷新車輛資料...');
     try {
         await Promise.all([
-            vehiclesStore.fetchVehicles(),
+            paging.refresh(),
             sitesStore.fetchSites()
         ]);
         console.log('車輛資料載入完成:', vehicles.value.length, '輛車');
@@ -63,8 +79,13 @@ const refreshData = async () => {
         console.error('載入車輛資料失敗:', error);
     }
 };
+// 當篩選條件改變時，重置到第一頁並重新載入
+const applyFilters = () => {
+    paging.resetToFirstPage();
+    paging.refresh(filters.value);
+};
 const getSiteName = (siteId) => {
-    const site = sites.value.find(s => s.id === siteId);
+    const site = siteOptions.value.find((s) => s.id === siteId);
     return (site === null || site === void 0 ? void 0 : site.name) || '未知站點';
 };
 const getStatusText = (status) => {
@@ -160,9 +181,43 @@ const renderSparklines = async () => {
         }
     });
 };
+const openCreateModal = () => {
+    showCreateModal.value = true;
+};
+const handleCreateVehicle = async (vehicle) => {
+    await vehiclesStore.createVehicle(vehicle);
+    showCreateModal.value = false;
+};
+// 監聽篩選條件變化
+watch(() => [filters.value.siteId, filters.value.status, filters.value.keyword, filters.value.lowBattery], () => {
+    applyFilters();
+    // 同步到 URL（不影響其他 query）
+    const q = { ...route.query };
+    q['vehicles_siteId'] = filters.value.siteId || undefined;
+    q['vehicles_status'] = filters.value.status || undefined;
+    q['vehicles_keyword'] = filters.value.keyword || undefined;
+    q['vehicles_lowBattery'] = filters.value.lowBattery ? '1' : undefined;
+    router.replace({ query: q });
+}, { deep: true });
 // Lifecycle
 onMounted(async () => {
-    await refreshData();
+    // 從 URL 還原篩選條件
+    const q = route.query;
+    const qp = (k) => q[`vehicles_${k}`];
+    filters.value.siteId = String(qp('siteId') || '');
+    filters.value.status = String(qp('status') || '');
+    filters.value.keyword = String(qp('keyword') || '');
+    filters.value.lowBattery = qp('lowBattery') === '1';
+    await Promise.all([
+        sitesStore.fetchSites(),
+        bikeMeta.fetchCategories(),
+        bikeMeta.fetchSeries(),
+        bikeMeta.fetchBikeStatusOptions(),
+        telemetry.fetchAvailable()
+        // bikeErrors.fetchCriticalUnread() - API endpoint doesn't exist
+    ]);
+    // 初始載入分頁資料
+    await paging.refresh(filters.value);
     renderSparklines();
 });
 // Watch for filter changes to re-render sparklines
@@ -213,6 +268,30 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)(
     ...{ class: "i-ph-arrow-clockwise w-4 h-4 mr-2" },
 });
 var __VLS_3;
+const __VLS_8 = {}.Button;
+/** @type {[typeof __VLS_components.Button, typeof __VLS_components.Button, ]} */ ;
+// @ts-ignore
+const __VLS_9 = __VLS_asFunctionalComponent(__VLS_8, new __VLS_8({
+    ...{ 'onClick': {} },
+    variant: "primary",
+    size: "sm",
+}));
+const __VLS_10 = __VLS_9({
+    ...{ 'onClick': {} },
+    variant: "primary",
+    size: "sm",
+}, ...__VLS_functionalComponentArgsRest(__VLS_9));
+let __VLS_12;
+let __VLS_13;
+let __VLS_14;
+const __VLS_15 = {
+    onClick: (__VLS_ctx.openCreateModal)
+};
+__VLS_11.slots.default;
+__VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+    ...{ class: "i-ph-plus w-4 h-4 mr-2" },
+});
+var __VLS_11;
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6" },
 });
@@ -226,7 +305,7 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)(
 __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
     ...{ class: "text-2xl font-bold text-gray-900" },
 });
-(__VLS_ctx.stats.total);
+(__VLS_ctx.stats.total || 0);
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "bg-white rounded-lg border border-gray-200 p-4 shadow-sm" },
 });
@@ -260,6 +339,17 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)(
     ...{ class: "text-2xl font-bold text-red-600" },
 });
 (__VLS_ctx.stats.needsAttention);
+if (__VLS_ctx.vehiclesStore.usingMock) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "rounded-lg border border-amber-300 bg-amber-50 text-amber-800 p-3 flex items-start gap-2" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+        ...{ class: "i-ph-info w-5 h-5 mt-0.5" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "text-sm" },
+    });
+}
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "card p-4" },
 });
@@ -277,7 +367,7 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.select, __VLS_intrinsicElement
 __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
     value: "",
 });
-for (const [site] of __VLS_getVForSourceType((__VLS_ctx.sites))) {
+for (const [site] of __VLS_getVForSourceType((__VLS_ctx.siteOptions))) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
         key: (site.id),
         value: (site.id),
@@ -304,26 +394,41 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElement
 __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
     value: "maintenance",
 });
-__VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
-    value: "low-battery",
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
+    ...{ class: "block text-sm font-medium text-gray-700 mb-1" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "flex items-center gap-4" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
+    ...{ class: "flex items-center" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.input, __VLS_intrinsicElements.input)({
+    type: "checkbox",
+    ...{ class: "rounded border-gray-300 text-brand-primary focus:ring-brand-primary focus:ring-offset-0" },
+});
+(__VLS_ctx.filters.lowBattery);
+__VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+    ...{ class: "ml-2 text-sm text-gray-700" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
 __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
     ...{ class: "block text-sm font-medium text-gray-700 mb-1" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-    ...{ class: "relative" },
+    ...{ class: "relative md:max-w-[16rem] lg:max-w-[18rem]" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.input, __VLS_intrinsicElements.input)({
     value: (__VLS_ctx.filters.keyword),
     type: "text",
     placeholder: "輸入ID...",
-    ...{ class: "input-base pl-9 w-full" },
+    ...{ class: "input-base pl-9 w-full md:max-w-[16rem] lg:max-w-[18rem]" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
     ...{ class: "i-ph-magnifying-glass absolute left-3 top-2.5 w-4 h-4 text-gray-600" },
 });
-if (__VLS_ctx.vehiclesStore.loading) {
+if (__VLS_ctx.paging.loading.value) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "text-center py-8" },
     });
@@ -334,7 +439,7 @@ if (__VLS_ctx.vehiclesStore.loading) {
         ...{ class: "text-gray-600" },
     });
 }
-else if (__VLS_ctx.vehiclesStore.errMsg) {
+else if (__VLS_ctx.paging.error.value) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "text-center py-8" },
     });
@@ -344,24 +449,24 @@ else if (__VLS_ctx.vehiclesStore.errMsg) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
         ...{ class: "text-red-600 mb-4" },
     });
-    (__VLS_ctx.vehiclesStore.errMsg);
-    const __VLS_8 = {}.Button;
+    (__VLS_ctx.paging.error.value);
+    const __VLS_16 = {}.Button;
     /** @type {[typeof __VLS_components.Button, typeof __VLS_components.Button, ]} */ ;
     // @ts-ignore
-    const __VLS_9 = __VLS_asFunctionalComponent(__VLS_8, new __VLS_8({
+    const __VLS_17 = __VLS_asFunctionalComponent(__VLS_16, new __VLS_16({
         ...{ 'onClick': {} },
     }));
-    const __VLS_10 = __VLS_9({
+    const __VLS_18 = __VLS_17({
         ...{ 'onClick': {} },
-    }, ...__VLS_functionalComponentArgsRest(__VLS_9));
-    let __VLS_12;
-    let __VLS_13;
-    let __VLS_14;
-    const __VLS_15 = {
+    }, ...__VLS_functionalComponentArgsRest(__VLS_17));
+    let __VLS_20;
+    let __VLS_21;
+    let __VLS_22;
+    const __VLS_23 = {
         onClick: (__VLS_ctx.refreshData)
     };
-    __VLS_11.slots.default;
-    var __VLS_11;
+    __VLS_19.slots.default;
+    var __VLS_19;
 }
 else {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
@@ -389,27 +494,15 @@ else {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
         ...{ class: "px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider" },
     });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider" },
-    });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.tbody, __VLS_intrinsicElements.tbody)({
         ...{ class: "bg-white divide-y divide-gray-200" },
     });
     for (const [vehicle] of __VLS_getVForSourceType((__VLS_ctx.filteredVehicles))) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.tr, __VLS_intrinsicElements.tr)({
             ...{ onClick: (...[$event]) => {
-                    if (!!(__VLS_ctx.vehiclesStore.loading))
+                    if (!!(__VLS_ctx.paging.loading.value))
                         return;
-                    if (!!(__VLS_ctx.vehiclesStore.errMsg))
+                    if (!!(__VLS_ctx.paging.error.value))
                         return;
                     __VLS_ctx.selectVehicle(vehicle);
                 } },
@@ -451,47 +544,20 @@ else {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
             ...{ class: "px-4 py-4" },
         });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "text-sm font-mono text-gray-900" },
-        });
-        (vehicle.motor || 'N/A');
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-            ...{ class: "px-4 py-4" },
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "text-sm font-mono text-gray-900" },
-        });
-        (vehicle.battery || 'N/A');
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-            ...{ class: "px-4 py-4" },
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "text-sm font-mono text-gray-900" },
-        });
-        (vehicle.controller || 'N/A');
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-            ...{ class: "px-4 py-4" },
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "text-sm font-mono text-gray-900" },
-        });
-        (vehicle.port || 'N/A');
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-            ...{ class: "px-4 py-4" },
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "text-center" },
-        });
-        if (vehicle.mqttStatus === 'online' || vehicle.mqtt_ok === true) {
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-                ...{ class: "inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100 text-green-600 font-bold" },
-            });
-        }
-        else {
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-                ...{ class: "inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-600 font-bold" },
-            });
-        }
+        /** @type {[typeof VehicleBadges, ]} */ ;
+        // @ts-ignore
+        const __VLS_24 = __VLS_asFunctionalComponent(VehicleBadges, new VehicleBadges({
+            status: (vehicle.status),
+            batteryLevel: (vehicle.batteryLevel || vehicle.batteryPct || 0),
+            mqttStatus: (vehicle.mqttStatus),
+            hasError: (__VLS_ctx.bikeErrors.hasCritical(String(vehicle.id))),
+        }));
+        const __VLS_25 = __VLS_24({
+            status: (vehicle.status),
+            batteryLevel: (vehicle.batteryLevel || vehicle.batteryPct || 0),
+            mqttStatus: (vehicle.mqttStatus),
+            hasError: (__VLS_ctx.bikeErrors.hasCritical(String(vehicle.id))),
+        }, ...__VLS_functionalComponentArgsRest(__VLS_24));
     }
     if (__VLS_ctx.filteredVehicles.length === 0) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
@@ -508,28 +574,104 @@ else {
         });
     }
 }
+if (__VLS_ctx.paging.total.value > 0) {
+    /** @type {[typeof PaginationBar, ]} */ ;
+    // @ts-ignore
+    const __VLS_27 = __VLS_asFunctionalComponent(PaginationBar, new PaginationBar({
+        ...{ 'onPageChange': {} },
+        ...{ 'onLimitChange': {} },
+        ...{ 'onPrev': {} },
+        ...{ 'onNext': {} },
+        currentPage: (__VLS_ctx.paging.currentPage.value),
+        totalPages: (__VLS_ctx.paging.totalPages.value),
+        total: (__VLS_ctx.paging.total.value),
+        limit: (__VLS_ctx.paging.limit.value),
+        offset: (__VLS_ctx.paging.offset.value),
+        pageRange: (__VLS_ctx.paging.pageRange.value),
+        hasNextPage: (__VLS_ctx.paging.hasNextPage.value),
+        hasPrevPage: (__VLS_ctx.paging.hasPrevPage.value),
+    }));
+    const __VLS_28 = __VLS_27({
+        ...{ 'onPageChange': {} },
+        ...{ 'onLimitChange': {} },
+        ...{ 'onPrev': {} },
+        ...{ 'onNext': {} },
+        currentPage: (__VLS_ctx.paging.currentPage.value),
+        totalPages: (__VLS_ctx.paging.totalPages.value),
+        total: (__VLS_ctx.paging.total.value),
+        limit: (__VLS_ctx.paging.limit.value),
+        offset: (__VLS_ctx.paging.offset.value),
+        pageRange: (__VLS_ctx.paging.pageRange.value),
+        hasNextPage: (__VLS_ctx.paging.hasNextPage.value),
+        hasPrevPage: (__VLS_ctx.paging.hasPrevPage.value),
+    }, ...__VLS_functionalComponentArgsRest(__VLS_27));
+    let __VLS_30;
+    let __VLS_31;
+    let __VLS_32;
+    const __VLS_33 = {
+        onPageChange: (__VLS_ctx.paging.goToPage)
+    };
+    const __VLS_34 = {
+        onLimitChange: (__VLS_ctx.paging.changeLimit)
+    };
+    const __VLS_35 = {
+        onPrev: (__VLS_ctx.paging.prevPage)
+    };
+    const __VLS_36 = {
+        onNext: (__VLS_ctx.paging.nextPage)
+    };
+    var __VLS_29;
+}
 if (__VLS_ctx.selectedVehicle) {
     /** @type {[typeof VehicleDetailModal, ]} */ ;
     // @ts-ignore
-    const __VLS_16 = __VLS_asFunctionalComponent(VehicleDetailModal, new VehicleDetailModal({
+    const __VLS_37 = __VLS_asFunctionalComponent(VehicleDetailModal, new VehicleDetailModal({
         ...{ 'onClose': {} },
         vehicle: (__VLS_ctx.selectedVehicle),
     }));
-    const __VLS_17 = __VLS_16({
+    const __VLS_38 = __VLS_37({
         ...{ 'onClose': {} },
         vehicle: (__VLS_ctx.selectedVehicle),
-    }, ...__VLS_functionalComponentArgsRest(__VLS_16));
-    let __VLS_19;
-    let __VLS_20;
-    let __VLS_21;
-    const __VLS_22 = {
+    }, ...__VLS_functionalComponentArgsRest(__VLS_37));
+    let __VLS_40;
+    let __VLS_41;
+    let __VLS_42;
+    const __VLS_43 = {
         onClose: (...[$event]) => {
             if (!(__VLS_ctx.selectedVehicle))
                 return;
             __VLS_ctx.selectedVehicle = null;
         }
     };
-    var __VLS_18;
+    var __VLS_39;
+}
+if (__VLS_ctx.showCreateModal) {
+    /** @type {[typeof CreateVehicleModal, ]} */ ;
+    // @ts-ignore
+    const __VLS_44 = __VLS_asFunctionalComponent(CreateVehicleModal, new CreateVehicleModal({
+        ...{ 'onClose': {} },
+        ...{ 'onCreated': {} },
+        sites: (__VLS_ctx.siteOptions),
+    }));
+    const __VLS_45 = __VLS_44({
+        ...{ 'onClose': {} },
+        ...{ 'onCreated': {} },
+        sites: (__VLS_ctx.siteOptions),
+    }, ...__VLS_functionalComponentArgsRest(__VLS_44));
+    let __VLS_47;
+    let __VLS_48;
+    let __VLS_49;
+    const __VLS_50 = {
+        onClose: (...[$event]) => {
+            if (!(__VLS_ctx.showCreateModal))
+                return;
+            __VLS_ctx.showCreateModal = false;
+        }
+    };
+    const __VLS_51 = {
+        onCreated: (__VLS_ctx.handleCreateVehicle)
+    };
+    var __VLS_46;
 }
 /** @type {__VLS_StyleScopedClasses['space-y-6']} */ ;
 /** @type {__VLS_StyleScopedClasses['flex']} */ ;
@@ -545,6 +687,10 @@ if (__VLS_ctx.selectedVehicle) {
 /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
 /** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
 /** @type {__VLS_StyleScopedClasses['i-ph-arrow-clockwise']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['mr-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['i-ph-plus']} */ ;
 /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['mr-2']} */ ;
@@ -601,6 +747,20 @@ if (__VLS_ctx.selectedVehicle) {
 /** @type {__VLS_StyleScopedClasses['text-2xl']} */ ;
 /** @type {__VLS_StyleScopedClasses['font-bold']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-red-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
+/** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-amber-300']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-amber-50']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-amber-800']} */ ;
+/** @type {__VLS_StyleScopedClasses['p-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-start']} */ ;
+/** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['i-ph-info']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-5']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-5']} */ ;
+/** @type {__VLS_StyleScopedClasses['mt-0.5']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
 /** @type {__VLS_StyleScopedClasses['card']} */ ;
 /** @type {__VLS_StyleScopedClasses['p-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['grid']} */ ;
@@ -624,10 +784,32 @@ if (__VLS_ctx.selectedVehicle) {
 /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
 /** @type {__VLS_StyleScopedClasses['mb-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['gap-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-gray-300']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-brand-primary']} */ ;
+/** @type {__VLS_StyleScopedClasses['focus:ring-brand-primary']} */ ;
+/** @type {__VLS_StyleScopedClasses['focus:ring-offset-0']} */ ;
+/** @type {__VLS_StyleScopedClasses['ml-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
+/** @type {__VLS_StyleScopedClasses['block']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
+/** @type {__VLS_StyleScopedClasses['mb-1']} */ ;
 /** @type {__VLS_StyleScopedClasses['relative']} */ ;
+/** @type {__VLS_StyleScopedClasses['md:max-w-[16rem]']} */ ;
+/** @type {__VLS_StyleScopedClasses['lg:max-w-[18rem]']} */ ;
 /** @type {__VLS_StyleScopedClasses['input-base']} */ ;
 /** @type {__VLS_StyleScopedClasses['pl-9']} */ ;
 /** @type {__VLS_StyleScopedClasses['w-full']} */ ;
+/** @type {__VLS_StyleScopedClasses['md:max-w-[16rem]']} */ ;
+/** @type {__VLS_StyleScopedClasses['lg:max-w-[18rem]']} */ ;
 /** @type {__VLS_StyleScopedClasses['i-ph-magnifying-glass']} */ ;
 /** @type {__VLS_StyleScopedClasses['absolute']} */ ;
 /** @type {__VLS_StyleScopedClasses['left-3']} */ ;
@@ -692,38 +874,6 @@ if (__VLS_ctx.selectedVehicle) {
 /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
 /** @type {__VLS_StyleScopedClasses['uppercase']} */ ;
 /** @type {__VLS_StyleScopedClasses['tracking-wider']} */ ;
-/** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-left']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-/** @type {__VLS_StyleScopedClasses['uppercase']} */ ;
-/** @type {__VLS_StyleScopedClasses['tracking-wider']} */ ;
-/** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-left']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-/** @type {__VLS_StyleScopedClasses['uppercase']} */ ;
-/** @type {__VLS_StyleScopedClasses['tracking-wider']} */ ;
-/** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-left']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-/** @type {__VLS_StyleScopedClasses['uppercase']} */ ;
-/** @type {__VLS_StyleScopedClasses['tracking-wider']} */ ;
-/** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-left']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-/** @type {__VLS_StyleScopedClasses['uppercase']} */ ;
-/** @type {__VLS_StyleScopedClasses['tracking-wider']} */ ;
 /** @type {__VLS_StyleScopedClasses['bg-white']} */ ;
 /** @type {__VLS_StyleScopedClasses['divide-y']} */ ;
 /** @type {__VLS_StyleScopedClasses['divide-gray-200']} */ ;
@@ -755,45 +905,6 @@ if (__VLS_ctx.selectedVehicle) {
 /** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
 /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['py-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-mono']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
-/** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-mono']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
-/** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-mono']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
-/** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-mono']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
-/** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-center']} */ ;
-/** @type {__VLS_StyleScopedClasses['inline-flex']} */ ;
-/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-/** @type {__VLS_StyleScopedClasses['justify-center']} */ ;
-/** @type {__VLS_StyleScopedClasses['w-6']} */ ;
-/** @type {__VLS_StyleScopedClasses['h-6']} */ ;
-/** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
-/** @type {__VLS_StyleScopedClasses['bg-green-100']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-green-600']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-bold']} */ ;
-/** @type {__VLS_StyleScopedClasses['inline-flex']} */ ;
-/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-/** @type {__VLS_StyleScopedClasses['justify-center']} */ ;
-/** @type {__VLS_StyleScopedClasses['w-6']} */ ;
-/** @type {__VLS_StyleScopedClasses['h-6']} */ ;
-/** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
-/** @type {__VLS_StyleScopedClasses['bg-red-100']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-red-600']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-bold']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-center']} */ ;
 /** @type {__VLS_StyleScopedClasses['py-8']} */ ;
 /** @type {__VLS_StyleScopedClasses['i-ph-bicycle']} */ ;
@@ -813,15 +924,23 @@ const __VLS_self = (await import('vue')).defineComponent({
         return {
             Button: Button,
             VehicleDetailModal: VehicleDetailModal,
+            CreateVehicleModal: CreateVehicleModal,
+            VehicleBadges: VehicleBadges,
+            PaginationBar: PaginationBar,
             vehiclesStore: vehiclesStore,
+            bikeErrors: bikeErrors,
             selectedVehicle: selectedVehicle,
+            showCreateModal: showCreateModal,
             filters: filters,
-            sites: sites,
+            paging: paging,
+            siteOptions: siteOptions,
             filteredVehicles: filteredVehicles,
             stats: stats,
             refreshData: refreshData,
             getBatteryColorClass: getBatteryColorClass,
             selectVehicle: selectVehicle,
+            openCreateModal: openCreateModal,
+            handleCreateVehicle: handleCreateVehicle,
         };
     },
 });

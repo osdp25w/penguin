@@ -55,6 +55,14 @@
       </div>
     </div>
 
+    <!-- Mock Banner -->
+    <div v-if="store.usingMock" class="rounded-lg border border-amber-300 bg-amber-50 text-amber-800 p-3 flex items-start gap-2">
+      <i class="i-ph-info w-5 h-5 mt-0.5"></i>
+      <div class="text-sm">
+        後端資料暫不可用，已顯示假資料以便操作與測試。
+      </div>
+    </div>
+
     <!-- List ------------------------------------------------------- -->
     <div class="grid gap-4">
       <div
@@ -140,7 +148,12 @@ onMounted(() => store.fetchOpen())
 /* 即時串流開 / 關（demo 無真正 stop，這裡用 reload） */
 const toggleStream = () => {
   if (store.isLive) location.reload()
-  else store.startStream()
+  else {
+    // 重新載入警報資料
+    store.fetchOpen()
+    // 啟動 WebSocket（如果需要）
+    store.startStream()
+  }
 }
 
 /* 時間格式化 ------------------------------------------------------ */

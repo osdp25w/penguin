@@ -11,6 +11,10 @@
           <i class="i-ph-arrow-clockwise w-4 h-4 mr-2"></i>
           重新整理
         </Button>
+        <Button variant="primary" size="sm" @click="openCreateModal">
+          <i class="i-ph-plus w-4 h-4 mr-2"></i>
+          新增車輛
+        </Button>
       </div>
     </div>
 
@@ -19,7 +23,7 @@
       <div class="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
         <div>
           <p class="text-sm font-medium text-gray-600">總車輛</p>
-          <p class="text-2xl font-bold text-gray-900">{{ stats.total }} 輛</p>
+          <p class="text-2xl font-bold text-gray-900">{{ stats.total || 0 }} 輛</p>
         </div>
       </div>
 
@@ -45,6 +49,14 @@
       </div>
     </div>
 
+    <!-- Mock Banner -->
+    <div v-if="vehiclesStore.usingMock" class="rounded-lg border border-amber-300 bg-amber-50 text-amber-800 p-3 flex items-start gap-2">
+      <i class="i-ph-info w-5 h-5 mt-0.5"></i>
+      <div class="text-sm">
+        後端資料暫不可用，已顯示假資料以便操作與測試。新增分頁功能和低電量徽章過濾。
+      </div>
+    </div>
+
     <!-- Filters -->
     <div class="card p-4">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -52,7 +64,7 @@
           <label class="block text-sm font-medium text-gray-700 mb-1">站點篩選</label>
           <select v-model="filters.siteId" class="input-base">
             <option value="">全部站點</option>
-            <option v-for="site in sites" :key="site.id" :value="site.id">
+            <option v-for="site in siteOptions" :key="site.id" :value="site.id">
               {{ site.name }}
             </option>
           </select>
@@ -65,18 +77,32 @@
             <option value="available">可用</option>
             <option value="in-use">使用中</option>
             <option value="maintenance">維護中</option>
-            <option value="low-battery">低電量</option>
           </select>
+        </div>
+
+        <!-- 新增低電量過濾器 -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">其他篩選</label>
+          <div class="flex items-center gap-4">
+            <label class="flex items-center">
+              <input
+                v-model="filters.lowBattery"
+                type="checkbox"
+                class="rounded border-gray-300 text-brand-primary focus:ring-brand-primary focus:ring-offset-0"
+              >
+              <span class="ml-2 text-sm text-gray-700">只顯示低電量車輛 (&lt;20%)</span>
+            </label>
+          </div>
         </div>
 
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">搜尋</label>
-          <div class="relative">
+          <div class="relative md:max-w-[16rem] lg:max-w-[18rem]">
             <input
               v-model="filters.keyword"
               type="text"
               placeholder="輸入ID..."
-              class="input-base pl-9 w-full"
+              class="input-base pl-9 w-full md:max-w-[16rem] lg:max-w-[18rem]"
             >
             <i class="i-ph-magnifying-glass absolute left-3 top-2.5 w-4 h-4 text-gray-600"></i>
           </div>
@@ -85,15 +111,15 @@
     </div>
 
     <!-- Loading State -->
-    <div v-if="vehiclesStore.loading" class="text-center py-8">
+    <div v-if="paging.loading.value" class="text-center py-8">
       <i class="i-ph-spinner w-8 h-8 animate-spin mx-auto text-gray-400 mb-2"></i>
       <p class="text-gray-600">載入中...</p>
     </div>
 
     <!-- Error State -->
-    <div v-else-if="vehiclesStore.errMsg" class="text-center py-8">
+    <div v-else-if="paging.error.value" class="text-center py-8">
       <i class="i-ph-warning-circle w-8 h-8 mx-auto text-red-400 mb-2"></i>
-      <p class="text-red-600 mb-4">{{ vehiclesStore.errMsg }}</p>
+      <p class="text-red-600 mb-4">{{ paging.error.value }}</p>
       <Button @click="refreshData">重試</Button>
     </div>
 
@@ -113,19 +139,7 @@
                 SoC
               </th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                Motor
-              </th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                Battery
-              </th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                Controller
-              </th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                Port
-              </th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                MQTT
+                狀態
               </th>
             </tr>
           </thead>
@@ -155,7 +169,7 @@
                 <div class="flex items-center gap-2">
                   <span class="text-sm font-medium text-gray-900">{{ vehicle.batteryLevel || vehicle.batteryPct || 0 }}%</span>
                   <div class="w-16 bg-gray-200 rounded-full h-2">
-                    <div 
+                    <div
                       class="h-2 rounded-full"
                       :class="getBatteryColorClass(vehicle.batteryLevel || vehicle.batteryPct || 0)"
                       :style="{ width: `${vehicle.batteryLevel || vehicle.batteryPct || 0}%` }"
@@ -163,51 +177,14 @@
                   </div>
                 </div>
               </td>
-              
-              <!-- Motor -->
+              <!-- 狀態徽章 -->
               <td class="px-4 py-4">
-                <div class="text-sm font-mono text-gray-900">
-                  {{ vehicle.motor || 'N/A' }}
-                </div>
-              </td>
-              
-              <!-- Battery -->
-              <td class="px-4 py-4">
-                <div class="text-sm font-mono text-gray-900">
-                  {{ vehicle.battery || 'N/A' }}
-                </div>
-              </td>
-              
-              <!-- Controller -->
-              <td class="px-4 py-4">
-                <div class="text-sm font-mono text-gray-900">
-                  {{ vehicle.controller || 'N/A' }}
-                </div>
-              </td>
-              
-              <!-- Port -->
-              <td class="px-4 py-4">
-                <div class="text-sm font-mono text-gray-900">
-                  {{ vehicle.port || 'N/A' }}
-                </div>
-              </td>
-              
-              <!-- MQTT -->
-              <td class="px-4 py-4">
-                <div class="text-center">
-                  <span 
-                    v-if="vehicle.mqttStatus === 'online' || vehicle.mqtt_ok === true"
-                    class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100 text-green-600 font-bold"
-                  >
-                    ✓
-                  </span>
-                  <span 
-                    v-else
-                    class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-600 font-bold"
-                  >
-                    ✕
-                  </span>
-                </div>
+                <VehicleBadges
+                  :status="vehicle.status"
+                  :battery-level="vehicle.batteryLevel || vehicle.batteryPct || 0"
+                  :mqtt-status="vehicle.mqttStatus"
+                  :has-error="bikeErrors.hasCritical(String(vehicle.id))"
+                />
               </td>
             </tr>
           </tbody>
@@ -222,81 +199,116 @@
       </div>
     </div>
 
+    <!-- 分頁組件 -->
+    <PaginationBar
+      v-if="paging.total.value > 0"
+      :current-page="paging.currentPage.value"
+      :total-pages="paging.totalPages.value"
+      :total="paging.total.value"
+      :limit="paging.limit.value"
+      :offset="paging.offset.value"
+      :page-range="paging.pageRange.value"
+      :has-next-page="paging.hasNextPage.value"
+      :has-prev-page="paging.hasPrevPage.value"
+      @page-change="paging.goToPage"
+      @limit-change="paging.changeLimit"
+      @prev="paging.prevPage"
+      @next="paging.nextPage"
+    />
+
     <!-- Vehicle Detail Modal -->
     <VehicleDetailModal
       v-if="selectedVehicle"
       :vehicle="selectedVehicle"
       @close="selectedVehicle = null"
     />
+
+    <!-- Create Vehicle Modal -->
+    <CreateVehicleModal
+      v-if="showCreateModal"
+      :sites="siteOptions"
+      @close="showCreateModal = false"
+      @created="handleCreateVehicle"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Button } from '@/design/components'
 import { useVehicles } from '@/stores/vehicles'
 import { useSites } from '@/stores/sites'
+import { usePaging } from '@/composables/usePaging'
+import { useBikeMeta } from '@/stores/bikeMeta'
+import { useTelemetry } from '@/stores/telemetry'
 import VehicleDetailModal from '@/components/modals/VehicleDetailModal.vue'
+import CreateVehicleModal from '@/components/modals/CreateVehicleModal.vue'
+import VehicleBadges from '@/components/VehicleBadges.vue'
+import PaginationBar from '@/components/PaginationBar.vue'
+import { useBikeErrors } from '@/stores/bikeErrors'
 
 // Stores
 const vehiclesStore = useVehicles()
 const sitesStore = useSites()
+const bikeMeta = useBikeMeta()
+const telemetry = useTelemetry()
+const route = useRoute()
+const router = useRouter()
+const bikeErrors = useBikeErrors()
 
 // Reactive data
 const sparklineRefs = ref<Record<string, HTMLCanvasElement>>({})
 const selectedVehicle = ref<any>(null)
+const showCreateModal = ref(false)
 
 const filters = ref({
   siteId: '',
   status: '',
-  keyword: ''
+  keyword: '',
+  lowBattery: false
+})
+
+// 分頁功能
+const paging = usePaging({
+  fetcher: async ({ limit, offset }) => {
+    return await vehiclesStore.fetchVehiclesPaged({
+      limit,
+      offset,
+      ...filters.value
+    })
+  },
+  syncToUrl: true,
+  queryPrefix: 'vehicles'
 })
 
 // Computed
-const vehicles = computed(() => vehiclesStore.vehicles)
-const sites = computed(() => sitesStore.sites)
+const vehicles = computed(() => paging.data.value)
+// 兼容不同 store 寫法：優先 list，退回 sites
+const siteOptions = computed(() => (sitesStore as any).list ?? (sitesStore as any).sites ?? [])
 
-const filteredVehicles = computed(() => {
-  let result = vehicles.value
-
-  if (filters.value.siteId) {
-    result = result.filter(v => v.siteId === filters.value.siteId)
-  }
-
-  if (filters.value.status) {
-    result = result.filter(v => v.status === filters.value.status)
-  }
-
-
-  if (filters.value.keyword) {
-    const keyword = filters.value.keyword.toLowerCase()
-    result = result.filter(v => 
-      v.id.toLowerCase().includes(keyword) ||
-      getSiteName(v.siteId).toLowerCase().includes(keyword)
-    )
-  }
-
-  return result
-})
+// 分頁模式下不需要前端過濾，直接使用分頁資料
+const filteredVehicles = computed(() => vehicles.value)
 
 const stats = computed(() => {
-  const total = vehicles.value.length
-  const available = vehicles.value.filter(v => 
+  const total = paging.total.value
+  const available = vehicles.value.filter(v =>
     v.status === 'available' || v.status === '可租借'
   ).length
-  const inUse = vehicles.value.filter(v => 
+  const inUse = vehicles.value.filter(v =>
     v.status === 'in-use' || v.status === '使用中'
   ).length
   const needsAttention = vehicles.value.filter(v => {
     const battery = v.batteryLevel || v.batteryPct || 0
     const hasIssues = [
       v.motorStatus,
-      v.batteryStatus, 
+      v.batteryStatus,
       v.controllerStatus,
       v.portStatus,
       v.mqttStatus
     ].some(status => status === 'error' || status === 'offline')
-    return battery < 20 || hasIssues
+    const hasErrorLog = bikeErrors.hasCritical(String(v.id))
+    return battery < 20 || hasIssues || hasErrorLog
   }).length
 
   return { total, available, inUse, needsAttention }
@@ -307,7 +319,7 @@ const refreshData = async () => {
   console.log('刷新車輛資料...')
   try {
     await Promise.all([
-      vehiclesStore.fetchVehicles(),
+      paging.refresh(),
       sitesStore.fetchSites()
     ])
     console.log('車輛資料載入完成:', vehicles.value.length, '輛車')
@@ -316,8 +328,14 @@ const refreshData = async () => {
   }
 }
 
+// 當篩選條件改變時，重置到第一頁並重新載入
+const applyFilters = () => {
+  paging.resetToFirstPage()
+  paging.refresh(filters.value)
+}
+
 const getSiteName = (siteId: string) => {
-  const site = sites.value.find(s => s.id === siteId)
+  const site = siteOptions.value.find((s: any) => s.id === siteId)
   return site?.name || '未知站點'
 }
 
@@ -428,9 +446,52 @@ const renderSparklines = async () => {
   })
 }
 
+const openCreateModal = () => {
+  showCreateModal.value = true
+}
+
+const handleCreateVehicle = async (vehicle: any) => {
+  await vehiclesStore.createVehicle(vehicle)
+  showCreateModal.value = false
+}
+
+// 監聽篩選條件變化
+watch(
+  () => [filters.value.siteId, filters.value.status, filters.value.keyword, filters.value.lowBattery],
+  () => {
+    applyFilters()
+    // 同步到 URL（不影響其他 query）
+    const q = { ...route.query }
+    q['vehicles_siteId'] = filters.value.siteId || undefined
+    q['vehicles_status'] = filters.value.status || undefined
+    q['vehicles_keyword'] = filters.value.keyword || undefined
+    q['vehicles_lowBattery'] = filters.value.lowBattery ? '1' : undefined
+    router.replace({ query: q })
+  },
+  { deep: true }
+)
+
 // Lifecycle
 onMounted(async () => {
-  await refreshData()
+  // 從 URL 還原篩選條件
+  const q = route.query
+  const qp = (k: string) => q[`vehicles_${k}`]
+  filters.value.siteId = String(qp('siteId') || '')
+  filters.value.status = String(qp('status') || '')
+  filters.value.keyword = String(qp('keyword') || '')
+  filters.value.lowBattery = qp('lowBattery') === '1'
+
+  await Promise.all([
+    sitesStore.fetchSites(),
+    bikeMeta.fetchCategories(),
+    bikeMeta.fetchSeries(),
+    bikeMeta.fetchBikeStatusOptions(),
+    telemetry.fetchAvailable()
+    // bikeErrors.fetchCriticalUnread() - API endpoint doesn't exist
+  ])
+
+  // 初始載入分頁資料
+  await paging.refresh(filters.value)
   renderSparklines()
 })
 

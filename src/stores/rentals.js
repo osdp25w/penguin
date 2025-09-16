@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
 import { useVehicles } from '@/stores/vehicles';
+import { http } from '@/lib/api';
 export const useRentals = defineStore('rentals', () => {
     const vehiclesStore = useVehicles();
     // State
@@ -12,57 +13,32 @@ export const useRentals = defineStore('rentals', () => {
         loading.value = true;
         error.value = undefined;
         try {
-            // 前置檢查
-            const vehicle = vehiclesStore.vehicles.find(v => v.id === form.bikeId);
-            if (!vehicle) {
-                throw new Error('車輛不存在');
-            }
-            // 檢查車輛狀態
-            if (vehicle.status !== '可租借') {
-                throw new Error('車輛狀態不可租借');
-            }
-            // 檢查電量
-            if (vehicle.batteryPct < 20) {
-                throw new Error('車輛電量不足，需要充電');
-            }
-            // 檢查信號
-            if (vehicle.signal === '弱') {
-                throw new Error('車輛信號過弱，無法租借');
-            }
-            // 檢查最後更新時間
-            const lastSeenTime = new Date(vehicle.lastSeen).getTime();
-            const now = new Date().getTime();
-            const minutesSinceLastSeen = (now - lastSeenTime) / (1000 * 60);
-            if (minutesSinceLastSeen > 5) {
-                throw new Error('車輛離線時間過長，請選擇其他車輛');
-            }
-            // 發送 API 請求
-            const response = await fetch('/api/rentals', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(form),
-            });
-            if (!response.ok) {
-                const errorData = await response.json();
-                switch (response.status) {
-                    case 409:
-                        throw new Error('車輛已被他人租借');
-                    case 422:
-                        throw new Error('表單驗證失敗');
-                    case 503:
-                        throw new Error('車輛離線，無法租借');
-                    default:
-                        throw new Error(errorData.message || '租借失敗');
-                }
-            }
-            const rental = await response.json();
+            const payload = {
+                bike_id: form.bikeId,
+                memo: form.memo
+            };
+            if (form.member_phone)
+                payload.member_phone = form.member_phone;
+            else if (form.member_email)
+                payload.member_email = form.member_email;
+            const res = await http.post('/api/rental/staff/rentals/', payload);
+            // Normalize to Rental type for UI
+            const rental = {
+                rentalId: String((res === null || res === void 0 ? void 0 : res.id) || (res === null || res === void 0 ? void 0 : res.rental_id) || Date.now()),
+                bikeId: form.bikeId,
+                userName: form.userName,
+                phone: form.phone,
+                idLast4: form.idLast4,
+                state: 'in_use',
+                startedAt: new Date().toISOString()
+            };
             current.value = rental;
+            // 同步更新車輛狀態
+            vehiclesStore.updateVehicleStatus(form.bikeId, 'in-use');
             return rental;
         }
         catch (err) {
-            error.value = err instanceof Error ? err.message : '未知錯誤';
+            error.value = (err === null || err === void 0 ? void 0 : err.message) || '租借失敗';
             throw err;
         }
         finally {
@@ -70,33 +46,8 @@ export const useRentals = defineStore('rentals', () => {
         }
     }
     async function unlockCurrent() {
-        if (!current.value) {
-            throw new Error('沒有進行中的租借');
-        }
-        loading.value = true;
-        error.value = undefined;
-        try {
-            const response = await fetch(`/api/rentals/${current.value.rentalId}/unlock`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-            });
-            if (!response.ok) {
-                throw new Error('開鎖失敗');
-            }
-            const result = await response.json();
-            if (current.value) {
-                current.value.state = result.state;
-            }
-        }
-        catch (err) {
-            error.value = err instanceof Error ? err.message : '開鎖失敗';
-            throw err;
-        }
-        finally {
-            loading.value = false;
-        }
+        // Koala API: 建立租借後即進入使用狀態，不需要額外 unlock API。
+        return;
     }
     async function cancelCurrent() {
         if (!current.value) {
@@ -105,15 +56,7 @@ export const useRentals = defineStore('rentals', () => {
         loading.value = true;
         error.value = undefined;
         try {
-            const response = await fetch(`/api/rentals/${current.value.rentalId}/cancel`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-            });
-            if (!response.ok) {
-                throw new Error('取消租借失敗');
-            }
+            // Koala 若有取消租借 API 可於此補上；暫無
             current.value = undefined;
         }
         catch (err) {
@@ -123,6 +66,48 @@ export const useRentals = defineStore('rentals', () => {
         finally {
             loading.value = false;
         }
+    }
+    async function listActiveRentals() {
+        try {
+            const res = await http.get('/api/rental/staff/rentals/active_rentals/');
+            // API 回應格式：{ code: 2000, msg: "success", data: [...] }
+            const rows = (res === null || res === void 0 ? void 0 : res.data) || (res === null || res === void 0 ? void 0 : res.results) || res || [];
+            console.log('[Rentals] Active rentals loaded:', rows.length, 'items');
+            return Array.isArray(rows) ? rows : [];
+        }
+        catch (error) {
+            console.error('[Rentals] Failed to load active rentals:', error);
+            return [];
+        }
+    }
+    async function returnByRentalId(id) {
+        try {
+            await http.patch(`/api/rental/staff/rentals/${id}/`, { action: 'return' });
+            return true;
+        }
+        catch (_a) {
+            return false;
+        }
+    }
+    async function returnByBikeId(bikeId) {
+        var _a;
+        const actives = await listActiveRentals();
+        const found = actives.find((r) => (r.bike_id || r.bikeId) === bikeId);
+        if (!found)
+            throw new Error('找不到該車輛的進行中租借');
+        const id = found.id || found.rental_id;
+        if (!id)
+            throw new Error('租借 ID 缺失');
+        const success = await returnByRentalId(id);
+        if (success) {
+            // 同步更新車輛狀態為可用
+            vehiclesStore.updateVehicleStatus(bikeId, 'available');
+            // 清除當前租借記錄
+            if (((_a = current.value) === null || _a === void 0 ? void 0 : _a.bikeId) === bikeId) {
+                current.value = undefined;
+            }
+        }
+        return success;
     }
     // Helper for vehicles store
     function setInUse(bikeId) {
@@ -143,6 +128,9 @@ export const useRentals = defineStore('rentals', () => {
         createRental,
         unlockCurrent,
         cancelCurrent,
+        listActiveRentals,
+        returnByBikeId,
+        returnByRentalId,
         setInUse,
         clearError,
         clearCurrent

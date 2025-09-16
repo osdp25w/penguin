@@ -1,0 +1,29 @@
+{
+  "url": "https://koala.osdp25w.xyz/api/telemetry/devices/?model=TD-2024-IoT",
+  "status": 403,
+  "headers": {
+    "allow": "GET, POST, HEAD, OPTIONS",
+    "alt-svc": "h3=\":443\"; ma=86400",
+    "cf-cache-status": "DYNAMIC",
+    "cf-ray": "97f09c50bf5756f4-TPE",
+    "connection": "keep-alive",
+    "content-encoding": "br",
+    "content-type": "application/json",
+    "cross-origin-opener-policy": "same-origin",
+    "date": "Sun, 14 Sep 2025 14:35:23 GMT",
+    "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+    "referrer-policy": "same-origin",
+    "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=we5qrlr%2Bxpa9MgQnxFD4lp%2FssQG%2BHUJhP1haaui%2BmqF%2FKQHTAMibL7gjkkzYfxD1Zo6Neh2zeGMUpi0F7dto4pQ%2FgR2T2RTt3sJ61RlGchGHMb952Sf9I0pR9A%3D%3D\"}]}",
+    "server": "cloudflare",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "transfer-encoding": "chunked",
+    "vary": "origin",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY"
+  },
+  "body": {
+    "code": 3002,
+    "msg": "permission denied",
+    "details": null
+  }
+}

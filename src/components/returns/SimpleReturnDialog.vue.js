@@ -1,8 +1,10 @@
 import { ref, watch } from 'vue';
 import { useReturns } from '@/stores/returns';
+import { useRentals } from '@/stores/rentals';
 const props = defineProps();
 const emit = defineEmits();
 const returnsStore = useReturns();
+const rentalsStore = useRentals();
 const loading = ref(false);
 // 方法
 function handleClose() {
@@ -15,12 +17,14 @@ async function handleConfirmReturn() {
         return;
     loading.value = true;
     try {
-        // 創建簡化的歸還記錄
+        // 走 Koala 租借歸還流程：根據車輛查詢進行中租借並 PATCH action=return
+        await rentalsStore.returnByBikeId(props.vehicle.id);
+        // 本地補一筆簡化的歸還記錄供 UI 顯示
         const returnData = {
             vehicleId: props.vehicle.id,
-            siteId: props.vehicle.siteId || 'unknown', // 使用車輛當前站點或預設值
-            odometer: 0, // 簡化版不需要填寫
-            battery: props.vehicle.batteryPct || 50, // 使用當前電量
+            siteId: props.vehicle.siteId || 'unknown',
+            odometer: 0,
+            battery: props.vehicle.batteryPct || 50,
             issues: undefined,
             photos: undefined
         };

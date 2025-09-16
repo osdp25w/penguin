@@ -97,8 +97,8 @@
             <div class="flex items-center justify-between mb-3">
               <h3 class="text-lg font-semibold text-gray-900">
                 {{ displayMode === 'history' 
-                    ? `軌跡過濾 (${Object.keys(filteredTraces).length}/${Object.keys(mockVehicleTraces).length})` 
-                    : `車輛過濾 (${filteredRealtimeVehicles.length}/${mockVehicles.length})` 
+                    ? `軌跡過濾 (${Object.keys(filteredTraces).length}/${Object.keys(filteredVehicleTraces.value).length})` 
+                    : `車輛過濾 (${filteredRealtimeVehicles.length}/${totalVehicles})` 
                 }}
               </h3>
             </div>
@@ -114,7 +114,7 @@
             <VehicleFilter 
               v-else
               v-model="selectedRealtimeVehicles"
-              :available-vehicles="mockVehicles"
+              :available-vehicles="realtimeVehicles"
             />
           </div>
 
@@ -138,11 +138,22 @@
                 </div>
               </div>
               
+              <!-- 租借者資訊（如果有的話） -->
+              <div v-if="vehicle.currentMember" class="mb-2 p-2 bg-blue-50 rounded text-sm">
+                <div class="flex items-center space-x-1 text-blue-700">
+                  <i class="i-ph-user w-4 h-4"></i>
+                  <span class="font-medium">租借者: {{ vehicle.currentMember.name }}</span>
+                </div>
+                <div class="text-blue-600 text-xs mt-1">
+                  電話: {{ vehicle.currentMember.phone }}
+                </div>
+              </div>
+
               <!-- 車輛詳細資訊網格 -->
               <div class="grid grid-cols-2 gap-2 text-sm text-gray-600 mb-3">
                 <div class="flex items-center space-x-1">
                   <i class="i-ph-gauge w-4 h-4"></i>
-                  <span>{{ vehicle.speedKph || 0 }} km/h</span>
+                  <span>{{ vehicle.vehicleSpeed || vehicle.speedKph || 0 }} km/h</span>
                 </div>
                 <div class="flex items-center space-x-1">
                   <i class="i-ph-battery-high w-4 h-4"></i>
@@ -168,36 +179,25 @@
 
               <!-- 動作按鈕 -->
               <div class="flex justify-end">
-                <!-- 主要動作按鈕：租借/歸還 -->
-                  <button 
-                    v-if="vehicle.status === '可租借' || vehicle.status === 'available'"
-                    :disabled="!canRentVehicle(vehicle)"
-                    :title="getRentButtonTooltip(vehicle)"
-                    @click="handleRentVehicle(vehicle)"
-                    class="px-3 py-1.5 text-sm font-medium rounded-lg transition-colors"
-                    :class="canRentVehicle(vehicle) 
-                      ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
-                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'"
-                  >
-                    <i class="i-ph-key w-4 h-4 mr-1"></i>
-                    租借
-                  </button>
-                  
-                  <button 
-                    v-else-if="vehicle.status === '使用中' || vehicle.status === 'in-use'"
-                    @click="handleReturnVehicle(vehicle)"
-                    class="px-3 py-1.5 text-sm font-medium rounded-lg bg-orange-600 text-white hover:bg-orange-700 transition-colors"
-                  >
-                    <i class="i-ph-handbag w-4 h-4 mr-1"></i>
-                    歸還
-                  </button>
-                  
-                  <span 
-                    v-else
-                    class="px-3 py-1.5 text-sm font-medium text-gray-500 bg-gray-100 rounded-lg"
-                  >
-                    {{ getStatusText(vehicle.status) }}
-                  </span>
+                <!-- 主要動作按鈕：租借/歸還（前端不再限制條件，改由後端校驗） -->
+                <button 
+                  v-if="!(vehicle.status === '使用中' || vehicle.status === 'in-use')"
+                  :title="getRentButtonTooltip(vehicle)"
+                  @click="handleRentVehicle(vehicle)"
+                  class="px-3 py-1.5 text-sm font-medium rounded-lg transition-colors bg-indigo-600 text-white hover:bg-indigo-700"
+                >
+                  <i class="i-ph-key w-4 h-4 mr-1"></i>
+                  租借
+                </button>
+                
+                <button 
+                  v-else
+                  @click="handleReturnVehicle(vehicle)"
+                  class="px-3 py-1.5 text-sm font-medium rounded-lg bg-orange-600 text-white hover:bg-orange-700 transition-colors"
+                >
+                  <i class="i-ph-handbag w-4 h-4 mr-1"></i>
+                  歸還
+                </button>
               </div>
             </div>
           </div>
@@ -231,13 +231,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { use } from 'echarts/core'
 import { BarChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { useSites } from '@/stores/sites'
 import { useVehicles } from '@/stores/vehicles'  
+import { useBikeMeta } from '@/stores/bikeMeta'
 import { useAlerts } from '@/stores/alerts'
 import { useReturns } from '@/stores/returns'
 import { useRentals } from '@/stores/rentals'
@@ -248,6 +249,7 @@ import SimpleReturnDialog from '@/components/returns/SimpleReturnDialog.vue'
 import VehicleTraceFilter from '@/components/filters/VehicleTraceFilter.vue'
 import VehicleFilter from '@/components/filters/VehicleFilter.vue'
 import type { Site } from '@/types/site'
+import { useAuth } from '@/stores/auth'
 
 // ECharts 註冊
 use([BarChart, GridComponent, TooltipComponent, CanvasRenderer])
@@ -255,9 +257,11 @@ use([BarChart, GridComponent, TooltipComponent, CanvasRenderer])
 // Stores
 const sitesStore = useSites()
 const vehiclesStore = useVehicles()
+const bikeMeta = useBikeMeta()
 const alertsStore = useAlerts()
 const returnsStore = useReturns()
 const rentalsStore = useRentals()
+const auth = useAuth()
 
 // 響應式狀態
 const showSetupGuide = ref(false)
@@ -286,6 +290,7 @@ const filteredVehicleTraces = ref<Record<string, any[]>>({})
 
 // 即時車輛過濾相關狀態
 const selectedRealtimeVehicles = ref<string[]>([])
+const realtimeVehicles = ref<any[]>([])
 const showRentDialog = ref(false)
 const selectedVehicleForRent = ref<any>(null)
 const showReturnDialog = ref(false)
@@ -295,235 +300,10 @@ const currentRental = ref<any>(null)
 
 const seedMockEnabled = computed(() => import.meta.env.VITE_SEED_MOCK === '1')
 
-// Mock 車輛資料 - 花蓮真實座標
-const mockVehicles = computed(() => [
-  {
-    id: 'BIKE001',
-    name: '花蓮火車站-001',
-    lat: 23.9917, // 花蓮火車站
-    lon: 121.6014,
-    speedKph: 0,
-    batteryPct: 85,
-    signal: '良好' as const,
-    status: '可租借' as const,
-    lastSeen: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-    // 兼容欄位
-    batteryLevel: 85,
-    brand: selectedDomain.value,
-    location: { lat: 23.9917, lng: 121.6014 },
-    siteId: 'hualien_station',
-    model: 'E-Bike Pro',
-    speed: 0,
-    registeredUser: null
-  },
-  {
-    id: 'BIKE002',
-    name: '東大門夜市-002',
-    lat: 23.9750, // 東大門夜市
-    lon: 121.6060,
-    speedKph: 15,
-    batteryPct: 72,
-    signal: '良好' as const,
-    status: '使用中' as const,
-    lastSeen: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
-    // 兼容欄位
-    batteryLevel: 72,
-    brand: selectedDomain.value,
-    location: { lat: 23.9750, lng: 121.6060 },
-    siteId: 'hualien_night_market',
-    model: 'E-Bike Pro',
-    speed: 15,
-    registeredUser: '張小明 (0912-345-678)'
-  },
-  {
-    id: 'BIKE003',
-    name: '花蓮港-003',
-    lat: 23.9739, // 花蓮港
-    lon: 121.6175,
-    speedKph: 0,
-    batteryPct: 45,
-    signal: '中等' as const,
-    status: '可租借' as const,
-    lastSeen: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-    // 兼容欄位
-    batteryLevel: 45,
-    brand: selectedDomain.value,
-    location: { lat: 23.9739, lng: 121.6175 },
-    siteId: 'hualien_port',
-    model: 'E-Bike Standard',
-    speed: 0,
-    registeredUser: null
-  },
-  {
-    id: 'BIKE004',
-    name: '海洋公園-004',
-    lat: 23.8979, // 花蓮遠雄海洋公園
-    lon: 121.6172,
-    speedKph: 0,
-    batteryPct: 91,
-    signal: '良好' as const,
-    status: '可租借' as const,
-    lastSeen: new Date(Date.now() - 1 * 60 * 1000).toISOString(),
-    // 兼容欄位
-    batteryLevel: 91,
-    brand: selectedDomain.value,
-    location: { lat: 23.8979, lng: 121.6172 },
-    siteId: 'hualien_ocean_park',
-    model: 'E-Bike Pro',
-    speed: 0,
-    registeredUser: null
-  },
-  {
-    id: 'BIKE005',
-    name: '縣政府-005',
-    lat: 23.9847, // 花蓮縣政府
-    lon: 121.6064,
-    speedKph: 0,
-    batteryPct: 15,
-    signal: '弱' as const,
-    status: '低電量' as const,
-    lastSeen: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-    // 兼容欄位
-    batteryLevel: 15,
-    brand: selectedDomain.value,
-    location: { lat: 23.9847, lng: 121.6064 },
-    siteId: 'hualien_county_hall',
-    model: 'E-Bike Standard',
-    speed: 0,
-    registeredUser: null
-  },
-  {
-    id: 'BIKE006',
-    name: '中華紙漿-006',
-    lat: 23.9739, // 花蓮中華紙漿
-    lon: 121.5994,
-    speedKph: 8,
-    batteryPct: 63,
-    signal: '中等' as const,
-    status: '使用中' as const,
-    lastSeen: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-    // 兼容欄位
-    batteryLevel: 63,
-    brand: selectedDomain.value,
-    location: { lat: 23.9739, lng: 121.5994 },
-    siteId: 'hualien_zhonghua',
-    model: 'E-Bike Pro',
-    speed: 8,
-    registeredUser: '李小華 (0987-654-321)'
-  },
-  {
-    id: 'BIKE007',
-    name: '美崙山公園-007',
-    lat: 23.9709, // 花蓮美崙山公園
-    lon: 121.6028,
-    speedKph: 0,
-    batteryPct: 92,
-    signal: '良好' as const,
-    status: '可租借' as const,
-    lastSeen: new Date(Date.now() - 8 * 60 * 1000).toISOString(),
-    // 兼容欄位
-    batteryLevel: 92,
-    brand: selectedDomain.value,
-    location: { lat: 23.9709, lng: 121.6028 },
-    siteId: 'hualien_meilun_park',
-    model: 'E-Bike Pro',
-    speed: 0,
-    registeredUser: null
-  },
-  {
-    id: 'BIKE008',
-    name: '慈濟醫院-008',
-    lat: 23.9786, // 花蓮慈濟醫院
-    lon: 121.5996,
-    speedKph: 12,
-    batteryPct: 54,
-    signal: '中等' as const,
-    status: '使用中' as const,
-    lastSeen: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
-    // 兼容欄位
-    batteryLevel: 54,
-    brand: selectedDomain.value,
-    location: { lat: 23.9786, lng: 121.5996 },
-    siteId: 'hualien_tzu_chi',
-    model: 'E-Bike Standard',
-    speed: 12,
-    registeredUser: '王大明 (0976-123-456)'
-  },
-  {
-    id: 'BIKE009',
-    name: '市公所-009',
-    lat: 23.9847, // 花蓮市公所
-    lon: 121.6064,
-    speedKph: 0,
-    batteryPct: 78,
-    signal: '良好' as const,
-    status: '可租借' as const,
-    lastSeen: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
-    batteryLevel: 78,
-    brand: selectedDomain.value,
-    location: { lat: 23.9847, lng: 121.6064 },
-    siteId: 'hualien_city_office',
-    model: 'E-Bike Pro',
-    speed: 0,
-    registeredUser: null
-  },
-  {
-    id: 'BIKE010',
-    name: '松園別館-010',
-    lat: 23.9853, // 花蓮松園別館
-    lon: 121.6097,
-    speedKph: 0,
-    batteryPct: 89,
-    signal: '良好' as const,
-    status: '可租借' as const,
-    lastSeen: new Date(Date.now() - 7 * 60 * 1000).toISOString(),
-    batteryLevel: 89,
-    brand: selectedDomain.value,
-    location: { lat: 23.9853, lng: 121.6097 },
-    siteId: 'hualien_pine_garden',
-    model: 'E-Bike Standard',
-    speed: 0,
-    registeredUser: null
-  },
-  {
-    id: 'BIKE011',
-    name: '曼波海灘-011',
-    lat: 23.9750, // 花蓮曼波海灘
-    lon: 121.6150,
-    speedKph: 6,
-    batteryPct: 67,
-    signal: '中等' as const,
-    status: '使用中' as const,
-    lastSeen: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
-    batteryLevel: 67,
-    brand: selectedDomain.value,
-    location: { lat: 23.9750, lng: 121.6150 },
-    siteId: 'hualien_manbo_beach',
-    model: 'E-Bike Pro',
-    speed: 6,
-    registeredUser: '陳小美 (0955-777-888)'
-  },
-  {
-    id: 'BIKE012',
-    name: '創意文化園區-012',
-    lat: 23.9715, // 花蓮創意文化園區
-    lon: 121.6080,
-    speedKph: 0,
-    batteryPct: 33,
-    signal: '弱' as const,
-    status: '可租借' as const,
-    lastSeen: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
-    batteryLevel: 33,
-    brand: selectedDomain.value,
-    location: { lat: 23.9715, lng: 121.6080 },
-    siteId: 'hualien_cultural_park',
-    model: 'E-Bike Standard',
-    speed: 0,
-    registeredUser: null
-  }
-])
+// 已移除 mock 車輛資料，改用真實 API 資料 (realtimeVehicles)
 
-// Mock 車輛歷史軌跡資料 - 花蓮真實路線
+// 軌跡資料將從真實 API 載入，暫時設為空
+/*
 const mockVehicleTraces = computed(() => ({
   'BIKE001': [
     // 花蓮火車站 → 東大門夜市 → 返回
@@ -628,18 +408,19 @@ const mockVehicleTraces = computed(() => ({
     { lat: 23.9715, lon: 121.6080, timestamp: new Date(Date.now() - 18 * 60 * 1000).toISOString() }
   ]
 }))
+*/
 
 // 計算車輛分布的中心點和最佳縮放級別
 const mapCenter = computed(() => {
-  const vehicles = mockVehicles.value
+  const vehicles = realtimeVehicles.value
   if (vehicles.length === 0) {
     // 預設花蓮市中心
     return { lat: 23.9739, lng: 121.6014, zoom: 12 }
   }
   
   // 計算所有車輛位置的邊界
-  const lats = vehicles.map(v => v.lat)
-  const lngs = vehicles.map(v => v.lon)
+  const lats = vehicles.map((v:any) => v.lat || v.location?.lat).filter(Boolean)
+  const lngs = vehicles.map((v:any) => v.lon || v.location?.lng).filter(Boolean)
   
   const minLat = Math.min(...lats)
   const maxLat = Math.max(...lats)
@@ -671,7 +452,7 @@ const mapCenter = computed(() => {
 
 // 軌跡過濾相關計算屬性
 const availableTraceVehicles = computed(() => {
-  const traces = mockVehicleTraces.value
+  const traces = filteredVehicleTraces.value
   const vehicleColors = [
     '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
     '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9'
@@ -686,13 +467,13 @@ const availableTraceVehicles = computed(() => {
 
 const filteredTraces = computed(() => {
   if (selectedTraceVehicles.value.length === 0) {
-    return mockVehicleTraces.value
+    return filteredVehicleTraces.value
   }
   
   const filtered: Record<string, any[]> = {}
   selectedTraceVehicles.value.forEach(vehicleId => {
-    if (mockVehicleTraces.value[vehicleId]) {
-      filtered[vehicleId] = mockVehicleTraces.value[vehicleId]
+    if (filteredVehicleTraces.value[vehicleId]) {
+      filtered[vehicleId] = filteredVehicleTraces.value[vehicleId]
     }
   })
   
@@ -701,18 +482,25 @@ const filteredTraces = computed(() => {
 
 // 即時車輛過濾邏輯
 const filteredRealtimeVehicles = computed(() => {
-  if (selectedRealtimeVehicles.value.length === 0) {
-    return mockVehicles.value
+  let list: any[] = realtimeVehicles.value
+  // 角色：member 不顯示已被租借（使用中）的車輛；但可看到低電/維修
+  const role = auth.user?.roleId
+  if (role !== 'admin' && role !== 'staff') {
+    list = list.filter(v => v.status !== '使用中' && v.status !== 'in-use')
   }
-  
-  return mockVehicles.value.filter(vehicle => 
-    selectedRealtimeVehicles.value.includes(vehicle.id)
-  )
+  if (selectedRealtimeVehicles.value.length === 0) {
+    return list
+  }
+  return list.filter(vehicle => selectedRealtimeVehicles.value.includes(vehicle.id))
 })
 
 // 過濾後的車輛
 const filteredVehicles = computed(() => {
-  let vehicles = mockVehicles.value
+  let vehicles = realtimeVehicles.value
+  const role = auth.user?.roleId
+  if (role !== 'admin' && role !== 'staff') {
+    vehicles = vehicles.filter(v => v.status !== '使用中' && v.status !== 'in-use')
+  }
   
   // 根據篩選條件過濾
   if (vehicleFilter.value !== 'all') {
@@ -745,14 +533,14 @@ const filteredVehicles = computed(() => {
 // 計算屬性
 const totalVehicles = computed(() => {
   if (displayMode.value === 'realtime') {
-    return mockVehicles.value.length
+    return realtimeVehicles.value.length
   }
   return sitesStore.filteredSites.reduce((sum, site) => sum + site.vehicleCount, 0)
 })
 
 const availableVehicles = computed(() => {
   if (displayMode.value === 'realtime') {
-    return mockVehicles.value.filter(v => v.status === 'available').length
+    return realtimeVehicles.value.filter((v:any) => v.status === 'available' || v.status === '可租借').length
   }
   return sitesStore.filteredSites.reduce((sum, site) => sum + site.availableCount, 0)
 })
@@ -923,26 +711,29 @@ async function loadHistoryTrajectories(): Promise<void> {
   // 載入歷史軌跡資料
   try {
     console.log('載入歷史軌跡資料')
-    // TODO: 呼叫 API 載入車輛歷史移動軌跡
+    // TODO: 當有軌跡 API 時，在此調用
+    // 暫時設為空物件，避免錯誤
+    filteredVehicleTraces.value = {}
   } catch (error) {
     console.error('載入軌跡資料失敗:', error)
+    filteredVehicleTraces.value = {}
   }
 }
 
 async function loadRealtimePositions(): Promise<void> {
-  // 載入即時位置資料
   try {
-    console.log('載入即時位置資料')
-    // TODO: 呼叫 API 載入車輛即時位置
+    const { data } = await vehiclesStore.fetchVehiclesPaged({ limit: 200, offset: 0 })
+    realtimeVehicles.value = data
   } catch (error) {
     console.error('載入即時位置失敗:', error)
+    realtimeVehicles.value = []
   }
 }
 
 function handleMapSelect(id: string): void {
   if (displayMode.value === 'realtime') {
     // 選擇車輛
-    const vehicle = mockVehicles.value.find(v => v.id === id)
+    const vehicle = realtimeVehicles.value.find((v:any) => v.id === id)
     if (vehicle) {
       selectedItem.value = vehicle
     }
@@ -966,63 +757,28 @@ async function handleRentSuccess(rentRecord: any): Promise<void> {
   showRentSuccessDialog.value = true
 
   // 重新載入相關資料
-  if (sitesStore.selected) {
+  if (displayMode.value === 'realtime') {
+    // 即時模式：重新載入即時位置資料
+    await loadRealtimePositions()
+  } else if (sitesStore.selected) {
+    // 站點模式：重新載入站點車輛資料
     await Promise.all([
       sitesStore.fetchSites(),
       vehiclesStore.fetchBySite(sitesStore.selected.id)
     ])
   }
 
-  // TODO: 顯示成功訊息和更新地圖上的車輛狀態
+  console.log('[SiteMap] Vehicle data refreshed after successful rental')
 }
 
 
 // 租借相關函數
-function canRentVehicle(vehicle: any): boolean {
-  // 檢查車輛狀態
-  if (vehicle.status !== '可租借') return false
-  
-  // 檢查電量
-  if (vehicle.batteryPct < 20) return false
-  
-  // 檢查信號
-  if (vehicle.signal === '弱') return false
-  
-  // 檢查最後更新時間
-  const lastSeenTime = new Date(vehicle.lastSeen).getTime()
-  const now = new Date().getTime()
-  const minutesSinceLastSeen = (now - lastSeenTime) / (1000 * 60)
-  
-  return minutesSinceLastSeen <= 5
-}
+function canRentVehicle(_vehicle: any): boolean { return true }
 
-function getRentButtonTooltip(vehicle: any): string {
-  if (vehicle.status !== '可租借') {
-    return `車輛狀態：${getStatusText(vehicle.status)}`
-  }
-  
-  if (vehicle.batteryPct < 20) {
-    return '電量不足，需要充電'
-  }
-  
-  if (vehicle.signal === '弱') {
-    return '信號過弱，無法租借'
-  }
-  
-  const lastSeenTime = new Date(vehicle.lastSeen).getTime()
-  const now = new Date().getTime()
-  const minutesSinceLastSeen = (now - lastSeenTime) / (1000 * 60)
-  
-  if (minutesSinceLastSeen > 5) {
-    return '車輛離線時間過長'
-  }
-  
-  return '點擊租借車輛'
-}
+function getRentButtonTooltip(_vehicle: any): string { return '點擊租借車輛' }
 
 function handleRentVehicle(vehicle: any): void {
-  if (!canRentVehicle(vehicle)) return
-  
+  // 不做前端條件限制，直接交由後端驗證
   selectedVehicleForRent.value = vehicle
   showRentDialog.value = true
 }
@@ -1074,7 +830,24 @@ async function onReturnSuccess(returnRecord: any): Promise<void> {
 
 // 生命週期
 onMounted(async () => {
-  await sitesStore.fetchSites()
+  await Promise.all([
+    sitesStore.fetchSites(),
+    bikeMeta.fetchBikeStatusOptions(),
+    loadRealtimePositions()
+  ])
+
+  // 設置自動重新整理即時資料 (每30秒)
+  const refreshInterval = setInterval(async () => {
+    if (displayMode.value === 'realtime') {
+      await loadRealtimePositions()
+      console.log('[SiteMap] Auto-refreshed realtime vehicle data')
+    }
+  }, 30000)
+
+  // 頁面卸載時清除定時器
+  onBeforeUnmount(() => {
+    clearInterval(refreshInterval)
+  })
 })
 
 // 監聽選中站點變化

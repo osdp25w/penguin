@@ -115,14 +115,12 @@ export const useUsers = defineStore('users', {
                     const kind = hasStaffType ? 'staff' : 'member';
                     return await toUser(u, kind);
                 }));
-                // Derive roles available from data plus defaults
+                // 只保留後端實際支援的角色
                 const roleSet = new Map([
-                    ['admin', '管理員'],
-                    ['manager', '管理者'],
-                    ['staff', '工作人員'],
-                    ['member', '會員'],
-                    ['visitor', '訪客'],
-                    ['user', '一般使用者']
+                    ['admin', '管理員'], // Staff.admin
+                    ['staff', '工作人員'], // Staff.staff
+                    ['member', '會員'], // Member.real (有身份證號)
+                    ['visitor', '遊客'] // Member.tourist (無身份證號)
                 ]);
                 for (const u of this.users) {
                     if (!roleSet.has(u.roleId))
@@ -138,11 +136,33 @@ export const useUsers = defineStore('users', {
                 this.loading = false;
             }
         },
-        /* ② 啟用 / 停用 ------------------------------------------------- */
-        toggleActive(userId) {
+        /* ② 啟用 / 停用（串接後端 API） --------------------------------- */
+        async toggleActive(userId) {
             const idx = this.users.findIndex(u => u.id === userId);
-            if (idx >= 0)
-                this.users[idx].active = !this.users[idx].active;
+            if (idx < 0)
+                return;
+            const user = this.users[idx];
+            const next = !user.active;
+            try {
+                this.loading = true;
+                this.errMsg = '';
+                const patch = { is_active: next };
+                const isStaffUser = (user.kind === 'staff') || user.roleId === 'admin' || user.roleId === 'staff';
+                if (isStaffUser) {
+                    await Koala.updateStaff(user.id, patch);
+                }
+                else {
+                    await Koala.updateMember(user.id, patch);
+                }
+                this.users[idx].active = next;
+            }
+            catch (e) {
+                console.error('[toggleActive] failed:', e);
+                this.errMsg = (e === null || e === void 0 ? void 0 : e.message) || '變更啟用狀態失敗';
+            }
+            finally {
+                this.loading = false;
+            }
         },
         /* ③ 新增使用者（前端快照；正式環境請改 POST） ---------------- */
         addUser(payload) {
@@ -152,32 +172,191 @@ export const useUsers = defineStore('users', {
             }
             this.users.unshift(payload);
         },
-        /* ④ 更新使用者（前端快照；正式環境請改 PATCH） -------------- */
-        async updateUser(payload) {
-            // Persist to Koala if possible, based on kind
+        /* ③-1 統一註冊使用者（支持 member, staff, admin, tourist 類型） */
+        async registerUser(payload) {
+            var _a, _b, _c, _d;
             try {
-                if (payload.kind === 'staff') {
-                    await Koala.updateStaff(payload.id, {
-                        email: payload.email,
-                        full_name: payload.fullName,
-                        type: payload.roleId
-                    });
+                this.loading = true;
+                this.errMsg = '';
+                const { encryptNationalId, encryptPassword } = await import('@/lib/encryption');
+                const { formatPhoneToInternational, isValidPhone } = await import('@/lib/phone');
+                // 驗證和格式化手機號碼
+                if (!isValidPhone(payload.phone)) {
+                    throw new Error('手機號碼格式不正確');
                 }
-                else if (payload.kind === 'member') {
-                    await Koala.updateMember(payload.id, {
-                        email: payload.email,
-                        full_name: payload.fullName,
-                        type: payload.roleId
-                    });
+                const formattedPhone = formatPhoneToInternational(payload.phone);
+                // 加密身份證號（如果提供 - staff/tourist 可能沒有）
+                let encId = '';
+                if (payload.nationalId) {
+                    encId = await encryptNationalId(payload.nationalId);
+                }
+                // 產生一組初始密碼（也可改為 UI 收集），並使用註冊模式加密
+                const rawPwd = Math.random().toString(36).slice(-10);
+                const encPwd = await encryptPassword(rawPwd, true); // 使用註冊模式 (GENERIC_SECRET_SIGNING_KEY)
+                // 準備 Koala 註冊 payload（依 Postman collection）
+                const body = {
+                    email: payload.email,
+                    full_name: payload.fullName,
+                    phone: formattedPhone, // 使用國際格式
+                    password: encPwd,
+                    type: payload.userType, // 支援 tourist, real, staff, admin
+                    // 可選的 username：優先使用 email localpart，否則 full_name
+                    username: (payload.email.split('@')[0] || payload.fullName || '').slice(0, 20)
+                };
+                // 如果有身份證號才加入（tourist 可能沒有）
+                if (encId) {
+                    body.national_id = encId;
+                }
+                console.log('[registerUser] Sending payload:', { ...body, password: '***encrypted***' });
+                const result = await (await import('@/services/koala')).Koala.register(body);
+                console.log('[registerUser] Registration successful:', result);
+                // 註冊成功後重新載入用戶列表（確保資料同步）
+                await this.fetchAll();
+                return result;
+            }
+            catch (e) {
+                console.error('[registerUser] failed:', e);
+                // 提供更友善的錯誤訊息
+                let errorMsg = '用戶註冊失敗';
+                if ((_a = e === null || e === void 0 ? void 0 : e.message) === null || _a === void 0 ? void 0 : _a.includes('email')) {
+                    errorMsg = '此信箱已被註冊';
+                }
+                else if ((_b = e === null || e === void 0 ? void 0 : e.message) === null || _b === void 0 ? void 0 : _b.includes('username')) {
+                    errorMsg = '此用戶名已被使用';
+                }
+                else if ((_c = e === null || e === void 0 ? void 0 : e.message) === null || _c === void 0 ? void 0 : _c.includes('phone')) {
+                    errorMsg = '手機號碼格式不正確';
+                }
+                else if (((_d = e === null || e === void 0 ? void 0 : e.message) === null || _d === void 0 ? void 0 : _d.includes('type')) && (payload.userType === 'staff' || payload.userType === 'admin')) {
+                    errorMsg = '目前後端註冊端點可能不支持 Staff/Admin 類型，請聯絡後端開發者擴展 API';
+                }
+                else if (e === null || e === void 0 ? void 0 : e.message) {
+                    errorMsg = e.message;
+                }
+                this.errMsg = errorMsg;
+                throw new Error(errorMsg);
+            }
+            finally {
+                this.loading = false;
+            }
+        },
+        /* ③-1-backward-compatibility 舊版 registerMember 方法（向後兼容） */
+        async registerMember(payload) {
+            return this.registerUser({
+                email: payload.email,
+                fullName: payload.fullName,
+                phone: payload.phone,
+                nationalId: payload.nationalId,
+                userType: payload.memberType || 'tourist',
+                active: payload.active
+            });
+        },
+        /* ③-2 建立 Staff/Admin 使用統一註冊端點 */
+        async createStaff(payload) {
+            return this.registerUser({
+                email: payload.email,
+                fullName: payload.fullName,
+                phone: payload.phone || '',
+                nationalId: '', // Staff 通常不需要身份證號
+                userType: payload.type || 'staff',
+                active: payload.active
+            });
+        },
+        /* ④ 編輯保存（串接後端 API，含身分證加密） -------------- */
+        async updateUser(payload) {
+            var _a, _b;
+            try {
+                this.loading = true;
+                this.errMsg = '';
+                const { formatPhoneToInternational, isValidPhone } = await import('@/lib/phone');
+                // 驗證手機號碼格式（如果提供）
+                let formattedPhone = payload.phone;
+                if (payload.phone && !isValidPhone(payload.phone)) {
+                    throw new Error('手機號碼格式不正確');
+                }
+                if (payload.phone) {
+                    formattedPhone = formatPhoneToInternational(payload.phone);
+                }
+                const isStaffUser = payload.kind === 'staff' || payload.roleId === 'admin' || payload.roleId === 'staff';
+                const patch = {
+                    email: payload.email,
+                    full_name: payload.fullName,
+                    phone: formattedPhone, // 使用格式化後的手機號碼
+                    is_active: payload.active
+                };
+                if (!isStaffUser) {
+                    // Member: 加密身份證（若提供）
+                    if (payload.nationalId) {
+                        try {
+                            const { encryptNationalId } = await import('@/lib/encryption');
+                            patch.national_id = await encryptNationalId(payload.nationalId);
+                        }
+                        catch (e) {
+                            console.warn('[updateUser] encrypt nationalId failed:', e);
+                        }
+                    }
+                    // Member: 加密密碼（若提供）
+                    if (payload.password) {
+                        try {
+                            const { encryptPassword } = await import('@/lib/encryption');
+                            patch.password = await encryptPassword(payload.password, true); // 使用註冊模式
+                        }
+                        catch (e) {
+                            console.warn('[updateUser] encrypt password failed:', e);
+                            throw new Error('密碼加密失敗');
+                        }
+                    }
+                }
+                else {
+                    // Staff: 後端通常用 type 區分 admin/staff
+                    if (payload.roleId === 'admin' || payload.roleId === 'staff') {
+                        patch.type = payload.roleId;
+                    }
+                    // Staff: 加密密碼（若提供）
+                    if (payload.password) {
+                        try {
+                            const { encryptPassword } = await import('@/lib/encryption');
+                            patch.password = await encryptPassword(payload.password, true); // 使用註冊模式
+                        }
+                        catch (e) {
+                            console.warn('[updateUser] encrypt password failed:', e);
+                            throw new Error('密碼加密失敗');
+                        }
+                    }
+                }
+                console.log('[updateUser] Sending patch:', { ...patch, password: patch.password ? '***encrypted***' : undefined });
+                if (isStaffUser)
+                    await Koala.updateStaff(payload.id, patch);
+                else
+                    await Koala.updateMember(payload.id, patch);
+                const idx = this.users.findIndex(u => u.id === payload.id);
+                if (idx >= 0) {
+                    // 更新本地狀態，但保留解密後的身份證號用於顯示
+                    this.users[idx] = {
+                        ...payload,
+                        phone: formattedPhone // 保存格式化後的手機號碼
+                    };
                 }
             }
             catch (e) {
-                // Swallow backend errors for now but still update locally
-                console.warn('Koala update failed, updating locally:', e);
+                console.error('[updateUser] failed:', e);
+                // 提供更友善的錯誤訊息
+                let errorMsg = '更新使用者失敗';
+                if ((_a = e === null || e === void 0 ? void 0 : e.message) === null || _a === void 0 ? void 0 : _a.includes('email')) {
+                    errorMsg = '此信箱已被使用';
+                }
+                else if ((_b = e === null || e === void 0 ? void 0 : e.message) === null || _b === void 0 ? void 0 : _b.includes('phone')) {
+                    errorMsg = '手機號碼格式不正確';
+                }
+                else if (e === null || e === void 0 ? void 0 : e.message) {
+                    errorMsg = e.message;
+                }
+                this.errMsg = errorMsg;
+                throw new Error(errorMsg);
             }
-            const idx = this.users.findIndex(u => u.id === payload.id);
-            if (idx >= 0)
-                this.users[idx] = { ...payload };
+            finally {
+                this.loading = false;
+            }
         }
     }
 });

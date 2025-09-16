@@ -5,6 +5,42 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>運動資料管理平台 </title>
+    <!-- Chunk load fallback: if hashed asset fails (404), force a cache-busting reload -->
+    <script>
+      (function () {
+        var KEY = 'asset-bust';
+        window.addEventListener('error', function (e) {
+          var t = e && e.target;
+          if (t && t.tagName === 'SCRIPT' && t.src && /\/assets\/.+\.js/.test(t.src)) {
+            try {
+              var u = new URL(window.location.href);
+              if (!u.searchParams.has(KEY)) {
+                u.searchParams.set(KEY, Date.now().toString());
+                window.location.replace(u.toString());
+              }
+            } catch (_) {
+              window.location.reload();
+            }
+          }
+        }, true);
+
+        // Handle dynamic import chunk load failures (ChunkLoadError)
+        window.addEventListener('unhandledrejection', function (e) {
+          try {
+            var msg = String(e && (e.reason && (e.reason.message || e.reason.name)) || '')
+            if (/ChunkLoadError|Loading chunk|import\(\)/i.test(msg)) {
+              var u = new URL(window.location.href)
+              if (!u.searchParams.has(KEY)) {
+                u.searchParams.set(KEY, Date.now().toString())
+                window.location.replace(u.toString())
+              } else {
+                window.location.reload()
+              }
+            }
+          } catch (_) {}
+        })
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

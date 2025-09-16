@@ -66,7 +66,7 @@
                   v-model="draft.phone"
                   class="input"
                   type="tel"
-                  placeholder="手機號碼"
+                  placeholder="手機號碼 (如: 0912345678)"
                 />
               </td>
               <td class="px-3 py-1">
@@ -101,7 +101,7 @@
             <template v-else>
               <td class="px-4 py-2 font-mono text-gray-900">{{ u.email }}</td>
               <td class="px-4 py-2 text-gray-900">{{ u.fullName }}</td>
-              <td class="px-4 py-2 text-gray-900">{{ u.phone || '-' }}</td>
+              <td class="px-4 py-2 text-gray-900">{{ formatPhoneForDisplay(u.phone) || '-' }}</td>
               <td class="px-4 py-2 text-gray-900">{{ u.nationalId ? maskNationalId(u.nationalId) : '-' }}</td>
               <td class="px-4 py-2 text-gray-900">{{ u.roleName }}</td>
               <td class="px-4 py-2 text-center">
@@ -159,6 +159,7 @@
               placeholder="全名"
             />
           </div>
+          <!-- 角色決定後續欄位顯示 -->
           <div class="flex items-center gap-3">
             <label class="w-24">角色</label>
             <select v-model="temp.roleId" class="input flex-1">
@@ -171,6 +172,37 @@
                 {{ r.name }}
               </option>
             </select>
+          </div>
+          <!-- 共同欄位：電話、身份證號 -->
+          <div class="flex items-center gap-3">
+            <label class="w-24">電話</label>
+            <input
+              v-model="temp.phone"
+              class="input flex-1"
+              type="tel"
+              placeholder="0912345678 或 +886912345678"
+            />
+          </div>
+          <div class="flex items-center gap-3">
+            <label class="w-24">身份證號</label>
+            <input
+              v-model="temp.nationalId"
+              class="input flex-1"
+              type="text"
+              placeholder="A123456789 (可選填，但一般會員必填)"
+            />
+          </div>
+
+          <!-- 沒有附加類型選擇，直接使用 roleId 來決定類型 -->
+          <!-- 身份證號只有 real member 的時候需要 -->
+          <div v-if="temp.roleId === 'member'" class="text-sm text-gray-600">
+            注意：會員類型將根據是否提供身份證號自動決定（有身份證號=一般會員，無=遊客）
+          </div>
+          <div v-else-if="temp.roleId === 'visitor'" class="text-sm text-gray-600">
+            注意：遊客帳號不需要身份證號
+          </div>
+          <div v-else-if="temp.roleId === 'staff' || temp.roleId === 'admin'" class="text-sm text-gray-600">
+            注意：Staff 帳號通常不需要身份證號
           </div>
           <div class="flex items-center gap-3">
             <label class="w-24">狀態</label>
@@ -202,6 +234,7 @@ import { Dialog, DialogPanel }      from '@headlessui/vue'
 import { Plus, RefreshCw }          from 'lucide-vue-next'
 import { useUsers }                 from '@/stores/users'
 import { maskNationalId } from '@/lib/encryption'
+import { formatPhoneForDisplay } from '@/lib/phone'
 import type { User, Role } from '@/types'
 
 // store
@@ -233,12 +266,13 @@ function saveEdit() {
 
 // 新增
 const showDlg = ref(false)
-const temp = reactive<Pick<UserRow, 'email'|'fullName'|'roleId'|'active'>>({
-  email: '', fullName: '', roleId: '', active: true
+const temp = reactive<{ email:string; fullName:string; roleId:string; active:boolean; phone:string; nationalId:string; }>({
+  email: '', fullName: '', roleId: '', active: true,
+  phone: '', nationalId: ''
 })
 const emailInput = ref<HTMLInputElement|null>(null)
 function openCreate() {
-  Object.assign(temp, { email: '', fullName: '', roleId: '', active: true })
+  Object.assign(temp, { email: '', fullName: '', roleId: '', active: true, phone: '', nationalId: '' })
   showDlg.value = true
 }
 function addUser() {
@@ -246,17 +280,35 @@ function addUser() {
     alert('請完整填寫 Email、姓名與角色')
     return
   }
-  const newUser: User = {
-    id       : 'u_' + Date.now().toString(36),
-    email    : temp.email,
-    fullName : temp.fullName,
-    roleId   : temp.roleId,
-    active   : temp.active,
-    createdAt: new Date().toISOString(),
-    lastLogin: ''
+  if (!temp.phone) {
+    alert('請填寫電話')
+    return
   }
-  store.addUser(newUser)
-  showDlg.value = false
+  // 只有 real member 需要身份證號
+  if (temp.roleId === 'member' && temp.nationalId && !temp.nationalId.trim()) {
+    alert('一般會員需要身份證號')
+    return
+  }
+  // 使用統一註冊方法支援所有用戶類型
+  const userTypeMap: { [key: string]: 'tourist' | 'real' | 'staff' | 'admin' } = {
+    'visitor': 'tourist',
+    'member': temp.nationalId ? 'real' : 'tourist', // 有身份證號的為一般會員，無的為遊客
+    'staff': 'staff',
+    'admin': 'admin'
+  }
+
+  const userType = userTypeMap[temp.roleId] || 'tourist'
+
+  store.registerUser({
+    email: temp.email,
+    fullName: temp.fullName,
+    phone: temp.phone,
+    nationalId: temp.nationalId || '', // 可選
+    userType: userType,
+    active: temp.active
+  })
+  .then(() => { showDlg.value = false })
+  .catch(err => { alert(err?.message || '用戶註冊失敗') })
 }
 </script>
 

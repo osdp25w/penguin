@@ -1,0 +1,19 @@
+{
+  "code": 2000,
+  "msg": "success",
+  "data": {
+    "tokens": {
+      "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU3OTQ2ODMzLCJpYXQiOjE3NTc4NjA0MzMsImp0aSI6IjhmZjY4MDQzNDBmNzRhY2RhNGRkNzUyNDA0ZjkzM2FmIiwidXNlcl9pZCI6N30.0Cd0YuBmL0nLE1ZUwwE2xwvPhvv4jvpUt1-g00rC7VI",
+      "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc1ODQ2NTIzMywiaWF0IjoxNzU3ODYwNDMzLCJqdGkiOiI5ZTE2Y2RlOTMyMzA0NzM4OTJlYzgzNDAzMDMyNDI1NSIsInVzZXJfaWQiOjd9.VG_LUG4L9cYn8i29ifEQ5IsUk3BKylsrMmehIMspbi0",
+      "token_type": "Bearer",
+      "expires_in": 86400
+    },
+    "profile": {
+      "id": 3,
+      "username": "pony_admin1",
+      "email": "pony@admin1.com",
+      "profile_type": "staff",
+      "is_active": true
+    }
+  }
+}

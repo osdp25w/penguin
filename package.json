@@ -10,7 +10,8 @@
     "build:docker": "vite build",
     "preview": "vite preview",
     "test:unit": "vitest",
-    "test:e2e": "cypress open"
+    "test:e2e": "cypress open",
+    "test:koala": "node ../scripts/koala_test.mjs"
   },
   "dependencies": {
     "@iconify-json/lucide": "^1.2.63",

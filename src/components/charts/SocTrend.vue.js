@@ -6,22 +6,63 @@ import { LineChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 use([LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
-const props = withDefaults(defineProps(), { labels: () => [], values: () => [], loading: false });
-const option = computed(() => ({
-    tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: props.labels, axisLabel: { color: '#a1a1aa' } },
-    yAxis: { max: 100, min: 0, name: '%', splitLine: { show: false } },
-    series: [{
-            type: 'line', data: props.values, smooth: true, symbol: 'none',
-            lineStyle: { width: 3, color: '#60a5fa' },
-            areaStyle: { opacity: 0.15, color: '#60a5fa' }
-        }],
-    grid: { top: 20, bottom: 40, left: 40, right: 10 },
-    backgroundColor: 'transparent',
-    textStyle: { color: '#e5e7eb', fontFamily: 'Inter' }
-}));
+const props = withDefaults(defineProps(), { labels: () => [], values: () => [], loading: false, granularity: 'hour' });
+const option = computed(() => {
+    const granularityLabels = {
+        hour: '小時',
+        day: '日',
+        month: '月',
+        year: '年'
+    };
+    const xAxisConfig = {
+        type: 'category',
+        data: props.labels,
+        axisLabel: {
+            color: '#a1a1aa',
+            rotate: props.granularity === 'hour' ? 0 : 45,
+            formatter: (value) => {
+                // 根據粒度調整標籤顯示
+                if (props.granularity === 'day' && value.includes('-')) {
+                    return value.split('-').slice(1).join('/');
+                }
+                return value;
+            }
+        }
+    };
+    return {
+        tooltip: {
+            trigger: 'axis',
+            formatter: (params) => {
+                const param = params[0];
+                return `${param.axisValue}<br/>SoC: ${param.data}%`;
+            }
+        },
+        xAxis: xAxisConfig,
+        yAxis: {
+            max: 100,
+            min: 0,
+            name: 'SoC %',
+            nameTextStyle: { color: '#a1a1aa' },
+            splitLine: { show: false },
+            axisLabel: { color: '#a1a1aa' }
+        },
+        series: [{
+                type: 'line',
+                data: props.values,
+                smooth: true,
+                symbol: props.values.length > 24 ? 'none' : 'circle',
+                symbolSize: 4,
+                lineStyle: { width: 3, color: '#60a5fa' },
+                areaStyle: { opacity: 0.15, color: '#60a5fa' },
+                connectNulls: false
+            }],
+        grid: { top: 30, bottom: 50, left: 50, right: 20 },
+        backgroundColor: 'transparent',
+        textStyle: { color: '#e5e7eb', fontFamily: 'Inter' }
+    };
+});
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
-const __VLS_withDefaultsArg = (function (t) { return t; })({ labels: () => [], values: () => [], loading: false });
+const __VLS_withDefaultsArg = (function (t) { return t; })({ labels: () => [], values: () => [], loading: false, granularity: 'hour' });
 const __VLS_ctx = {};
 let __VLS_components;
 let __VLS_directives;

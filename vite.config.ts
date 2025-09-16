@@ -350,22 +350,32 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: 5173,
       https: httpsCreds || undefined,
-      proxy: {
-        // Proxy Koala backend to avoid CORS in dev
-        '/koala': {
-          target: 'https://koala.osdp25w.xyz',
-          changeOrigin: true,
-          secure: false,
-          rewrite: (path) => path.replace(/^\/koala/, '')
-        }
-      }
+      // Removed proxy - frontend now calls koala.osdp25w.xyz directly
     },
 
   /* 建置輸出 */
   build: {
     outDir: 'dist',
-    sourcemap: false
+    sourcemap: false,
+    assetsDir: 'assets',
+    rollupOptions: {
+      output: {
+        // 更穩定的 chunk 命名策略，確保與部署環境相容
+        chunkFileNames: 'assets/[name]-[hash].js',
+        entryFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]',
+        manualChunks: {
+          // 手動分割關鍵組件到固定 chunk，避免動態導入問題
+          'vendor-vue': ['vue', 'vue-router', 'pinia'],
+          'vendor-ui': ['@headlessui/vue']
+          // 移除 admin-pages 手動分割，讓 Vite 自動處理
+        }
+      }
+    }
   },
+
+  /* 確保 base path 正確配置 */
+  base: '/',
 
     /* 只注入 VITE_ 開頭的環境變數 */
     envPrefix: 'VITE_'

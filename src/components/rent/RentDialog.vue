@@ -1,117 +1,66 @@
 <template>
-  <!-- 背景遮罩 -->
-  <div 
-    v-if="show"
-    class="fixed inset-0 z-50 overflow-y-auto"
-    @click.self="handleClose"
-  >
+  <div v-if="show" class="fixed inset-0 z-50 overflow-y-auto" @click.self="handleClose">
     <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <!-- 背景遮罩 -->
-      <div 
-        class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm transition-opacity"
-        @click="handleClose"
-      ></div>
-
-      <!-- 定位元素 -->
+      <div class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm transition-opacity" @click="handleClose"></div>
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
 
-      <!-- Modal 主體 -->
-      <div 
-        class="inline-block align-bottom bg-white rounded-2xl px-6 pt-6 pb-6 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
-        @click.stop
-      >
-        <!-- 標題 -->
+      <div class="inline-block align-bottom bg-white rounded-2xl px-6 pt-6 pb-6 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full" @click.stop>
         <div class="flex items-center justify-between mb-6">
-          <h3 class="text-xl font-semibold text-gray-900">
-            車輛租借
-          </h3>
-          <button 
-            @click="handleClose"
-            class="text-gray-400 hover:text-gray-600 transition-colors"
-          >
+          <h3 class="text-xl font-semibold text-gray-900">車輛租借</h3>
+          <button @click="handleClose" class="text-gray-400 hover:text-gray-600 transition-colors">
             <i class="i-ph-x w-5 h-5"></i>
           </button>
         </div>
 
-        <!-- 表單 -->
         <form @submit.prevent="handleSubmit" class="space-y-5">
-          <!-- 車輛 ID -->
+          <!-- 車輛 ID（縮短顯示，避免超出） -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">
-              車輛 ID
-            </label>
-            <input
-              :value="vehicle?.id || ''"
-              type="text"
-              readonly
-              class="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 text-gray-600 cursor-not-allowed"
-            >
+            <label class="block text-sm font-medium text-gray-700 mb-2">車輛 ID</label>
+            <div class="relative md:max-w-[20rem] lg:max-w-[24rem]">
+              <div
+                class="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 text-gray-700 font-mono text-sm truncate"
+                :title="vehicle?.id || ''"
+              >
+                {{ truncatedVehicleId }}
+              </div>
+            </div>
           </div>
 
-          <!-- 使用者姓名 -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">
-              使用者姓名 <span class="text-red-500">*</span>
-            </label>
-            <input
-              v-model="form.userName"
-              type="text"
-              placeholder="請輸入姓名（2-30字）"
-              class="w-full px-4 py-3 border rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              :class="errors.userName ? 'border-red-300 bg-red-50' : 'border-gray-300'"
-              :disabled="loading"
-            >
-            <p v-if="errors.userName" class="mt-1 text-xs text-red-600">{{ errors.userName }}</p>
+          <!-- 使用者資訊：member 直接顯示目前登入者；admin/staff 可選擇代租對象 -->
+          <div v-if="!isStaff">
+            <label class="block text-sm font-medium text-gray-700 mb-2">使用者</label>
+            <div class="p-3 border border-gray-200 rounded-xl bg-gray-50 text-gray-800">
+              <div class="font-medium">{{ currentUserName }}</div>
+              <div class="text-sm text-gray-600">{{ currentUserPhone || '未提供電話' }}</div>
+              <div v-if="currentUserIdLast4" class="text-xs text-gray-500">身分末四碼：{{ currentUserIdLast4 }}</div>
+            </div>
           </div>
 
-          <!-- 聯絡電話 -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">
-              聯絡電話 <span class="text-red-500">*</span>
-            </label>
-            <input
-              v-model="form.phone"
-              type="tel"
-              placeholder="09xxxxxxxx 或 +886xxxxxxxxx"
-              class="w-full px-4 py-3 border rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              :class="errors.phone ? 'border-red-300 bg-red-50' : 'border-gray-300'"
-              :disabled="loading"
-            >
-            <p v-if="errors.phone" class="mt-1 text-xs text-red-600">{{ errors.phone }}</p>
+          <div v-else>
+            <label class="block text-sm font-medium text-gray-700 mb-2">代租對象</label>
+
+            <!-- 代租：搜尋 + 下拉（staff 僅保留代租功能） -->
+            <div class="space-y-2">
+              <div class="relative md:max-w-[20rem] lg:max-w-[24rem]">
+                <input v-model="memberQuery" type="text" placeholder="搜尋姓名/帳號/電話" class="w-full px-4 py-3 border border-gray-300 rounded-xl" @input="filterMembers" />
+              </div>
+              <div class="relative md:max-w-[20rem] lg:max-w-[24rem]">
+                <select v-model="selectedMemberId" class="w-full px-4 py-3 border border-gray-300 rounded-xl">
+                  <option value="">請選擇成員</option>
+                  <option v-for="m in filteredMemberOptions" :key="m.id" :value="String(m.id)">
+                    {{ memberLabel(m) }}
+                  </option>
+                </select>
+              </div>
+              <p v-if="errors.userName" class="mt-1 text-xs text-red-600">{{ errors.userName }}</p>
+            </div>
           </div>
 
-          <!-- 身分證末四碼 -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">
-              身分證末四碼 <span class="text-red-500">*</span>
-            </label>
-            <input
-              v-model="form.idLast4"
-              type="text"
-              placeholder="請輸入身分證末四碼"
-              maxlength="4"
-              class="w-full px-4 py-3 border rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              :class="errors.idLast4 ? 'border-red-300 bg-red-50' : 'border-gray-300'"
-              :disabled="loading"
-            >
-            <p v-if="errors.idLast4" class="mt-1 text-xs text-red-600">{{ errors.idLast4}}</p>
-          </div>
-
-          <!-- 底部按鈕 -->
           <div class="flex space-x-3 pt-4">
-            <button
-              type="button"
-              @click="handleClose"
-              class="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors"
-              :disabled="loading"
-            >
+            <button type="button" @click="handleClose" class="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors" :disabled="loading">
               取消
             </button>
-            <button
-              type="submit"
-              class="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              :disabled="loading || !isFormValid"
-            >
+            <button type="submit" class="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" :disabled="loading || !canSubmit">
               <i v-if="loading" class="i-ph-spinner w-4 h-4 mr-2 animate-spin inline-block"></i>
               <i v-else class="i-ph-check-circle w-4 h-4 mr-2 inline-block"></i>
               {{ loading ? '處理中...' : '確定租借' }}
@@ -127,172 +76,138 @@
 import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { useRentals } from '@/stores/rentals'
 import { CreateRentalSchema } from '@/types/rental'
-import type { Vehicle } from '@/types/vehicle'
+import { useAuth } from '@/stores/auth'
+import { Koala } from '@/services/koala'
 
-interface Props {
-  show: boolean
-  vehicle: Vehicle | null
-}
-
-interface Emits {
-  close: []
-  success: [rental: any]
-}
-
-const props = defineProps<Props>()
-const emit = defineEmits<Emits>()
+interface Vehicle { id: string }
+const props = defineProps<{ show: boolean; vehicle: Vehicle | null }>()
+const emit = defineEmits<{ close: []; success: [rental: any] }>()
 
 const rentalsStore = useRentals()
+const auth = useAuth()
 
-// 表單資料
-const form = reactive({
-  userName: '',
-  phone: '',
-  idLast4: ''
-})
-
-// 錯誤狀態
-const errors = reactive({
-  userName: '',
-  phone: '',
-  idLast4: ''
-})
+const isStaff = computed(() => auth.user?.roleId === 'admin' || auth.user?.roleId === 'staff')
+// staff 僅保留代租功能（不提供「為自己」）
+const isProxy = ref(true)
+const currentUserName = computed(() => auth.user?.name || '')
+const currentUserPhone = computed(() => auth.user?.phone || '')
+const currentUserIdLast4 = computed(() => (auth.user?.idNumber ? String(auth.user.idNumber).slice(-4) : ''))
 
 const loading = ref(false)
+const errors = reactive({ userName: '' })
 
-// 計算屬性
-const isFormValid = computed(() => {
-  return form.userName.trim() && 
-         form.phone.trim() && 
-         form.idLast4.trim() &&
-         !errors.userName &&
-         !errors.phone &&
-         !errors.idLast4
+// staff 代租：成員選擇
+const memberOptions = ref<any[]>([])
+const filteredMemberOptions = ref<any[]>([])
+const selectedMemberId = ref<string>('')
+const memberQuery = ref('')
+
+const canSubmit = computed(() => {
+  if (!props.vehicle) return false
+  if (isStaff.value) return !!selectedMemberId.value
+  return !!currentUserName.value
 })
 
-// 方法
-function validateField(field: keyof typeof form) {
-  errors[field] = ''
-
-  switch (field) {
-    case 'userName':
-      if (!form.userName.trim()) {
-        errors.userName = '請輸入使用者姓名'
-      } else if (form.userName.length < 2 || form.userName.length > 30) {
-        errors.userName = '姓名長度必須在 2-30 字之間'
-      }
-      break
-
-    case 'phone':
-      if (!form.phone.trim()) {
-        errors.phone = '請輸入聯絡電話'
-      } else if (!/^(09\d{8}|(\+886|886)9\d{8})$/.test(form.phone)) {
-        errors.phone = '請輸入有效的台灣手機號碼'
-      }
-      break
-
-    case 'idLast4':
-      if (!form.idLast4.trim()) {
-        errors.idLast4 = '請輸入身分證末四碼'
-      } else if (!/^\d{4}$/.test(form.idLast4)) {
-        errors.idLast4 = '請輸入四位數字'
-      }
-      break
-  }
-}
-
-function validateForm(): boolean {
-  validateField('userName')
-  validateField('phone')
-  validateField('idLast4')
-
-  return !errors.userName && !errors.phone && !errors.idLast4
-}
-
 async function handleSubmit() {
-  if (!validateForm() || !props.vehicle) return
-
+  if (!props.vehicle) return
   loading.value = true
   rentalsStore.clearError()
-
   try {
-    // 驗證表單資料
-    const formData = CreateRentalSchema.parse({
-      bikeId: props.vehicle.id,
-      userName: form.userName.trim(),
-      phone: form.phone.trim(),
-      idLast4: form.idLast4.trim()
+    // 準備租借資料
+    let userName = currentUserName.value
+    let phone = currentUserPhone.value
+    let idLast4 = currentUserIdLast4.value
+
+    if (isStaff.value) {
+      const m = memberOptions.value.find(x => String(x.id) === selectedMemberId.value)
+      if (!m) {
+        errors.userName = '請選擇要代租的成員'
+        loading.value = false
+        return
+      }
+      userName = m?.full_name || m?.username || ''
+      phone = m?.phone || ''
+      const nat: string | undefined = m?.national_id
+      if (nat) idLast4 = nat.slice(-4)
+    }
+
+    // 處理可選欄位：確保符合 schema 規則或設為空字符串
+    if (!phone) {
+      // 如果 auth.user.phone 存在且符合台灣手機號碼格式，使用它；否則留空
+      const userPhone = auth.user?.phone || ''
+      phone = /^(09\d{8}|(\+886|886)9\d{8})$/.test(userPhone) ? userPhone : ''
+    }
+
+    if (!idLast4) {
+      // 如果有 user idNumber，取末四碼；否則留空
+      if (auth.user?.idNumber) {
+        const lastFour = String(auth.user.idNumber).slice(-4)
+        idLast4 = /^\d{4}$/.test(lastFour) ? lastFour : ''
+      } else {
+        idLast4 = ''
+      }
+    }
+
+    const formData = CreateRentalSchema.parse({ bikeId: props.vehicle.id, userName, phone, idLast4 })
+    const isPhone = !!phone && /(^(09\d{8})$)|(^((\+886|886)9\d{8})$)/.test(phone)
+    const rental = await rentalsStore.createRental({
+      ...formData,
+      member_phone: isPhone ? phone : undefined,
+      member_email: !isPhone ? (isStaff.value ? (memberOptions.value.find(x => String(x.id) === selectedMemberId.value)?.email || undefined) : (auth.user?.email || undefined)) : undefined
     })
-
-    // 建立租借單
-    const rental = await rentalsStore.createRental(formData)
-
-    // 開鎖
     await rentalsStore.unlockCurrent()
-
-    // 更新車輛狀態
     rentalsStore.setInUse(props.vehicle.id)
-
-    // 成功
     emit('success', rental)
-    clearForm()
     handleClose()
-
   } catch (error) {
     console.error('租借失敗:', error)
-    // 錯誤已經在 store 中處理
   } finally {
     loading.value = false
   }
 }
 
 function handleClose() {
-  if (!loading.value) {
-    emit('close')
-    clearForm()
-  }
+  if (!loading.value) emit('close')
 }
 
-function clearForm() {
-  form.userName = ''
-  form.phone = ''
-  form.idLast4 = ''
-  
-  errors.userName = ''
-  errors.phone = ''
-  errors.idLast4 = ''
-}
-
-// 監聽表單變化進行即時驗證
-watch(() => form.userName, () => validateField('userName'), { flush: 'post' })
-watch(() => form.phone, () => validateField('phone'), { flush: 'post' })
-watch(() => form.idLast4, () => validateField('idLast4'), { flush: 'post' })
-
-// 監聽 show 狀態變化
-watch(() => props.show, async (newShow) => {
-  if (newShow) {
+watch(() => props.show, async (open) => {
+  if (open) {
     await nextTick()
-    // 焦點設置到第一個可編輯欄位
-    const firstInput = document.querySelector('input[type="text"]:not([readonly])') as HTMLElement
-    firstInput?.focus()
-  } else {
-    clearForm()
+    if (isStaff.value && memberOptions.value.length === 0) {
+      try {
+        const list = await Koala.listMembers()
+        memberOptions.value = list
+        filteredMemberOptions.value = list
+      } catch (e) {
+        console.warn('無法載入成員清單', e)
+      }
+    }
   }
 })
 
-// 鍵盤事件處理
-function handleKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') {
-    handleClose()
-  }
+function filterMembers() {
+  const q = memberQuery.value.trim().toLowerCase()
+  if (!q) { filteredMemberOptions.value = memberOptions.value; return }
+  filteredMemberOptions.value = memberOptions.value.filter((m) => {
+    const s = `${m.full_name || ''} ${m.username || ''} ${m.phone || ''} ${m.email || ''}`.toLowerCase()
+    return s.includes(q)
+  })
 }
 
-// 添加鍵盤事件監聽
-watch(() => props.show, (newShow) => {
-  if (newShow) {
-    document.addEventListener('keydown', handleKeydown)
-  } else {
-    document.removeEventListener('keydown', handleKeydown)
-  }
+// 顯示輔助：截斷字串與組裝成員選項
+const truncatedVehicleId = computed(() => {
+  const id = props.vehicle?.id || ''
+  return id.length > 18 ? `${id.slice(0, 8)}…${id.slice(-6)}` : id
 })
+
+function short(val: string | undefined, max = 18): string {
+  const s = String(val || '')
+  return s.length > max ? s.slice(0, max - 1) + '…' : s
+}
+
+function memberLabel(m: any): string {
+  const name = short(m.full_name || m.username || '—', 12)
+  const contact = short(m.phone || m.email || '無', 14)
+  return `${name}（${contact}）`
+}
 </script>

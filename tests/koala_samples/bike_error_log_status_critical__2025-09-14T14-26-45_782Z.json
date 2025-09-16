@@ -1,0 +1,29 @@
+{
+  "url": "https://koala.osdp25w.xyz/api/bike/error-log-status/?level=critical",
+  "status": 403,
+  "headers": {
+    "allow": "GET, HEAD, OPTIONS",
+    "alt-svc": "h3=\":443\"; ma=86400",
+    "cf-cache-status": "DYNAMIC",
+    "cf-ray": "97f08fac4dce4a88-TPE",
+    "connection": "keep-alive",
+    "content-encoding": "br",
+    "content-type": "application/json",
+    "cross-origin-opener-policy": "same-origin",
+    "date": "Sun, 14 Sep 2025 14:26:45 GMT",
+    "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+    "referrer-policy": "same-origin",
+    "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=DqywPAvb0TNXy6FDJ0y%2Fp484zYf0oRrcObroq1OJiajPOTF9keU3nvudXO0AdzFmZTL%2FsCXvGytBXUHpUx1sgMaBdu4ct3HeyyLLuelYBu6aBNowe5XumcDakg%3D%3D\"}]}",
+    "server": "cloudflare",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "transfer-encoding": "chunked",
+    "vary": "origin",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY"
+  },
+  "body": {
+    "code": 3002,
+    "msg": "permission denied",
+    "details": null
+  }
+}

@@ -1,0 +1,3224 @@
+{
+	"info": {
+		"_postman_id": "e0b6cb74-f6a9-4c73-b504-85f176739c9e",
+		"name": "Koala",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "47889687",
+		"_collection_link": "https://lab3-spotify.postman.co/workspace/Osdp25w~e3bcdb23-5473-44a4-8b4b-fee48d18fdff/collection/15456587-e0b6cb74-f6a9-4c73-b504-85f176739c9e?action=share&source=collection_link&creator=47889687"
+	},
+	"item": [
+		{
+			"name": "Member",
+			"item": [
+				{
+					"name": "Auth",
+					"item": [
+						{
+							"name": "login",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Login successful\", function () {",
+											"    const response = pm.response.json();",
+											"    ",
+											"    if (response.code === 2000) {",
+											"        console.log(`Login with ${response.data.profile.username} successfully`);",
+											"        ",
+											"        // 設置 access token 和 refresh token",
+											"        pm.environment.set(\"member_access_token\", response.data.tokens.access_token);",
+											"        pm.environment.set(\"member_refresh_token\", response.data.tokens.refresh_token);",
+											"        ",
+											"        console.log(\"Tokens saved to environment variables\");",
+											"    } else {",
+											"        console.error(`Login failed. Response code:`, response.code);",
+											"    }",
+											"});"
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"email\": \"{{member_real_email}}\",\n  \"password\": \"{{member_encrypted_password}}\"\n}\n\n\n// {\n//   \"email\": \"{{member_tourist_email}}\",\n//   \"password\": \"{{member_encrypted_password}}\"\n// }",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/auth/login/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"auth",
+										"login",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X POST http://localhost:8000/api/auth/login/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"encrypted_credentials\": \"gAAAAABoqaSNnGWOiu3MSlEiiTdyXe7JEvA-CljvUafx7VyqJ\n  eeGa2U6EAeOp4-uOIO91X19kkfK_cuNRMCaGsx8W1KtXfIZHCUwB1_KF86Vw5Z0AkNdpWg=\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "refresh token",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"refresh_token\": \"{{member_refresh_token}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/auth/refresh/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"auth",
+										"refresh",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X POST\n  http://localhost:8000/account/auth/refresh/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"refresh_token\": \"your_refresh_token_here\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "logout",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/auth/logout/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"auth",
+										"logout",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X POST\n  http://localhost:8000/account/auth/logout/ \\\n    -H \"Authorization: Bearer \n  your_access_token_here\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Member",
+					"item": [
+						{
+							"name": "update member",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"type\": \"real\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/members/7/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"members",
+										"7",
+										""
+									]
+								},
+								"description": "Generated from cURL:  curl -X POST\n  http://localhost:8000/account/members/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"testuser\",\n      \"email\": \"testuser@example.com\",\n      \"password\": \"password123\",\n      \"full_name\": \"Test User\",\n      \"phone\": \"0912345678\",\n      \"type\": \"tourist\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "delete member",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"type\": \"real\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/members/7/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"members",
+										"7",
+										""
+									]
+								},
+								"description": "Generated from cURL:  curl -X POST\n  http://localhost:8000/account/members/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"testuser\",\n      \"email\": \"testuser@example.com\",\n      \"password\": \"password123\",\n      \"full_name\": \"Test User\",\n      \"phone\": \"0912345678\",\n      \"type\": \"tourist\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "list all members",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer your_access_token_here"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/members/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"members",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X GET http://localhost:8000/api/account/members/ \\\n    -H \"Authorization: Bearer your_access_token_here\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "retrieve a member",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer your_access_token_here"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/members/13/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"members",
+										"13",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X GET http://localhost:8000/api/account/members/ \\\n    -H \"Authorization: Bearer your_access_token_here\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "check email available",
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true
+							},
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n \"email\": \"test@example.com\"\n}\n\n\n// {\n//  \"email\": \"pony@tourist3.com\"\n// }",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/register/check-availability/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"register",
+										"check-availability",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X POST http://localhost:8000/account/register/check-availability/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"testuser\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "touist member registration",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"username\": \"newtourist\",\n  \"email\": \"newtourist@example.com\",\n  \"password\": \"gAAAAABospJTWqrrsrP3f7Q2N3NCq49nVACu5tQzu6fIudgWp73ta0rfvaIcYj3IjljOGrnYwznPTzMjvCDzG6k2gX_nZ1qSbg==\",\n  \"full_name\": \"新用戶\",\n  \"phone\": \"0912345678\",\n  \"type\": \"tourist\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/register/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"register",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X POST http://localhost:8000/account/register/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"newuser\",\n      \"email\": \"newuser@example.com\",\n      \"password\": \"password123\",\n      \"confirm_password\": \"password123\",\n      \"full_name\": \"新用戶\",\n      \"phone\": \"0912345678\",\n      \"type\": \"tourist\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "real member registration",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"username\": \"newreal\",\n  \"email\": \"newreal@example.com\",\n  \"password\": \"gAAAAABospOUpLbfZ0gIMEa3mvV5DGRVP52HoFYVZm6lEVo34fNKy-CCYREK9T8yTHiBWYQI6URTMhznZTr4DVdEs5ufLhO-5w==\",\n  \"full_name\": \"新用戶\",\n  \"phone\": \"0912345678\",\n  \"national_id\": \"gAAAAABospQbPeDf2eiQ5QmGsWVsDfb3yg-2DXdxRcWn9otdaZZ8yjsRCbCfNKl9S55u_nLfW_drXJR-fwLSncry57RKxFtUVw==\",\n  \"type\": \"real\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/register/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"register",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X POST http://localhost:8000/api/account/register/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"newuser\",\n      \"email\": \"newuser@example.com\",\n      \"password\": \"password123\",\n      \"full_name\": \"新用戶\",\n      \"phone\": \"0912345678\",\n      \"national_id\": \"A123456789\",\n      \"type\": \"real\"\n    }'"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Staff",
+					"item": [
+						{
+							"name": "list all staffs",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/staff/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"staff",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl --location 'http://localhost:8000/api/account/staff/' \\\n  --header 'Authorization: Bearer \n  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU2NjM2MzA2LCJpYXQiOjE3NTY1NDk5MDYsImp0a\n  SI6IjQ0YTBkNjllYzVlNTQzZTk5ZjEyMDA3OTA5ZjFiNjE5IiwidXNlcl9pZCI6NTF9.vugWmBh4KQIKXzXAN-78wLs_POy--jP1eL-eS0RDBBE' \\\n  --header 'Content-Type: application/json'"
+							},
+							"response": []
+						},
+						{
+							"name": "retrieve a staff",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/staff/8/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"staff",
+										"8",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl --location 'http://localhost:8000/api/account/staff/{staff_id}/' \\\n  --header 'Authorization: Bearer \n  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU2NjM2MzA2LCJpYXQiOjE3NTY1NDk5MDYsImp0a\n  SI6IjQ0YTBkNjllYzVlNTQzZTk5ZjEyMDA3OTA5ZjFiNjE5IiwidXNlcl9pZCI6NTF9.vugWmBh4KQIKXzXAN-78wLs_POy--jP1eL-eS0RDBBE' \\\n  --header 'Content-Type: application/json'"
+							},
+							"response": []
+						},
+						{
+							"name": "update staff",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"username\": \"pony_admin2\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/staff/8/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"staff",
+										"8",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl --location --request PATCH 'http://localhost:8000/api/account/staff/{staff_id}/' \\\n  --header 'Authorization: Bearer \n  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU2NjM2MzA2LCJpYXQiOjE3NTY1NDk5MDYsImp0a\n  SI6IjQ0YTBkNjllYzVlNTQzZTk5ZjEyMDA3OTA5ZjFiNjE5IiwidXNlcl9pZCI6NTF9.vugWmBh4KQIKXzXAN-78wLs_POy--jP1eL-eS0RDBBE' \\\n  --header 'Content-Type: application/json' \\\n  --data '{\n      \"email\": \"updated@example.com\",\n      \"type\": \"admin\"\n  }'"
+							},
+							"response": []
+						},
+						{
+							"name": "delete staff",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/staff/5/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"staff",
+										"5",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl --location --request DELETE 'http://localhost:8000/api/account/staff/{staff_id}/' \\\n  --header 'Authorization: Bearer \n  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU2NjM2MzA2LCJpYXQiOjE3NTY1NDk5MDYsImp0a\n  SI6IjQ0YTBkNjllYzVlNTQzZTk5ZjEyMDA3OTA5ZjFiNjE5IiwidXNlcl_pZCI6NTF9.vugWmBh4KQIKXzXAN-78wLs_POy--jP1eL-eS0RDBBE'"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "BikeRental",
+					"item": [
+						{
+							"name": "get own rental records",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_MEMBER_TOKEN",
+										"disabled": true
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/rental/member/rentals/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"rental",
+										"member",
+										"rentals",
+										""
+									]
+								},
+								"description": "Generated from cURL:  curl -X GET \"http://localhost:8000/api/rental/member/rentals/\" \\\n    -H \"Authorization: Bearer YOUR_MEMBER_TOKEN\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "get a rental record",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_MEMBER_TOKEN"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/rental/member/rentals/3/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"rental",
+										"member",
+										"rentals",
+										"3",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X GET \"http://localhost:8000/api/rental/member/rentals/1/\" \\\n    -H \"Authorization: Bearer YOUR_MEMBER_TOKEN\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "get currently active rental",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_MEMBER_TOKEN"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/rental/member/rentals/active_rental/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"rental",
+										"member",
+										"rentals",
+										"active_rental",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X GET \"http://localhost:8000/api/rental/member/rentals/active_rental/\" \\\n    -H \"Authorization: Bearer YOUR_MEMBER_TOKEN\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "rental a bike",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_MEMBER_TOKEN"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"bike_id\": \"SS001\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/rental/member/rentals/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"rental",
+										"member",
+										"rentals",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X POST \"http://localhost:8000/api/rental/member/rentals/\" \\\n    -H \"Authorization: Bearer YOUR_MEMBER_TOKEN\" \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"bike_id\": \"BIKE001\",\n      \"pickup_location\": \"台大校門口\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "return a bike",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_MEMBER_TOKEN"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"action\": \"return\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/rental/member/rentals/1/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"rental",
+										"member",
+										"rentals",
+										"1",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X PATCH \"http://localhost:8000/api/rental/member/rentals/1/\" \\\n    -H \"Authorization: Bearer YOUR_MEMBER_TOKEN\" \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"action\": \"return\",\n      \"return_location\": \"台大圖書館\"\n    }'"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "BikeRealtimeStatus",
+					"item": [
+						{
+							"name": "get available bikes",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_MEMBER_TOKEN"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/bike/realtime-status/?limit=20&offset=0",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"bike",
+										"realtime-status",
+										""
+									],
+									"query": [
+										{
+											"key": "limit",
+											"value": "20"
+										},
+										{
+											"key": "offset",
+											"value": "0"
+										}
+									]
+								},
+								"description": "Generated from cURL:   curl -X GET \"http://localhost:8000/api/bike/realtime-status/\" \\\n    -H \"Authorization: Bearer YOUR_MEMBER_TOKEN\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						}
+					]
+				}
+			],
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"exec": [
+							"// pm.sendRequest({",
+							"//     url: `${pm.environment.get('base_url')}/api/account/auth/login/`,",
+							"//     method: 'POST',",
+							"//     header: {",
+							"//         'accept': 'application/json, text/plain, */*',",
+							"//         'accept-language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',",
+							"//         'cache-control': 'no-cache',",
+							"//         'content-type': 'application/json',",
+							"//         'pragma': 'no-cache',",
+							"//         'priority': 'u=1, i',",
+							"//         'sec-ch-ua': '\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"138\", \"Google Chrome\";v=\"138\"',",
+							"//         'sec-ch-ua-mobile': '?0',",
+							"//         'sec-ch-ua-platform': '\"macOS\"',",
+							"//         'sec-fetch-dest': 'empty',",
+							"//         'sec-fetch-mode': 'cors',",
+							"//         'sec-fetch-site': 'same-site',",
+							"//         'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'",
+							"//     },",
+							"//     body: {",
+							"//         mode: 'urlencoded',",
+							"//         urlencoded: [",
+							"//             { key: 'email', value: pm.environment.get('member_email'), disabled: false },",
+							"//             { key: 'password', value: pm.environment.get('member_encrypted_password'), disabled: false },",
+							"//         ]",
+							"//     }",
+							"// }, function (err, response) {",
+							"//     if (!err && response.code === 200) {",
+							"//         const jsonData = response.json();",
+							"//         console.log(`Login with ${pm.environment.get('member_email')} successfully`);",
+							"//         pm.environment.set(\"member_access_token\", jsonData.data.tokens.access_token);",
+							"//         pm.environment.set(\"member_refresh_token\", jsonData.data.tokens.refresh_token);",
+							"//     } else {",
+							"//         console.error(`Login with ${pm.environment.get('member_email')} failed:`, err || response.text());",
+							"//     }",
+							"// });"
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"exec": [
+							""
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "Staff",
+			"item": [
+				{
+					"name": "Auth",
+					"item": [
+						{
+							"name": "login",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Login successful\", function () {",
+											"    const response = pm.response.json();",
+											"    ",
+											"    if (response.code === 2000) {",
+											"        console.log(`Login with ${response.data.profile.username} successfully`);",
+											"        ",
+											"        // 設置 access token 和 refresh token",
+											"        pm.environment.set(\"staff_access_token\", response.data.tokens.access_token);",
+											"        pm.environment.set(\"staff_refresh_token\", response.data.tokens.refresh_token);",
+											"        ",
+											"        console.log(\"Tokens saved to environment variables\");",
+											"    } else {",
+											"        console.error(`Login failed. Response code:`, response.code);",
+											"    }",
+											"});"
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								},
+								{
+									"listen": "prerequest",
+									"script": {
+										"exec": [
+											""
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "// {\n//   \"email\": \"{{staff_staff_email}}\",\n//   \"password\": \"{{staff_encrypted_password}}\"\n// }\n\n\n{\n  \"email\": \"{{staff_admin_email}}\",\n  \"password\": \"{{staff_encrypted_password}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/auth/login/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"auth",
+										"login",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X POST http://localhost:8000/api/auth/login/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"encrypted_credentials\": \"gAAAAABoqaSNnGWOiu3MSlEiiTdyXe7JEvA-CljvUafx7VyqJ\n  eeGa2U6EAeOp4-uOIO91X19kkfK_cuNRMCaGsx8W1KtXfIZHCUwB1_KF86Vw5Z0AkNdpWg=\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "refresh token",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"refresh_token\": \"{{staff_refresh_token}}\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/auth/refresh/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"auth",
+										"refresh",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X POST\n  http://localhost:8000/account/auth/refresh/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"refresh_token\": \"your_refresh_token_here\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "logout",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/auth/logout/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"auth",
+										"logout",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X POST\n  http://localhost:8000/account/auth/logout/ \\\n    -H \"Authorization: Bearer \n  your_access_token_here\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Member",
+					"item": [
+						{
+							"name": "update member",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"type\": \"real\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/members/7/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"members",
+										"7",
+										""
+									]
+								},
+								"description": "Generated from cURL:  curl -X POST\n  http://localhost:8000/account/members/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"testuser\",\n      \"email\": \"testuser@example.com\",\n      \"password\": \"password123\",\n      \"full_name\": \"Test User\",\n      \"phone\": \"0912345678\",\n      \"type\": \"tourist\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "delete member",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"type\": \"real\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/members/7/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"members",
+										"7",
+										""
+									]
+								},
+								"description": "Generated from cURL:  curl -X POST\n  http://localhost:8000/account/members/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"testuser\",\n      \"email\": \"testuser@example.com\",\n      \"password\": \"password123\",\n      \"full_name\": \"Test User\",\n      \"phone\": \"0912345678\",\n      \"type\": \"tourist\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "list all members",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer your_access_token_here"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/members/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"members",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X GET http://localhost:8000/api/account/members/ \\\n    -H \"Authorization: Bearer your_access_token_here\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "retrieve a member",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer your_access_token_here"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/members/13/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"members",
+										"13",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X GET http://localhost:8000/api/account/members/ \\\n    -H \"Authorization: Bearer your_access_token_here\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "check email available",
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n \"email\": \"test@example.com\"\n}\n\n\n// {\n//  \"email\": \"pony@tourist3.com\"\n// }",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/register/check-availability/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"register",
+										"check-availability",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X POST http://localhost:8000/account/register/check-availability/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"testuser\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "touist member registration",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"username\": \"newtourist\",\n  \"email\": \"newtourist@example.com\",\n  \"password\": \"gAAAAABospJTWqrrsrP3f7Q2N3NCq49nVACu5tQzu6fIudgWp73ta0rfvaIcYj3IjljOGrnYwznPTzMjvCDzG6k2gX_nZ1qSbg==\",\n  \"full_name\": \"新用戶\",\n  \"phone\": \"0912345678\",\n  \"type\": \"tourist\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/register/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"register",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X POST http://localhost:8000/account/register/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"newuser\",\n      \"email\": \"newuser@example.com\",\n      \"password\": \"password123\",\n      \"confirm_password\": \"password123\",\n      \"full_name\": \"新用戶\",\n      \"phone\": \"0912345678\",\n      \"type\": \"tourist\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "real member registration",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"username\": \"newreal\",\n  \"email\": \"newreal@example.com\",\n  \"password\": \"gAAAAABospOUpLbfZ0gIMEa3mvV5DGRVP52HoFYVZm6lEVo34fNKy-CCYREK9T8yTHiBWYQI6URTMhznZTr4DVdEs5ufLhO-5w==\",\n  \"full_name\": \"新用戶\",\n  \"phone\": \"0912345678\",\n  \"national_id\": \"gAAAAABospQbPeDf2eiQ5QmGsWVsDfb3yg-2DXdxRcWn9otdaZZ8yjsRCbCfNKl9S55u_nLfW_drXJR-fwLSncry57RKxFtUVw==\",\n  \"type\": \"real\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/register/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"register",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X POST http://localhost:8000/api/account/register/ \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"username\": \"newuser\",\n      \"email\": \"newuser@example.com\",\n      \"password\": \"password123\",\n      \"full_name\": \"新用戶\",\n      \"phone\": \"0912345678\",\n      \"national_id\": \"A123456789\",\n      \"type\": \"real\"\n    }'"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Staff",
+					"item": [
+						{
+							"name": "list all staffs",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/staff/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"staff",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl --location 'http://localhost:8000/api/account/staff/' \\\n  --header 'Authorization: Bearer \n  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU2NjM2MzA2LCJpYXQiOjE3NTY1NDk5MDYsImp0a\n  SI6IjQ0YTBkNjllYzVlNTQzZTk5ZjEyMDA3OTA5ZjFiNjE5IiwidXNlcl9pZCI6NTF9.vugWmBh4KQIKXzXAN-78wLs_POy--jP1eL-eS0RDBBE' \\\n  --header 'Content-Type: application/json'"
+							},
+							"response": []
+						},
+						{
+							"name": "retrieve a staff",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/staff/8/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"staff",
+										"8",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl --location 'http://localhost:8000/api/account/staff/{staff_id}/' \\\n  --header 'Authorization: Bearer \n  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU2NjM2MzA2LCJpYXQiOjE3NTY1NDk5MDYsImp0a\n  SI6IjQ0YTBkNjllYzVlNTQzZTk5ZjEyMDA3OTA5ZjFiNjE5IiwidXNlcl9pZCI6NTF9.vugWmBh4KQIKXzXAN-78wLs_POy--jP1eL-eS0RDBBE' \\\n  --header 'Content-Type: application/json'"
+							},
+							"response": []
+						},
+						{
+							"name": "update staff",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"username\": \"pony_admin2\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/account/staff/8/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"staff",
+										"8",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl --location --request PATCH 'http://localhost:8000/api/account/staff/{staff_id}/' \\\n  --header 'Authorization: Bearer \n  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU2NjM2MzA2LCJpYXQiOjE3NTY1NDk5MDYsImp0a\n  SI6IjQ0YTBkNjllYzVlNTQzZTk5ZjEyMDA3OTA5ZjFiNjE5IiwidXNlcl9pZCI6NTF9.vugWmBh4KQIKXzXAN-78wLs_POy--jP1eL-eS0RDBBE' \\\n  --header 'Content-Type: application/json' \\\n  --data '{\n      \"email\": \"updated@example.com\",\n      \"type\": \"admin\"\n  }'"
+							},
+							"response": []
+						},
+						{
+							"name": "delete staff",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/account/staff/5/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"account",
+										"staff",
+										"5",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl --location --request DELETE 'http://localhost:8000/api/account/staff/{staff_id}/' \\\n  --header 'Authorization: Bearer \n  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU2NjM2MzA2LCJpYXQiOjE3NTY1NDk5MDYsImp0a\n  SI6IjQ0YTBkNjllYzVlNTQzZTk5ZjEyMDA3OTA5ZjFiNjE5IiwidXNlcl_pZCI6NTF9.vugWmBh4KQIKXzXAN-78wLs_POy--jP1eL-eS0RDBBE'"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "DailyOverviewStatistics",
+					"item": [
+						{
+							"name": "list all",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_JWT_TOKEN"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/statistic/daily-overview/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"statistic",
+										"daily-overview",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X GET \"http://localhost:8000/api/statistic/daily-overview/\" \\\n    -H \"Authorization: Bearer YOUR_JWT_TOKEN\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "get specific day",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_JWT_TOKEN"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/statistic/daily-overview/?collected_time=2025-09-07",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"statistic",
+										"daily-overview",
+										""
+									],
+									"query": [
+										{
+											"key": "collected_time",
+											"value": "2025-09-07"
+										}
+									]
+								},
+								"description": "Generated from cURL: curl -X GET \"http://localhost:8000/api/statistic/daily-overview/\" \\\n    -H \"Authorization: Bearer YOUR_JWT_TOKEN\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "get range day",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_JWT_TOKEN"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/statistic/daily-overview/?collected_time__gte=2025-09-03&collected_time__lte=2025-09-07",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"statistic",
+										"daily-overview",
+										""
+									],
+									"query": [
+										{
+											"key": "collected_time__gte",
+											"value": "2025-09-03"
+										},
+										{
+											"key": "collected_time__lte",
+											"value": "2025-09-07"
+										}
+									]
+								},
+								"description": "Generated from cURL: curl -X GET \"http://localhost:8000/api/statistic/daily-overview/\" \\\n    -H \"Authorization: Bearer YOUR_JWT_TOKEN\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "HourlyOverviewStatistics",
+					"item": [
+						{
+							"name": "list all",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_JWT_TOKEN"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/statistic/hourly-overview/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"statistic",
+										"hourly-overview",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X GET \"http://localhost:8000/api/statistic/hourly-overview/\" \\\n    -H \"Authorization: Bearer YOUR_JWT_TOKEN\""
+							},
+							"response": []
+						},
+						{
+							"name": "get specific hour",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_JWT_TOKEN"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/statistic/hourly-overview/?collected_time__date=2025-09-06",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"statistic",
+										"hourly-overview",
+										""
+									],
+									"query": [
+										{
+											"key": "collected_time__date",
+											"value": "2025-09-06"
+										}
+									]
+								},
+								"description": "Generated from cURL: curl -X GET \"http://localhost:8000/api/statistic/hourly-overview/?collected_time__date=2024-01-01\" \\\n    -H \"Authorization: Bearer YOUR_JWT_TOKEN\""
+							},
+							"response": []
+						},
+						{
+							"name": "get range hour across day",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_JWT_TOKEN"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/statistic/hourly-overview/?collected_time__gte=2025-09-03&collected_time__lte=2025-09-06",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"statistic",
+										"hourly-overview",
+										""
+									],
+									"query": [
+										{
+											"key": "collected_time__gte",
+											"value": "2025-09-03"
+										},
+										{
+											"key": "collected_time__lte",
+											"value": "2025-09-06"
+										}
+									]
+								},
+								"description": "Generated from cURL: curl -X GET \"http://localhost:8000/api/statistic/daily-overview/\" \\\n    -H \"Authorization: Bearer YOUR_JWT_TOKEN\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "get range hour across day and hour",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer your_token"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/statistic/hourly-overview/?collected_time__gte=2025-09-02T09:00:00&collected_time__lte=2025-09-03T17:00:00",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"statistic",
+										"hourly-overview",
+										""
+									],
+									"query": [
+										{
+											"key": "collected_time__gte",
+											"value": "2025-09-02T09:00:00"
+										},
+										{
+											"key": "collected_time__lte",
+											"value": "2025-09-03T17:00:00"
+										}
+									]
+								},
+								"description": "Generated from cURL: curl --location\n  'http://localhost:8000/api/statistic/hourly-overview/?collected_time__gte=2025-09-03T09:00:00&collected_time__lte=2025-09-03T17:00:00' \\\n  --header 'Authorization: Bearer your_token' \\\n  --header 'Content-Type: application/json'"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "BikeRealtimeStatus",
+					"item": [
+						{
+							"name": "get all bikes",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_STAFF_TOKEN"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/bike/realtime-status/?limit=5&offset=3",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"bike",
+										"realtime-status",
+										""
+									],
+									"query": [
+										{
+											"key": "limit",
+											"value": "5"
+										},
+										{
+											"key": "offset",
+											"value": "3"
+										}
+									]
+								},
+								"description": "Generated from cURL:   curl -X GET \"http://localhost:8000/api/bike/realtime-status/\" \\\n    -H \"Authorization: Bearer YOUR_STAFF_TOKEN\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "get status options",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/bike/status-options/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"bike",
+										"status-options",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X GET \"http://localhost:8000/api/bike/status-options/\" \\\n    -H \"Authorization: Bearer YOUR_TOKEN\""
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "BikeRental",
+					"item": [
+						{
+							"name": "rental a bike to member via email",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_STAFF_TOKEN"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"bike_id\": \"UP003\",\n  \"member_email\": \"pony@real1.com\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/rental/staff/rentals/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"rental",
+										"staff",
+										"rentals",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X POST \"http://localhost:8000/api/rental/staff/rentals/\" \\\n    -H \"Authorization: Bearer YOUR_STAFF_TOKEN\" \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"bike_id\": \"BIKE001\",\n      \"member_email\": \"user@example.com\",\n      \"memo\": \"員工協助租借\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "rental a bike to member via phone",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_STAFF_TOKEN"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"bike_id\": \"UP003\",\n  \"member_phone\": \"+886912345673\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/rental/staff/rentals/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"rental",
+										"staff",
+										"rentals",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X POST \"http://localhost:8000/api/rental/staff/rentals/\" \\\n    -H \"Authorization: Bearer YOUR_STAFF_TOKEN\" \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"bike_id\": \"BIKE001\",\n      \"member_email\": \"user@example.com\",\n      \"memo\": \"員工協助租借\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "get all ongoing rentals",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer <staff_jwt_token>"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/rental/staff/rentals/active_rentals/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"rental",
+										"staff",
+										"rentals",
+										"active_rentals",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X GET http://localhost:8000/api/rental/staff/rentals/active_rentals/ \\\n    -H \"Authorization: Bearer <staff_jwt_token>\""
+							},
+							"response": []
+						},
+						{
+							"name": "help member return bike",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer <staff_jwt_token>"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"action\": \"return\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/rental/staff/rentals/7/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"rental",
+										"staff",
+										"rentals",
+										"7",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X PATCH http://localhost:8000/api/rental/staff/rentals/<rental_id>/ \\\n    -H \"Content-Type: application/json\" \\\n    -H \"Authorization: Bearer <staff_jwt_token>\" \\\n    -d '{\n      \"action\": \"return\"\n    }'"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "BikeCategory",
+					"item": [
+						{
+							"name": "get all bike categories",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/bike/categories/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"bike",
+										"categories",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X GET \"http://localhost:8000/api/bike/categories/\" \\\n    -H \"Authorization: Bearer YOUR_TOKEN\""
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "BikeSeries",
+					"item": [
+						{
+							"name": "get all bike serieses",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/bike/series/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"bike",
+										"series",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X GET \"http://localhost:8000/api/bike/series/\" \\\n    -H \"Authorization: Bearer YOUR_TOKEN\""
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "TelemetryDevice",
+					"item": [
+						{
+							"name": "get status options",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN_HERE"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/telemetry/device-status-options/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"telemetry",
+										"device-status-options",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X GET \"http://localhost:8000/api/telemetry/device-status-options/\" \\\n    -H \"Authorization: Bearer YOUR_TOKEN_HERE\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "list all devices",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/telemetry/devices/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"telemetry",
+										"devices",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X GET \"http://localhost:8000/api/telemetry/devices/\" \\\n    -H \"Authorization: Bearer YOUR_TOKEN\""
+							},
+							"response": []
+						},
+						{
+							"name": "filter by status",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/telemetry/devices/?status=available",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"telemetry",
+										"devices",
+										""
+									],
+									"query": [
+										{
+											"key": "status",
+											"value": "available"
+										}
+									]
+								},
+								"description": "Generated from cURL: curl \"http://localhost:8000/api/telemetry/devices/?status=available\""
+							},
+							"response": []
+						},
+						{
+							"name": "filter by model",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/telemetry/devices/?model=TD-2024-IoT",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"telemetry",
+										"devices",
+										""
+									],
+									"query": [
+										{
+											"key": "model",
+											"value": "TD-2024-IoT"
+										}
+									]
+								},
+								"description": "Generated from cURL: curl \"http://localhost:8000/api/telemetry/devices/?model=TD-2024\""
+							},
+							"response": []
+						},
+						{
+							"name": "contains partial IMEI",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/telemetry/devices/?IMEI_q=72950756",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"telemetry",
+										"devices",
+										""
+									],
+									"query": [
+										{
+											"key": "IMEI_q",
+											"value": "72950756"
+										}
+									]
+								},
+								"description": "Generated from cURL: curl \"http://localhost:8000/api/telemetry/devices/?IMEI_q=867295\""
+							},
+							"response": []
+						},
+						{
+							"name": "create new device",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"IMEI\": \"867293333673772\",\n  \"name\": \"Test Device 001\",\n  \"model\": \"TD-2024-IoT\",\n  \"status\": \"available\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/telemetry/devices/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"telemetry",
+										"devices",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X POST \"http://localhost:8000/api/telemetry/devices/\" \\\n    -H \"Authorization: Bearer YOUR_TOKEN\" \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"IMEI\": \"867295075673999\",\n      \"name\": \"Test Device 001\",\n      \"model\": \"TD-2024-IoT\",\n      \"status\": \"available\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "update device status",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"status\": \"maintenance\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/telemetry/devices/867291175673772/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"telemetry",
+										"devices",
+										"867291175673772",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X PATCH \"http://localhost:8000/api/telemetry/devices/867295075673999/\" \\\n    -H \"Authorization: Bearer YOUR_TOKEN\" \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\"status\": \"maintenance\"}'"
+							},
+							"response": []
+						},
+						{
+							"name": "update device fields",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"new_name1\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/telemetry/devices/867291175673772/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"telemetry",
+										"devices",
+										"867291175673772",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X PATCH \"http://localhost:8000/api/telemetry/devices/867295075673999/\" \\\n    -H \"Authorization: Bearer YOUR_TOKEN\" \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\"status\": \"maintenance\"}'"
+							},
+							"response": []
+						},
+						{
+							"name": "delete device",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/telemetry/devices/867291175673772/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"telemetry",
+										"devices",
+										"867291175673772",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X DELETE \"http://localhost:8000/api/telemetry/devices/867295075673001/\" \\\n    -H \"Authorization: Bearer YOUR_TOKEN\""
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "BikeInfo",
+					"item": [
+						{
+							"name": "list all bike info",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN_HERE"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/bike/bikes/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"bike",
+										"bikes",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X GET \"http://localhost:8000/api/bike/bikes/\" \\\n    -H \"Authorization: Bearer YOUR_TOKEN_HERE\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "create bike info",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN_HERE"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"bike_id\": \"BIKE001\",\n  \"bike_name\": \"City Bike Alpha\",\n  \"bike_model\": \"CB-2024-001\",\n  \"series\": 1\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/bike/bikes/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"bike",
+										"bikes",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X POST \"http://localhost:8000/api/bike/bikes/\" \\\n    -H \"Authorization: Bearer YOUR_TOKEN_HERE\" \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"bike_id\": \"BIKE001\",\n      \"bike_name\": \"City Bike Alpha\",\n      \"bike_model\": \"CB-2024-001\",\n      \"series\": 1\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "create bike info with telemetry device",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN_HERE"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"bike_id\": \"BIKE004\",\n  \"bike_name\": \"City Bike Beta\",\n  \"bike_model\": \"CB-2024-003\",\n  \"series\": 1,\n  \"telemetry_device_imei\": \"867291175673772\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/bike/bikes/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"bike",
+										"bikes",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X POST \"http://localhost:8000/api/bike/bikes/\" \\\n    -H \"Authorization: Bearer YOUR_TOKEN_HERE\" \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"bike_id\": \"BIKE002\",\n      \"bike_name\": \"City Bike Beta\",\n      \"bike_model\": \"CB-2024-002\",\n      \"series\": 1,\n      \"telemetry_device_imei\": \"867295075673999\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "update bike info",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN_HERE"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"bike_name\": \"Updated Bike Name5\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/bike/bikes/BIKE004/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"bike",
+										"bikes",
+										"BIKE004",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X PATCH \"http://localhost:8000/api/bike/bikes/BIKE001/\" \\\n    -H \"Authorization: Bearer YOUR_TOKEN_HERE\" \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"bike_name\": \"Updated Bike Name\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "update bike telemetry device",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN_HERE"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"telemetry_device_imei\": \"867293333673772\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/bike/bikes/BIKE004/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"bike",
+										"bikes",
+										"BIKE004",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X PATCH \"http://localhost:8000/api/bike/bikes/BIKE001/\" \\\n    -H \"Authorization: Bearer YOUR_TOKEN_HERE\" \\\n    -H \"Content-Type: application/json\" \\\n    -d '{\n      \"bike_name\": \"Updated Bike Name\"\n    }'"
+							},
+							"response": []
+						},
+						{
+							"name": "delete bike info",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN_HERE"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/bike/bikes/UP003/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"bike",
+										"bikes",
+										"UP003",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X DELETE \"http://localhost:8000/api/bike/bikes/BIKE001/\" \\\n    -H \"Authorization: Bearer YOUR_TOKEN_HERE\""
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "BikeErrorLogStatus",
+					"item": [
+						{
+							"name": "list own error logs",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_JWT_TOKEN"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/bike/error-log-status/?limit=10&offset=0&expand_telemetry_record=True",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"bike",
+										"error-log-status",
+										""
+									],
+									"query": [
+										{
+											"key": "limit",
+											"value": "10"
+										},
+										{
+											"key": "offset",
+											"value": "0"
+										},
+										{
+											"key": "expand_telemetry_record",
+											"value": "True"
+										}
+									]
+								},
+								"description": "Generated from cURL: curl -X GET \"http://localhost:8000/api/bike/error-log-status/?is_read=false\" \\\n    -H \"Authorization: Bearer YOUR_JWT_TOKEN\""
+							},
+							"response": []
+						},
+						{
+							"name": "filter with level",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Token YOUR_TOKEN_HERE"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/bike/error-log-status/?level=critical",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"bike",
+										"error-log-status",
+										""
+									],
+									"query": [
+										{
+											"key": "level",
+											"value": "critical"
+										}
+									]
+								},
+								"description": "Generated from cURL: curl -X GET \\\n    'http://localhost:8000/api/bike/error-log-status/?level=critical' \\\n    -H 'Authorization: Token YOUR_TOKEN_HERE' \\\n    -H 'Content-Type: application/json'"
+							},
+							"response": []
+						},
+						{
+							"name": "filter with is_read",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Token YOUR_TOKEN_HERE"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/bike/error-log-status/?is_read=false",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"bike",
+										"error-log-status",
+										""
+									],
+									"query": [
+										{
+											"key": "is_read",
+											"value": "false"
+										}
+									]
+								},
+								"description": "Generated from cURL: curl -X GET \\\n    'http://localhost:8000/api/bike/error-log-status/?is_read=false' \\\n    -H 'Authorization: Token YOUR_TOKEN_HERE' \\\n    -H 'Content-Type: application/json'"
+							},
+							"response": []
+						},
+						{
+							"name": "read error log",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Token YOUR_TOKEN_HERE"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"is_read\": true\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/bike/error-log-status/220/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"bike",
+										"error-log-status",
+										"220",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X PATCH \\\n    'http://localhost:8000/api/bike/error-log-status/{error_log_status_id}/' \\\n    -H 'Authorization: Token YOUR_TOKEN_HERE' \\\n    -H 'Content-Type: application/json' \\\n    -d '{\n      \"is_read\": true\n    }'"
+							},
+							"response": []
+						}
+					]
+				}
+			],
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"exec": [
+							"// pm.sendRequest({",
+							"//     url: `${pm.environment.get('base_url')}/api/account/auth/login/`,",
+							"//     method: 'POST',",
+							"//     header: {",
+							"//         'accept': 'application/json, text/plain, */*',",
+							"//         'accept-language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',",
+							"//         'cache-control': 'no-cache',",
+							"//         'content-type': 'application/json',",
+							"//         'pragma': 'no-cache',",
+							"//         'priority': 'u=1, i',",
+							"//         'sec-ch-ua': '\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"138\", \"Google Chrome\";v=\"138\"',",
+							"//         'sec-ch-ua-mobile': '?0',",
+							"//         'sec-ch-ua-platform': '\"macOS\"',",
+							"//         'sec-fetch-dest': 'empty',",
+							"//         'sec-fetch-mode': 'cors',",
+							"//         'sec-fetch-site': 'same-site',",
+							"//         'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'",
+							"//     },",
+							"//     body: {",
+							"//         mode: 'urlencoded',",
+							"//         urlencoded: [",
+							"//             { key: 'email', value: pm.environment.get('staff_email'), disabled: false },",
+							"//             { key: 'password', value: pm.environment.get('staff_encrypted_password'), disabled: false },",
+							"//         ]",
+							"//     }",
+							"// }, function (err, response) {",
+							"//     if (!err && response.code === 200) {",
+							"//         const jsonData = response.json();",
+							"//         console.log(`Login with ${pm.environment.get('staff_email')} successfully`);",
+							"//         pm.environment.set(\"staff_access_token\", jsonData.data.tokens.access_token);",
+							"//         pm.environment.set(\"staff_refresh_token\", jsonData.data.tokens.refresh_token);",
+							"//     } else {",
+							"//         console.error(`Login with ${pm.environment.get('staff_email')} failed:`, err || response.text());",
+							"//     }",
+							"// });"
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"exec": [
+							""
+						]
+					}
+				}
+			]
+		}
+	]
+}

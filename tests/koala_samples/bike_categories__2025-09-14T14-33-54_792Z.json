@@ -1,0 +1,58 @@
+{
+  "url": "https://koala.osdp25w.xyz/api/bike/categories/",
+  "status": 200,
+  "headers": {
+    "allow": "GET, HEAD, OPTIONS",
+    "alt-svc": "h3=\":443\"; ma=86400",
+    "cf-cache-status": "DYNAMIC",
+    "cf-ray": "97f09a25ae37840f-TPE",
+    "connection": "keep-alive",
+    "content-encoding": "br",
+    "content-type": "application/json",
+    "cross-origin-opener-policy": "same-origin",
+    "date": "Sun, 14 Sep 2025 14:33:54 GMT",
+    "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+    "referrer-policy": "same-origin",
+    "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=d5mTO4l1x1EwqmUH8Ul0AvT4%2BXHPNo7%2Fm1vQaW2pa5zlfJZHsDfBpGJFPR4wBiaRj%2BWNJpwWr1UEFwypc3DPREVCM%2BvvLqJyfHGHdERidyJQ%2B4QDUPo83OK%2BPA%3D%3D\"}]}",
+    "server": "cloudflare",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "transfer-encoding": "chunked",
+    "vary": "origin",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY"
+  },
+  "body": {
+    "code": 2000,
+    "msg": "success",
+    "data": [
+      {
+        "id": 1,
+        "category_name": "電動自行車",
+        "description": "配備電動輔助系統的自行車，適合中長距離騎乘",
+        "created_at": "2025-09-13T02:03:52.399592+08:00",
+        "updated_at": "2025-09-13T02:03:52.399604+08:00"
+      },
+      {
+        "id": 2,
+        "category_name": "傳統自行車",
+        "description": "無電動輔助的傳統自行車，適合短距離騎乘和運動",
+        "created_at": "2025-09-13T02:03:52.399618+08:00",
+        "updated_at": "2025-09-13T02:03:52.399627+08:00"
+      },
+      {
+        "id": 3,
+        "category_name": "電動機車",
+        "description": "電動輔助機車，適合城市通勤",
+        "created_at": "2025-09-13T02:03:52.399639+08:00",
+        "updated_at": "2025-09-13T02:03:52.399642+08:00"
+      },
+      {
+        "id": 4,
+        "category_name": "摺疊車",
+        "description": "可摺疊收納的自行車，便於攜帶和存放",
+        "created_at": "2025-09-13T02:03:52.399651+08:00",
+        "updated_at": "2025-09-13T02:03:52.399654+08:00"
+      }
+    ]
+  }
+}

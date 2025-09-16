@@ -3,6 +3,8 @@ WORKDIR /app
 
 # Install dependencies
 COPY package*.json ./
+# Avoid heavy binary downloads during install (e.g., Cypress)
+ENV CYPRESS_INSTALL_BINARY=0
 RUN npm ci
 
 # Copy source

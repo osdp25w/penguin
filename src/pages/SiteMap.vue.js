@@ -1,10 +1,11 @@
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { use } from 'echarts/core';
 import { BarChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import { useSites } from '@/stores/sites';
 import { useVehicles } from '@/stores/vehicles';
+import { useBikeMeta } from '@/stores/bikeMeta';
 import { useAlerts } from '@/stores/alerts';
 import { useReturns } from '@/stores/returns';
 import { useRentals } from '@/stores/rentals';
@@ -14,14 +15,17 @@ import RentSuccessDialog from '@/components/rent/RentSuccessDialog.vue';
 import SimpleReturnDialog from '@/components/returns/SimpleReturnDialog.vue';
 import VehicleTraceFilter from '@/components/filters/VehicleTraceFilter.vue';
 import VehicleFilter from '@/components/filters/VehicleFilter.vue';
+import { useAuth } from '@/stores/auth';
 // ECharts 註冊
 use([BarChart, GridComponent, TooltipComponent, CanvasRenderer]);
 // Stores
 const sitesStore = useSites();
 const vehiclesStore = useVehicles();
+const bikeMeta = useBikeMeta();
 const alertsStore = useAlerts();
 const returnsStore = useReturns();
 const rentalsStore = useRentals();
+const auth = useAuth();
 // 響應式狀態
 const showSetupGuide = ref(false);
 const showSeedGuide = ref(false);
@@ -46,6 +50,7 @@ const selectedTraceVehicles = ref([]);
 const filteredVehicleTraces = ref({});
 // 即時車輛過濾相關狀態
 const selectedRealtimeVehicles = ref([]);
+const realtimeVehicles = ref([]);
 const showRentDialog = ref(false);
 const selectedVehicleForRent = ref(null);
 const showReturnDialog = ref(false);
@@ -53,348 +58,124 @@ const selectedReturnVehicle = ref(null);
 const showRentSuccessDialog = ref(false);
 const currentRental = ref(null);
 const seedMockEnabled = computed(() => import.meta.env.VITE_SEED_MOCK === '1');
-// Mock 車輛資料 - 花蓮真實座標
-const mockVehicles = computed(() => [
-    {
-        id: 'BIKE001',
-        name: '花蓮火車站-001',
-        lat: 23.9917, // 花蓮火車站
-        lon: 121.6014,
-        speedKph: 0,
-        batteryPct: 85,
-        signal: '良好',
-        status: '可租借',
-        lastSeen: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-        // 兼容欄位
-        batteryLevel: 85,
-        brand: selectedDomain.value,
-        location: { lat: 23.9917, lng: 121.6014 },
-        siteId: 'hualien_station',
-        model: 'E-Bike Pro',
-        speed: 0,
-        registeredUser: null
-    },
-    {
-        id: 'BIKE002',
-        name: '東大門夜市-002',
-        lat: 23.9750, // 東大門夜市
-        lon: 121.6060,
-        speedKph: 15,
-        batteryPct: 72,
-        signal: '良好',
-        status: '使用中',
-        lastSeen: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
-        // 兼容欄位
-        batteryLevel: 72,
-        brand: selectedDomain.value,
-        location: { lat: 23.9750, lng: 121.6060 },
-        siteId: 'hualien_night_market',
-        model: 'E-Bike Pro',
-        speed: 15,
-        registeredUser: '張小明 (0912-345-678)'
-    },
-    {
-        id: 'BIKE003',
-        name: '花蓮港-003',
-        lat: 23.9739, // 花蓮港
-        lon: 121.6175,
-        speedKph: 0,
-        batteryPct: 45,
-        signal: '中等',
-        status: '可租借',
-        lastSeen: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-        // 兼容欄位
-        batteryLevel: 45,
-        brand: selectedDomain.value,
-        location: { lat: 23.9739, lng: 121.6175 },
-        siteId: 'hualien_port',
-        model: 'E-Bike Standard',
-        speed: 0,
-        registeredUser: null
-    },
-    {
-        id: 'BIKE004',
-        name: '海洋公園-004',
-        lat: 23.8979, // 花蓮遠雄海洋公園
-        lon: 121.6172,
-        speedKph: 0,
-        batteryPct: 91,
-        signal: '良好',
-        status: '可租借',
-        lastSeen: new Date(Date.now() - 1 * 60 * 1000).toISOString(),
-        // 兼容欄位
-        batteryLevel: 91,
-        brand: selectedDomain.value,
-        location: { lat: 23.8979, lng: 121.6172 },
-        siteId: 'hualien_ocean_park',
-        model: 'E-Bike Pro',
-        speed: 0,
-        registeredUser: null
-    },
-    {
-        id: 'BIKE005',
-        name: '縣政府-005',
-        lat: 23.9847, // 花蓮縣政府
-        lon: 121.6064,
-        speedKph: 0,
-        batteryPct: 15,
-        signal: '弱',
-        status: '低電量',
-        lastSeen: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-        // 兼容欄位
-        batteryLevel: 15,
-        brand: selectedDomain.value,
-        location: { lat: 23.9847, lng: 121.6064 },
-        siteId: 'hualien_county_hall',
-        model: 'E-Bike Standard',
-        speed: 0,
-        registeredUser: null
-    },
-    {
-        id: 'BIKE006',
-        name: '中華紙漿-006',
-        lat: 23.9739, // 花蓮中華紙漿
-        lon: 121.5994,
-        speedKph: 8,
-        batteryPct: 63,
-        signal: '中等',
-        status: '使用中',
-        lastSeen: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-        // 兼容欄位
-        batteryLevel: 63,
-        brand: selectedDomain.value,
-        location: { lat: 23.9739, lng: 121.5994 },
-        siteId: 'hualien_zhonghua',
-        model: 'E-Bike Pro',
-        speed: 8,
-        registeredUser: '李小華 (0987-654-321)'
-    },
-    {
-        id: 'BIKE007',
-        name: '美崙山公園-007',
-        lat: 23.9709, // 花蓮美崙山公園
-        lon: 121.6028,
-        speedKph: 0,
-        batteryPct: 92,
-        signal: '良好',
-        status: '可租借',
-        lastSeen: new Date(Date.now() - 8 * 60 * 1000).toISOString(),
-        // 兼容欄位
-        batteryLevel: 92,
-        brand: selectedDomain.value,
-        location: { lat: 23.9709, lng: 121.6028 },
-        siteId: 'hualien_meilun_park',
-        model: 'E-Bike Pro',
-        speed: 0,
-        registeredUser: null
-    },
-    {
-        id: 'BIKE008',
-        name: '慈濟醫院-008',
-        lat: 23.9786, // 花蓮慈濟醫院
-        lon: 121.5996,
-        speedKph: 12,
-        batteryPct: 54,
-        signal: '中等',
-        status: '使用中',
-        lastSeen: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
-        // 兼容欄位
-        batteryLevel: 54,
-        brand: selectedDomain.value,
-        location: { lat: 23.9786, lng: 121.5996 },
-        siteId: 'hualien_tzu_chi',
-        model: 'E-Bike Standard',
-        speed: 12,
-        registeredUser: '王大明 (0976-123-456)'
-    },
-    {
-        id: 'BIKE009',
-        name: '市公所-009',
-        lat: 23.9847, // 花蓮市公所
-        lon: 121.6064,
-        speedKph: 0,
-        batteryPct: 78,
-        signal: '良好',
-        status: '可租借',
-        lastSeen: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
-        batteryLevel: 78,
-        brand: selectedDomain.value,
-        location: { lat: 23.9847, lng: 121.6064 },
-        siteId: 'hualien_city_office',
-        model: 'E-Bike Pro',
-        speed: 0,
-        registeredUser: null
-    },
-    {
-        id: 'BIKE010',
-        name: '松園別館-010',
-        lat: 23.9853, // 花蓮松園別館
-        lon: 121.6097,
-        speedKph: 0,
-        batteryPct: 89,
-        signal: '良好',
-        status: '可租借',
-        lastSeen: new Date(Date.now() - 7 * 60 * 1000).toISOString(),
-        batteryLevel: 89,
-        brand: selectedDomain.value,
-        location: { lat: 23.9853, lng: 121.6097 },
-        siteId: 'hualien_pine_garden',
-        model: 'E-Bike Standard',
-        speed: 0,
-        registeredUser: null
-    },
-    {
-        id: 'BIKE011',
-        name: '曼波海灘-011',
-        lat: 23.9750, // 花蓮曼波海灘
-        lon: 121.6150,
-        speedKph: 6,
-        batteryPct: 67,
-        signal: '中等',
-        status: '使用中',
-        lastSeen: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
-        batteryLevel: 67,
-        brand: selectedDomain.value,
-        location: { lat: 23.9750, lng: 121.6150 },
-        siteId: 'hualien_manbo_beach',
-        model: 'E-Bike Pro',
-        speed: 6,
-        registeredUser: '陳小美 (0955-777-888)'
-    },
-    {
-        id: 'BIKE012',
-        name: '創意文化園區-012',
-        lat: 23.9715, // 花蓮創意文化園區
-        lon: 121.6080,
-        speedKph: 0,
-        batteryPct: 33,
-        signal: '弱',
-        status: '可租借',
-        lastSeen: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
-        batteryLevel: 33,
-        brand: selectedDomain.value,
-        location: { lat: 23.9715, lng: 121.6080 },
-        siteId: 'hualien_cultural_park',
-        model: 'E-Bike Standard',
-        speed: 0,
-        registeredUser: null
-    }
-]);
-// Mock 車輛歷史軌跡資料 - 花蓮真實路線
+// 已移除 mock 車輛資料，改用真實 API 資料 (realtimeVehicles)
+// 軌跡資料將從真實 API 載入，暫時設為空
+/*
 const mockVehicleTraces = computed(() => ({
-    'BIKE001': [
-        // 花蓮火車站 → 東大門夜市 → 返回
-        { lat: 23.9917, lon: 121.6014, timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString() }, // 1小時前出發
-        { lat: 23.9870, lon: 121.6035, timestamp: new Date(Date.now() - 55 * 60 * 1000).toISOString() },
-        { lat: 23.9820, lon: 121.6050, timestamp: new Date(Date.now() - 50 * 60 * 1000).toISOString() },
-        { lat: 23.9750, lon: 121.6060, timestamp: new Date(Date.now() - 40 * 60 * 1000).toISOString() }, // 到達夜市
-        { lat: 23.9800, lon: 121.6040, timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString() },
-        { lat: 23.9880, lon: 121.6025, timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString() },
-        { lat: 23.9917, lon: 121.6014, timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString() } // 返回火車站
-    ],
-    'BIKE002': [
-        // 東大門夜市 → 花蓮港 → 海洋公園
-        { lat: 23.9750, lon: 121.6060, timestamp: new Date(Date.now() - 90 * 60 * 1000).toISOString() }, // 1.5小時前出發
-        { lat: 23.9745, lon: 121.6100, timestamp: new Date(Date.now() - 80 * 60 * 1000).toISOString() },
-        { lat: 23.9740, lon: 121.6150, timestamp: new Date(Date.now() - 70 * 60 * 1000).toISOString() },
-        { lat: 23.9739, lon: 121.6175, timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString() }, // 到達花蓮港
-        { lat: 23.9500, lon: 121.6170, timestamp: new Date(Date.now() - 40 * 60 * 1000).toISOString() },
-        { lat: 23.9200, lon: 121.6172, timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString() },
-        { lat: 23.8979, lon: 121.6172, timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString() } // 到達海洋公園
-    ],
-    'BIKE003': [
-        // 花蓮港 → 縣政府 → 美崙山公園
-        { lat: 23.9739, lon: 121.6175, timestamp: new Date(Date.now() - 120 * 60 * 1000).toISOString() }, // 2小時前出發
-        { lat: 23.9750, lon: 121.6120, timestamp: new Date(Date.now() - 100 * 60 * 1000).toISOString() },
-        { lat: 23.9800, lon: 121.6080, timestamp: new Date(Date.now() - 80 * 60 * 1000).toISOString() },
-        { lat: 23.9847, lon: 121.6064, timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString() }, // 到達縣政府
-        { lat: 23.9800, lon: 121.6050, timestamp: new Date(Date.now() - 40 * 60 * 1000).toISOString() },
-        { lat: 23.9730, lon: 121.6035, timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString() },
-        { lat: 23.9709, lon: 121.6028, timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString() } // 到達美崙山公園
-    ],
-    'BIKE004': [
-        // 海洋公園沿海岸移動
-        { lat: 23.8979, lon: 121.6172, timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString() }, // 30分鐘前
-        { lat: 23.8990, lon: 121.6175, timestamp: new Date(Date.now() - 25 * 60 * 1000).toISOString() },
-        { lat: 23.9000, lon: 121.6170, timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString() },
-        { lat: 23.8985, lon: 121.6173, timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString() },
-        { lat: 23.8979, lon: 121.6172, timestamp: new Date(Date.now() - 1 * 60 * 1000).toISOString() } // 返回原點
-    ],
-    'BIKE005': [
-        // 縣政府周邊移動
-        { lat: 23.9847, lon: 121.6064, timestamp: new Date(Date.now() - 45 * 60 * 1000).toISOString() }, // 45分鐘前
-        { lat: 23.9850, lon: 121.6070, timestamp: new Date(Date.now() - 40 * 60 * 1000).toISOString() },
-        { lat: 23.9845, lon: 121.6060, timestamp: new Date(Date.now() - 35 * 60 * 1000).toISOString() },
-        { lat: 23.9847, lon: 121.6064, timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString() } // 停在縣政府
-    ],
-    'BIKE006': [
-        // 中華紙漿 → 火車站 → 松園別館
-        { lat: 23.9739, lon: 121.5994, timestamp: new Date(Date.now() - 75 * 60 * 1000).toISOString() }, // 1.25小時前
-        { lat: 23.9800, lon: 121.6000, timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString() },
-        { lat: 23.9880, lon: 121.6010, timestamp: new Date(Date.now() - 45 * 60 * 1000).toISOString() },
-        { lat: 23.9917, lon: 121.6014, timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString() }, // 經過火車站
-        { lat: 23.9850, lon: 121.6050, timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString() },
-        { lat: 23.9853, lon: 121.6097, timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString() } // 到達松園別館
-    ],
-    'BIKE007': [
-        // 美崙山公園 → 慈濟醫院 → 曼波海灘
-        { lat: 23.9709, lon: 121.6028, timestamp: new Date(Date.now() - 100 * 60 * 1000).toISOString() }, // 100分鐘前
-        { lat: 23.9750, lon: 121.6010, timestamp: new Date(Date.now() - 80 * 60 * 1000).toISOString() },
-        { lat: 23.9780, lon: 121.6000, timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString() },
-        { lat: 23.9786, lon: 121.5996, timestamp: new Date(Date.now() - 40 * 60 * 1000).toISOString() }, // 到達慈濟醫院
-        { lat: 23.9760, lon: 121.6050, timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString() },
-        { lat: 23.9750, lon: 121.6120, timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString() },
-        { lat: 23.9750, lon: 121.6150, timestamp: new Date(Date.now() - 8 * 60 * 1000).toISOString() } // 到達曼波海灘
-    ],
-    'BIKE008': [
-        // 慈濟醫院 → 創意文化園區 → 火車站
-        { lat: 23.9786, lon: 121.5996, timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString() }, // 1小時前
-        { lat: 23.9750, lon: 121.6020, timestamp: new Date(Date.now() - 45 * 60 * 1000).toISOString() },
-        { lat: 23.9720, lon: 121.6060, timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString() },
-        { lat: 23.9715, lon: 121.6080, timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString() }, // 到達文化園區
-        { lat: 23.9850, lon: 121.6050, timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString() },
-        { lat: 23.9917, lon: 121.6014, timestamp: new Date(Date.now() - 3 * 60 * 1000).toISOString() } // 到達火車站
-    ],
-    'BIKE009': [
-        // 市公所 → 東大門夜市 → 文化園區
-        { lat: 23.9847, lon: 121.6064, timestamp: new Date(Date.now() - 50 * 60 * 1000).toISOString() },
-        { lat: 23.9800, lon: 121.6060, timestamp: new Date(Date.now() - 40 * 60 * 1000).toISOString() },
-        { lat: 23.9750, lon: 121.6060, timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString() }, // 夜市
-        { lat: 23.9720, lon: 121.6070, timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString() },
-        { lat: 23.9715, lon: 121.6080, timestamp: new Date(Date.now() - 12 * 60 * 1000).toISOString() } // 文化園區
-    ],
-    'BIKE010': [
-        // 松園別館沿海移動
-        { lat: 23.9853, lon: 121.6097, timestamp: new Date(Date.now() - 35 * 60 * 1000).toISOString() },
-        { lat: 23.9850, lon: 121.6120, timestamp: new Date(Date.now() - 25 * 60 * 1000).toISOString() },
-        { lat: 23.9855, lon: 121.6110, timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString() },
-        { lat: 23.9853, lon: 121.6097, timestamp: new Date(Date.now() - 7 * 60 * 1000).toISOString() }
-    ],
-    'BIKE011': [
-        // 曼波海灘沿海岸線
-        { lat: 23.9750, lon: 121.6150, timestamp: new Date(Date.now() - 25 * 60 * 1000).toISOString() },
-        { lat: 23.9745, lon: 121.6155, timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString() },
-        { lat: 23.9755, lon: 121.6145, timestamp: new Date(Date.now() - 8 * 60 * 1000).toISOString() },
-        { lat: 23.9750, lon: 121.6150, timestamp: new Date(Date.now() - 4 * 60 * 1000).toISOString() }
-    ],
-    'BIKE012': [
-        // 創意文化園區內移動
-        { lat: 23.9715, lon: 121.6080, timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString() },
-        { lat: 23.9720, lon: 121.6085, timestamp: new Date(Date.now() - 25 * 60 * 1000).toISOString() },
-        { lat: 23.9710, lon: 121.6075, timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString() },
-        { lat: 23.9715, lon: 121.6080, timestamp: new Date(Date.now() - 18 * 60 * 1000).toISOString() }
-    ]
-}));
+  'BIKE001': [
+    // 花蓮火車站 → 東大門夜市 → 返回
+    { lat: 23.9917, lon: 121.6014, timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString() }, // 1小時前出發
+    { lat: 23.9870, lon: 121.6035, timestamp: new Date(Date.now() - 55 * 60 * 1000).toISOString() },
+    { lat: 23.9820, lon: 121.6050, timestamp: new Date(Date.now() - 50 * 60 * 1000).toISOString() },
+    { lat: 23.9750, lon: 121.6060, timestamp: new Date(Date.now() - 40 * 60 * 1000).toISOString() }, // 到達夜市
+    { lat: 23.9800, lon: 121.6040, timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString() },
+    { lat: 23.9880, lon: 121.6025, timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString() },
+    { lat: 23.9917, lon: 121.6014, timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString() }  // 返回火車站
+  ],
+  'BIKE002': [
+    // 東大門夜市 → 花蓮港 → 海洋公園
+    { lat: 23.9750, lon: 121.6060, timestamp: new Date(Date.now() - 90 * 60 * 1000).toISOString() }, // 1.5小時前出發
+    { lat: 23.9745, lon: 121.6100, timestamp: new Date(Date.now() - 80 * 60 * 1000).toISOString() },
+    { lat: 23.9740, lon: 121.6150, timestamp: new Date(Date.now() - 70 * 60 * 1000).toISOString() },
+    { lat: 23.9739, lon: 121.6175, timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString() }, // 到達花蓮港
+    { lat: 23.9500, lon: 121.6170, timestamp: new Date(Date.now() - 40 * 60 * 1000).toISOString() },
+    { lat: 23.9200, lon: 121.6172, timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString() },
+    { lat: 23.8979, lon: 121.6172, timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString() }   // 到達海洋公園
+  ],
+  'BIKE003': [
+    // 花蓮港 → 縣政府 → 美崙山公園
+    { lat: 23.9739, lon: 121.6175, timestamp: new Date(Date.now() - 120 * 60 * 1000).toISOString() }, // 2小時前出發
+    { lat: 23.9750, lon: 121.6120, timestamp: new Date(Date.now() - 100 * 60 * 1000).toISOString() },
+    { lat: 23.9800, lon: 121.6080, timestamp: new Date(Date.now() - 80 * 60 * 1000).toISOString() },
+    { lat: 23.9847, lon: 121.6064, timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString() },  // 到達縣政府
+    { lat: 23.9800, lon: 121.6050, timestamp: new Date(Date.now() - 40 * 60 * 1000).toISOString() },
+    { lat: 23.9730, lon: 121.6035, timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString() },
+    { lat: 23.9709, lon: 121.6028, timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString() }   // 到達美崙山公園
+  ],
+  'BIKE004': [
+    // 海洋公園沿海岸移動
+    { lat: 23.8979, lon: 121.6172, timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString() }, // 30分鐘前
+    { lat: 23.8990, lon: 121.6175, timestamp: new Date(Date.now() - 25 * 60 * 1000).toISOString() },
+    { lat: 23.9000, lon: 121.6170, timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString() },
+    { lat: 23.8985, lon: 121.6173, timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString() },
+    { lat: 23.8979, lon: 121.6172, timestamp: new Date(Date.now() - 1 * 60 * 1000).toISOString() }   // 返回原點
+  ],
+  'BIKE005': [
+    // 縣政府周邊移動
+    { lat: 23.9847, lon: 121.6064, timestamp: new Date(Date.now() - 45 * 60 * 1000).toISOString() }, // 45分鐘前
+    { lat: 23.9850, lon: 121.6070, timestamp: new Date(Date.now() - 40 * 60 * 1000).toISOString() },
+    { lat: 23.9845, lon: 121.6060, timestamp: new Date(Date.now() - 35 * 60 * 1000).toISOString() },
+    { lat: 23.9847, lon: 121.6064, timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString() }  // 停在縣政府
+  ],
+  'BIKE006': [
+    // 中華紙漿 → 火車站 → 松園別館
+    { lat: 23.9739, lon: 121.5994, timestamp: new Date(Date.now() - 75 * 60 * 1000).toISOString() }, // 1.25小時前
+    { lat: 23.9800, lon: 121.6000, timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString() },
+    { lat: 23.9880, lon: 121.6010, timestamp: new Date(Date.now() - 45 * 60 * 1000).toISOString() },
+    { lat: 23.9917, lon: 121.6014, timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString() }, // 經過火車站
+    { lat: 23.9850, lon: 121.6050, timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString() },
+    { lat: 23.9853, lon: 121.6097, timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString() }   // 到達松園別館
+  ],
+  'BIKE007': [
+    // 美崙山公園 → 慈濟醫院 → 曼波海灘
+    { lat: 23.9709, lon: 121.6028, timestamp: new Date(Date.now() - 100 * 60 * 1000).toISOString() }, // 100分鐘前
+    { lat: 23.9750, lon: 121.6010, timestamp: new Date(Date.now() - 80 * 60 * 1000).toISOString() },
+    { lat: 23.9780, lon: 121.6000, timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString() },
+    { lat: 23.9786, lon: 121.5996, timestamp: new Date(Date.now() - 40 * 60 * 1000).toISOString() }, // 到達慈濟醫院
+    { lat: 23.9760, lon: 121.6050, timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString() },
+    { lat: 23.9750, lon: 121.6120, timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString() },
+    { lat: 23.9750, lon: 121.6150, timestamp: new Date(Date.now() - 8 * 60 * 1000).toISOString() }   // 到達曼波海灘
+  ],
+  'BIKE008': [
+    // 慈濟醫院 → 創意文化園區 → 火車站
+    { lat: 23.9786, lon: 121.5996, timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString() }, // 1小時前
+    { lat: 23.9750, lon: 121.6020, timestamp: new Date(Date.now() - 45 * 60 * 1000).toISOString() },
+    { lat: 23.9720, lon: 121.6060, timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString() },
+    { lat: 23.9715, lon: 121.6080, timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString() }, // 到達文化園區
+    { lat: 23.9850, lon: 121.6050, timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString() },
+    { lat: 23.9917, lon: 121.6014, timestamp: new Date(Date.now() - 3 * 60 * 1000).toISOString() }   // 到達火車站
+  ],
+  'BIKE009': [
+    // 市公所 → 東大門夜市 → 文化園區
+    { lat: 23.9847, lon: 121.6064, timestamp: new Date(Date.now() - 50 * 60 * 1000).toISOString() },
+    { lat: 23.9800, lon: 121.6060, timestamp: new Date(Date.now() - 40 * 60 * 1000).toISOString() },
+    { lat: 23.9750, lon: 121.6060, timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString() }, // 夜市
+    { lat: 23.9720, lon: 121.6070, timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString() },
+    { lat: 23.9715, lon: 121.6080, timestamp: new Date(Date.now() - 12 * 60 * 1000).toISOString() }  // 文化園區
+  ],
+  'BIKE010': [
+    // 松園別館沿海移動
+    { lat: 23.9853, lon: 121.6097, timestamp: new Date(Date.now() - 35 * 60 * 1000).toISOString() },
+    { lat: 23.9850, lon: 121.6120, timestamp: new Date(Date.now() - 25 * 60 * 1000).toISOString() },
+    { lat: 23.9855, lon: 121.6110, timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString() },
+    { lat: 23.9853, lon: 121.6097, timestamp: new Date(Date.now() - 7 * 60 * 1000).toISOString() }
+  ],
+  'BIKE011': [
+    // 曼波海灘沿海岸線
+    { lat: 23.9750, lon: 121.6150, timestamp: new Date(Date.now() - 25 * 60 * 1000).toISOString() },
+    { lat: 23.9745, lon: 121.6155, timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString() },
+    { lat: 23.9755, lon: 121.6145, timestamp: new Date(Date.now() - 8 * 60 * 1000).toISOString() },
+    { lat: 23.9750, lon: 121.6150, timestamp: new Date(Date.now() - 4 * 60 * 1000).toISOString() }
+  ],
+  'BIKE012': [
+    // 創意文化園區內移動
+    { lat: 23.9715, lon: 121.6080, timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString() },
+    { lat: 23.9720, lon: 121.6085, timestamp: new Date(Date.now() - 25 * 60 * 1000).toISOString() },
+    { lat: 23.9710, lon: 121.6075, timestamp: new Date(Date.now() - 20 * 60 * 1000).toISOString() },
+    { lat: 23.9715, lon: 121.6080, timestamp: new Date(Date.now() - 18 * 60 * 1000).toISOString() }
+  ]
+}))
+*/
 // 計算車輛分布的中心點和最佳縮放級別
 const mapCenter = computed(() => {
-    const vehicles = mockVehicles.value;
+    const vehicles = realtimeVehicles.value;
     if (vehicles.length === 0) {
         // 預設花蓮市中心
         return { lat: 23.9739, lng: 121.6014, zoom: 12 };
     }
     // 計算所有車輛位置的邊界
-    const lats = vehicles.map(v => v.lat);
-    const lngs = vehicles.map(v => v.lon);
+    const lats = vehicles.map((v) => { var _a; return v.lat || ((_a = v.location) === null || _a === void 0 ? void 0 : _a.lat); }).filter(Boolean);
+    const lngs = vehicles.map((v) => { var _a; return v.lon || ((_a = v.location) === null || _a === void 0 ? void 0 : _a.lng); }).filter(Boolean);
     const minLat = Math.min(...lats);
     const maxLat = Math.max(...lats);
     const minLng = Math.min(...lngs);
@@ -425,7 +206,7 @@ const mapCenter = computed(() => {
 });
 // 軌跡過濾相關計算屬性
 const availableTraceVehicles = computed(() => {
-    const traces = mockVehicleTraces.value;
+    const traces = filteredVehicleTraces.value;
     const vehicleColors = [
         '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
         '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9'
@@ -438,26 +219,38 @@ const availableTraceVehicles = computed(() => {
 });
 const filteredTraces = computed(() => {
     if (selectedTraceVehicles.value.length === 0) {
-        return mockVehicleTraces.value;
+        return filteredVehicleTraces.value;
     }
     const filtered = {};
     selectedTraceVehicles.value.forEach(vehicleId => {
-        if (mockVehicleTraces.value[vehicleId]) {
-            filtered[vehicleId] = mockVehicleTraces.value[vehicleId];
+        if (filteredVehicleTraces.value[vehicleId]) {
+            filtered[vehicleId] = filteredVehicleTraces.value[vehicleId];
         }
     });
     return filtered;
 });
 // 即時車輛過濾邏輯
 const filteredRealtimeVehicles = computed(() => {
-    if (selectedRealtimeVehicles.value.length === 0) {
-        return mockVehicles.value;
+    var _a;
+    let list = realtimeVehicles.value;
+    // 角色：member 不顯示已被租借（使用中）的車輛；但可看到低電/維修
+    const role = (_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId;
+    if (role !== 'admin' && role !== 'staff') {
+        list = list.filter(v => v.status !== '使用中' && v.status !== 'in-use');
     }
-    return mockVehicles.value.filter(vehicle => selectedRealtimeVehicles.value.includes(vehicle.id));
+    if (selectedRealtimeVehicles.value.length === 0) {
+        return list;
+    }
+    return list.filter(vehicle => selectedRealtimeVehicles.value.includes(vehicle.id));
 });
 // 過濾後的車輛
 const filteredVehicles = computed(() => {
-    let vehicles = mockVehicles.value;
+    var _a;
+    let vehicles = realtimeVehicles.value;
+    const role = (_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId;
+    if (role !== 'admin' && role !== 'staff') {
+        vehicles = vehicles.filter(v => v.status !== '使用中' && v.status !== 'in-use');
+    }
     // 根據篩選條件過濾
     if (vehicleFilter.value !== 'all') {
         vehicles = vehicles.filter(vehicle => {
@@ -484,13 +277,13 @@ const filteredVehicles = computed(() => {
 // 計算屬性
 const totalVehicles = computed(() => {
     if (displayMode.value === 'realtime') {
-        return mockVehicles.value.length;
+        return realtimeVehicles.value.length;
     }
     return sitesStore.filteredSites.reduce((sum, site) => sum + site.vehicleCount, 0);
 });
 const availableVehicles = computed(() => {
     if (displayMode.value === 'realtime') {
-        return mockVehicles.value.filter(v => v.status === 'available').length;
+        return realtimeVehicles.value.filter((v) => v.status === 'available' || v.status === '可租借').length;
     }
     return sitesStore.filteredSites.reduce((sum, site) => sum + site.availableCount, 0);
 });
@@ -650,26 +443,29 @@ async function loadHistoryTrajectories() {
     // 載入歷史軌跡資料
     try {
         console.log('載入歷史軌跡資料');
-        // TODO: 呼叫 API 載入車輛歷史移動軌跡
+        // TODO: 當有軌跡 API 時，在此調用
+        // 暫時設為空物件，避免錯誤
+        filteredVehicleTraces.value = {};
     }
     catch (error) {
         console.error('載入軌跡資料失敗:', error);
+        filteredVehicleTraces.value = {};
     }
 }
 async function loadRealtimePositions() {
-    // 載入即時位置資料
     try {
-        console.log('載入即時位置資料');
-        // TODO: 呼叫 API 載入車輛即時位置
+        const { data } = await vehiclesStore.fetchVehiclesPaged({ limit: 200, offset: 0 });
+        realtimeVehicles.value = data;
     }
     catch (error) {
         console.error('載入即時位置失敗:', error);
+        realtimeVehicles.value = [];
     }
 }
 function handleMapSelect(id) {
     if (displayMode.value === 'realtime') {
         // 選擇車輛
-        const vehicle = mockVehicles.value.find(v => v.id === id);
+        const vehicle = realtimeVehicles.value.find((v) => v.id === id);
         if (vehicle) {
             selectedItem.value = vehicle;
         }
@@ -691,52 +487,24 @@ async function handleRentSuccess(rentRecord) {
     showRentDialog.value = false;
     showRentSuccessDialog.value = true;
     // 重新載入相關資料
-    if (sitesStore.selected) {
+    if (displayMode.value === 'realtime') {
+        // 即時模式：重新載入即時位置資料
+        await loadRealtimePositions();
+    }
+    else if (sitesStore.selected) {
+        // 站點模式：重新載入站點車輛資料
         await Promise.all([
             sitesStore.fetchSites(),
             vehiclesStore.fetchBySite(sitesStore.selected.id)
         ]);
     }
-    // TODO: 顯示成功訊息和更新地圖上的車輛狀態
+    console.log('[SiteMap] Vehicle data refreshed after successful rental');
 }
 // 租借相關函數
-function canRentVehicle(vehicle) {
-    // 檢查車輛狀態
-    if (vehicle.status !== '可租借')
-        return false;
-    // 檢查電量
-    if (vehicle.batteryPct < 20)
-        return false;
-    // 檢查信號
-    if (vehicle.signal === '弱')
-        return false;
-    // 檢查最後更新時間
-    const lastSeenTime = new Date(vehicle.lastSeen).getTime();
-    const now = new Date().getTime();
-    const minutesSinceLastSeen = (now - lastSeenTime) / (1000 * 60);
-    return minutesSinceLastSeen <= 5;
-}
-function getRentButtonTooltip(vehicle) {
-    if (vehicle.status !== '可租借') {
-        return `車輛狀態：${getStatusText(vehicle.status)}`;
-    }
-    if (vehicle.batteryPct < 20) {
-        return '電量不足，需要充電';
-    }
-    if (vehicle.signal === '弱') {
-        return '信號過弱，無法租借';
-    }
-    const lastSeenTime = new Date(vehicle.lastSeen).getTime();
-    const now = new Date().getTime();
-    const minutesSinceLastSeen = (now - lastSeenTime) / (1000 * 60);
-    if (minutesSinceLastSeen > 5) {
-        return '車輛離線時間過長';
-    }
-    return '點擊租借車輛';
-}
+function canRentVehicle(_vehicle) { return true; }
+function getRentButtonTooltip(_vehicle) { return '點擊租借車輛'; }
 function handleRentVehicle(vehicle) {
-    if (!canRentVehicle(vehicle))
-        return;
+    // 不做前端條件限制，直接交由後端驗證
     selectedVehicleForRent.value = vehicle;
     showRentDialog.value = true;
 }
@@ -778,7 +546,22 @@ async function onReturnSuccess(returnRecord) {
 }
 // 生命週期
 onMounted(async () => {
-    await sitesStore.fetchSites();
+    await Promise.all([
+        sitesStore.fetchSites(),
+        bikeMeta.fetchBikeStatusOptions(),
+        loadRealtimePositions()
+    ]);
+    // 設置自動重新整理即時資料 (每30秒)
+    const refreshInterval = setInterval(async () => {
+        if (displayMode.value === 'realtime') {
+            await loadRealtimePositions();
+            console.log('[SiteMap] Auto-refreshed realtime vehicle data');
+        }
+    }, 30000);
+    // 頁面卸載時清除定時器
+    onBeforeUnmount(() => {
+        clearInterval(refreshInterval);
+    });
 });
 // 監聽選中站點變化
 watch(() => sitesStore.selected, async (newSite) => {
@@ -929,8 +712,8 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.h3, __VLS_intrinsicElements.h3
     ...{ class: "text-lg font-semibold text-gray-900" },
 });
 (__VLS_ctx.displayMode === 'history'
-    ? `軌跡過濾 (${Object.keys(__VLS_ctx.filteredTraces).length}/${Object.keys(__VLS_ctx.mockVehicleTraces).length})`
-    : `車輛過濾 (${__VLS_ctx.filteredRealtimeVehicles.length}/${__VLS_ctx.mockVehicles.length})`);
+    ? `軌跡過濾 (${Object.keys(__VLS_ctx.filteredTraces).length}/${Object.keys(__VLS_ctx.filteredVehicleTraces.value).length})`
+    : `車輛過濾 (${__VLS_ctx.filteredRealtimeVehicles.length}/${__VLS_ctx.totalVehicles})`);
 if (__VLS_ctx.displayMode === 'history') {
     /** @type {[typeof VehicleTraceFilter, ]} */ ;
     // @ts-ignore
@@ -948,11 +731,11 @@ else {
     // @ts-ignore
     const __VLS_10 = __VLS_asFunctionalComponent(VehicleFilter, new VehicleFilter({
         modelValue: (__VLS_ctx.selectedRealtimeVehicles),
-        availableVehicles: (__VLS_ctx.mockVehicles),
+        availableVehicles: (__VLS_ctx.realtimeVehicles),
     }));
     const __VLS_11 = __VLS_10({
         modelValue: (__VLS_ctx.selectedRealtimeVehicles),
-        availableVehicles: (__VLS_ctx.mockVehicles),
+        availableVehicles: (__VLS_ctx.realtimeVehicles),
     }, ...__VLS_functionalComponentArgsRest(__VLS_10));
 }
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
@@ -982,6 +765,25 @@ for (const [vehicle] of __VLS_getVForSourceType((__VLS_ctx.displayMode === 'real
         ...{ class: "px-2 py-0.5 rounded-full text-xs font-medium" },
     });
     (__VLS_ctx.getStatusText(vehicle.status));
+    if (vehicle.currentMember) {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "mb-2 p-2 bg-blue-50 rounded text-sm" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "flex items-center space-x-1 text-blue-700" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: "i-ph-user w-4 h-4" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+            ...{ class: "font-medium" },
+        });
+        (vehicle.currentMember.name);
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "text-blue-600 text-xs mt-1" },
+        });
+        (vehicle.currentMember.phone);
+    }
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "grid grid-cols-2 gap-2 text-sm text-gray-600 mb-3" },
     });
@@ -992,7 +794,7 @@ for (const [vehicle] of __VLS_getVForSourceType((__VLS_ctx.displayMode === 'real
         ...{ class: "i-ph-gauge w-4 h-4" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
-    (vehicle.speedKph || 0);
+    (vehicle.vehicleSpeed || vehicle.speedKph || 0);
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "flex items-center space-x-1" },
     });
@@ -1034,30 +836,24 @@ for (const [vehicle] of __VLS_getVForSourceType((__VLS_ctx.displayMode === 'real
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "flex justify-end" },
     });
-    if (vehicle.status === '可租借' || vehicle.status === 'available') {
+    if (!(vehicle.status === '使用中' || vehicle.status === 'in-use')) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
             ...{ onClick: (...[$event]) => {
-                    if (!(vehicle.status === '可租借' || vehicle.status === 'available'))
+                    if (!(!(vehicle.status === '使用中' || vehicle.status === 'in-use')))
                         return;
                     __VLS_ctx.handleRentVehicle(vehicle);
                 } },
-            disabled: (!__VLS_ctx.canRentVehicle(vehicle)),
             title: (__VLS_ctx.getRentButtonTooltip(vehicle)),
-            ...{ class: "px-3 py-1.5 text-sm font-medium rounded-lg transition-colors" },
-            ...{ class: (__VLS_ctx.canRentVehicle(vehicle)
-                    ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                    : 'bg-gray-300 text-gray-500 cursor-not-allowed') },
+            ...{ class: "px-3 py-1.5 text-sm font-medium rounded-lg transition-colors bg-indigo-600 text-white hover:bg-indigo-700" },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
             ...{ class: "i-ph-key w-4 h-4 mr-1" },
         });
     }
-    else if (vehicle.status === '使用中' || vehicle.status === 'in-use') {
+    else {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
             ...{ onClick: (...[$event]) => {
-                    if (!!(vehicle.status === '可租借' || vehicle.status === 'available'))
-                        return;
-                    if (!(vehicle.status === '使用中' || vehicle.status === 'in-use'))
+                    if (!!(!(vehicle.status === '使用中' || vehicle.status === 'in-use')))
                         return;
                     __VLS_ctx.handleReturnVehicle(vehicle);
                 } },
@@ -1066,12 +862,6 @@ for (const [vehicle] of __VLS_getVForSourceType((__VLS_ctx.displayMode === 'real
         __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
             ...{ class: "i-ph-handbag w-4 h-4 mr-1" },
         });
-    }
-    else {
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-            ...{ class: "px-3 py-1.5 text-sm font-medium text-gray-500 bg-gray-100 rounded-lg" },
-        });
-        (__VLS_ctx.getStatusText(vehicle.status));
     }
 }
 /** @type {[typeof RentDialog, ]} */ ;
@@ -1305,6 +1095,22 @@ var __VLS_30;
 /** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
 /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
+/** @type {__VLS_StyleScopedClasses['mb-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['p-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-blue-50']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['space-x-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-blue-700']} */ ;
+/** @type {__VLS_StyleScopedClasses['i-ph-user']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-blue-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+/** @type {__VLS_StyleScopedClasses['mt-1']} */ ;
 /** @type {__VLS_StyleScopedClasses['grid']} */ ;
 /** @type {__VLS_StyleScopedClasses['grid-cols-2']} */ ;
 /** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
@@ -1352,6 +1158,9 @@ var __VLS_30;
 /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
 /** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
 /** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-indigo-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-white']} */ ;
+/** @type {__VLS_StyleScopedClasses['hover:bg-indigo-700']} */ ;
 /** @type {__VLS_StyleScopedClasses['i-ph-key']} */ ;
 /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
@@ -1369,13 +1178,6 @@ var __VLS_30;
 /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['mr-1']} */ ;
-/** @type {__VLS_StyleScopedClasses['px-3']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-1.5']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-/** @type {__VLS_StyleScopedClasses['bg-gray-100']} */ ;
-/** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
 var __VLS_dollars;
 const __VLS_self = (await import('vue')).defineComponent({
     setup() {
@@ -1394,20 +1196,21 @@ const __VLS_self = (await import('vue')).defineComponent({
             searchQuery: searchQuery,
             timeRange: timeRange,
             selectedTraceVehicles: selectedTraceVehicles,
+            filteredVehicleTraces: filteredVehicleTraces,
             selectedRealtimeVehicles: selectedRealtimeVehicles,
+            realtimeVehicles: realtimeVehicles,
             showRentDialog: showRentDialog,
             selectedVehicleForRent: selectedVehicleForRent,
             showReturnDialog: showReturnDialog,
             selectedReturnVehicle: selectedReturnVehicle,
             showRentSuccessDialog: showRentSuccessDialog,
             currentRental: currentRental,
-            mockVehicles: mockVehicles,
-            mockVehicleTraces: mockVehicleTraces,
             mapCenter: mapCenter,
             availableTraceVehicles: availableTraceVehicles,
             filteredTraces: filteredTraces,
             filteredRealtimeVehicles: filteredRealtimeVehicles,
             filteredVehicles: filteredVehicles,
+            totalVehicles: totalVehicles,
             getStatusBadgeClass: getStatusBadgeClass,
             getRelativeTime: getRelativeTime,
             selectVehicle: selectVehicle,
@@ -1416,7 +1219,6 @@ const __VLS_self = (await import('vue')).defineComponent({
             handleDisplayModeChange: handleDisplayModeChange,
             handleMapSelect: handleMapSelect,
             handleRentSuccess: handleRentSuccess,
-            canRentVehicle: canRentVehicle,
             getRentButtonTooltip: getRentButtonTooltip,
             handleRentVehicle: handleRentVehicle,
             handleReturnVehicle: handleReturnVehicle,

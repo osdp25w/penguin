@@ -34,6 +34,15 @@ export const VehicleSchema = z.object({
         t: z.number(),
         v: z.number()
     })).optional(),
+    // 租借資訊
+    currentMember: z.object({
+        id: z.number(),
+        name: z.string(),
+        phone: z.string()
+    }).nullable().optional(),
+    // 車輛即時資訊
+    vehicleSpeed: z.number().optional(),
+    telemetryImei: z.string().nullable().optional(),
     lastUpdate: z.string().optional(),
     createdAt: z.string().optional()
 });

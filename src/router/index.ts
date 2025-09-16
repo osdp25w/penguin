@@ -15,6 +15,8 @@ const Vehicles       = () => import('@/pages/Vehicles.vue')        // 車輛清�
 const Alerts         = () => import('@/pages/Alerts.vue')          // 警報中心
 const MLPredict      = () => import('@/pages/MLPredict.vue')       // ML 預測
 const UserManagement = () => import('@/pages/UserManagement.vue')  // 帳號管理
+const SiteManagement = () => import('@/pages/SiteManagement.vue')  // 場域管理
+const TelemetryDevices = () => import('@/pages/TelemetryDevices.vue') // 遙測設備管理
 
 /* routes -------------------------------------------------- */
 const routes: RouteRecordRaw[] = [
@@ -57,12 +59,29 @@ const routes: RouteRecordRaw[] = [
         component: MLPredict,
         meta: { title: 'ML 預測' }
       },
+      // Admin paths (canonical)
       {
         path: 'admin/users',
         name: 'admin-users',
         component: UserManagement,
-        meta: { title: '帳號管理', requiresAdmin: true }
-      }
+        meta: { title: '帳號管理', requiresAuth: true, requiresAdmin: true }
+      },
+      {
+        path: 'admin/sites',
+        name: 'admin-sites',
+        component: SiteManagement,
+        meta: { title: '場域管理', requiresAuth: true, requiresAdmin: true }
+      },
+      {
+        path: 'admin/telemetry',
+        name: 'admin-telemetry',
+        component: TelemetryDevices,
+        meta: { title: '遙測設備', requiresAuth: true, requiresAdmin: true }
+      },
+      // Legacy paths (redirect to admin/*)
+      { path: 'users', redirect: '/admin/users' },
+      { path: 'site-management', redirect: '/admin/sites' },
+      { path: 'telemetry', redirect: '/admin/telemetry' }
     ]
   },
 
@@ -86,20 +105,55 @@ export const router = createRouter({
 router.beforeEach((to) => {
   const auth = useAuth()
 
+  console.log('[Router] Navigation to:', to.path, 'Auth state:', {
+    isLogin: auth.isLogin,
+    user: auth.user,
+    requiresAuth: to.meta.requiresAuth,
+    requiresAdmin: to.meta.requiresAdmin
+  })
+
   /* 檢查登入狀態 */
   if (to.meta.requiresAuth && !auth.isLogin) {
+    console.log('[Router] Redirecting to login - not authenticated')
     return { path: '/login', query: { redirect: to.fullPath } }
   }
 
-  /* 檢查管理員權限 */
+  /* 檢查管理員/工作人員權限（admin 或 staff） */
   if (to.meta.requiresAdmin) {
-    let isAdmin = auth.user?.roleId === 'admin'
-    if (!isAdmin) {
-      // 與 auth store 的 ROLE_KEY 對齊（'penguin.role'）
-      const role = sessionStorage.getItem('penguin.role') || localStorage.getItem('penguin.role')
-      isAdmin = role === 'admin'
+    let role = auth.user?.roleId as string | null
+    if (!role) role = (sessionStorage.getItem('penguin.role') || localStorage.getItem('penguin.role'))
+
+    // 正常權限檢查：只允許 admin 或 staff 訪問
+    const allowed = role === 'admin' || role === 'staff'
+
+    console.log('[Router] Admin page access check (DEBUG MODE - ALLOWING ALL):', {
+      path: to.path,
+      userRole: role,
+      isAllowed: allowed,
+      user: auth.user,
+      sessionRole: sessionStorage.getItem('penguin.role'),
+      localRole: localStorage.getItem('penguin.role'),
+      userRoleFromAuth: auth.user?.roleId
+    })
+
+    if (!allowed) {
+      console.warn('[Router] Access denied to admin page:', to.path, 'Role:', role, 'Redirecting to /403')
+      return '/403'
+    } else {
+      console.log('[Router] Access granted to admin page:', to.path)
     }
-    if (!isAdmin) return '/403'
+  }
+
+  /* 會員（member）僅能瀏覽「場域地圖」頁面 - 但不包括管理頁面（管理頁面已在上面處理） */
+  if (to.meta.requiresAuth && !to.meta.requiresAdmin) {
+    const role = (auth.user?.roleId || sessionStorage.getItem('penguin.role') || localStorage.getItem('penguin.role')) as string | null
+    if (role === 'member') {
+      // 僅允許 /sites，其餘受保護頁面一律導向 /sites
+      if (to.path !== '/sites') {
+        console.log('[Router] Member user redirected from', to.path, 'to /sites')
+        return '/sites'
+      }
+    }
   }
 
   /* 設定頁面標題 */

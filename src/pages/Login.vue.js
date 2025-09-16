@@ -11,10 +11,17 @@ const router = useRouter();
 const route = useRoute();
 /* 提交 -------------------------------------------------------------- */
 async function submit() {
+    var _a;
     loading.value = true;
     try {
         await auth.login(email.value, password.value);
-        router.replace(route.query.redirect || '/');
+        const redirect = route.query.redirect || '/';
+        // 會員（member）登入後一律進入場域地圖
+        const role = ((_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId) || sessionStorage.getItem('penguin.role') || localStorage.getItem('penguin.role');
+        if (role === 'member')
+            router.replace('/sites');
+        else
+            router.replace(redirect);
     }
     finally {
         loading.value = false;
@@ -37,17 +44,29 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.h1, __VLS_intrinsicElements.h1
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "space-y-5" },
 });
+__VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
+    for: "login-email",
+    ...{ class: "sr-only" },
+});
 __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
+    id: "login-email",
+    name: "email",
     type: "email",
     placeholder: "Email",
-    autocomplete: "off",
+    autocomplete: "username",
     ...{ class: "\u0077\u002d\u0036\u0034\u0020\u006d\u0061\u0078\u002d\u0077\u002d\u0066\u0075\u006c\u006c\u0020\u0070\u0078\u002d\u0034\u0020\u0070\u0079\u002d\u0032\u0020\u0072\u006f\u0075\u006e\u0064\u0065\u0064\u002d\u006d\u0064\u0020\u0062\u006f\u0072\u0064\u0065\u0072\u0020\u0062\u006f\u0072\u0064\u0065\u0072\u002d\u0062\u006c\u0061\u0063\u006b\u002f\u0031\u0035\u000a\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0062\u0067\u002d\u0077\u0068\u0069\u0074\u0065\u0020\u0074\u0065\u0078\u0074\u002d\u0073\u006c\u0061\u0074\u0065\u002d\u0038\u0030\u0030\u0020\u0070\u006c\u0061\u0063\u0065\u0068\u006f\u006c\u0064\u0065\u0072\u003a\u0074\u0065\u0078\u0074\u002d\u0073\u006c\u0061\u0074\u0065\u002d\u0034\u0030\u0030\u000a\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0066\u006f\u0063\u0075\u0073\u003a\u006f\u0075\u0074\u006c\u0069\u006e\u0065\u002d\u006e\u006f\u006e\u0065\u0020\u0066\u006f\u0063\u0075\u0073\u003a\u0072\u0069\u006e\u0067\u002d\u0032\u0020\u0066\u006f\u0063\u0075\u0073\u003a\u0072\u0069\u006e\u0067\u002d\u0069\u006e\u0064\u0069\u0067\u006f\u002d\u0034\u0030\u0030" },
 });
 (__VLS_ctx.email);
+__VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
+    for: "login-password",
+    ...{ class: "sr-only" },
+});
 __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
+    id: "login-password",
+    name: "password",
     type: "password",
     placeholder: "Password",
-    autocomplete: "off",
+    autocomplete: "current-password",
     ...{ class: "\u0077\u002d\u0036\u0034\u0020\u006d\u0061\u0078\u002d\u0077\u002d\u0066\u0075\u006c\u006c\u0020\u0070\u0078\u002d\u0034\u0020\u0070\u0079\u002d\u0032\u0020\u0072\u006f\u0075\u006e\u0064\u0065\u0064\u002d\u006d\u0064\u0020\u0062\u006f\u0072\u0064\u0065\u0072\u0020\u0062\u006f\u0072\u0064\u0065\u0072\u002d\u0062\u006c\u0061\u0063\u006b\u002f\u0031\u0035\u000a\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0062\u0067\u002d\u0077\u0068\u0069\u0074\u0065\u0020\u0074\u0065\u0078\u0074\u002d\u0073\u006c\u0061\u0074\u0065\u002d\u0038\u0030\u0030\u0020\u0070\u006c\u0061\u0063\u0065\u0068\u006f\u006c\u0064\u0065\u0072\u003a\u0074\u0065\u0078\u0074\u002d\u0073\u006c\u0061\u0074\u0065\u002d\u0034\u0030\u0030\u000a\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0020\u0066\u006f\u0063\u0075\u0073\u003a\u006f\u0075\u0074\u006c\u0069\u006e\u0065\u002d\u006e\u006f\u006e\u0065\u0020\u0066\u006f\u0063\u0075\u0073\u003a\u0072\u0069\u006e\u0067\u002d\u0032\u0020\u0066\u006f\u0063\u0075\u0073\u003a\u0072\u0069\u006e\u0067\u002d\u0069\u006e\u0064\u0069\u0067\u006f\u002d\u0034\u0030\u0030" },
 });
 (__VLS_ctx.password);
@@ -93,6 +112,7 @@ if (__VLS_ctx.auth.err) {
 /** @type {__VLS_StyleScopedClasses['text-slate-800']} */ ;
 /** @type {__VLS_StyleScopedClasses['tracking-wide']} */ ;
 /** @type {__VLS_StyleScopedClasses['space-y-5']} */ ;
+/** @type {__VLS_StyleScopedClasses['sr-only']} */ ;
 /** @type {__VLS_StyleScopedClasses['w-64']} */ ;
 /** @type {__VLS_StyleScopedClasses['max-w-full']} */ ;
 /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
@@ -106,6 +126,7 @@ if (__VLS_ctx.auth.err) {
 /** @type {__VLS_StyleScopedClasses['focus:outline-none']} */ ;
 /** @type {__VLS_StyleScopedClasses['focus:ring-2']} */ ;
 /** @type {__VLS_StyleScopedClasses['focus:ring-indigo-400']} */ ;
+/** @type {__VLS_StyleScopedClasses['sr-only']} */ ;
 /** @type {__VLS_StyleScopedClasses['w-64']} */ ;
 /** @type {__VLS_StyleScopedClasses['max-w-full']} */ ;
 /** @type {__VLS_StyleScopedClasses['px-4']} */ ;

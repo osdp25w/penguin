@@ -1,0 +1,124 @@
+{
+  "when": "2025-09-14T12:34:29.134Z",
+  "results": [
+    {
+      "name": "bike_realtime_limit5_off3",
+      "url": "https://koala.osdp25w.xyz/api/bike/realtime-status/?limit=5&offset=3",
+      "status": 200,
+      "file": "/Users/xutingwei/bike2/penguin/tests/koala_samples/bike_realtime_limit5_off3__2025-09-14T12-34-22_970Z.json"
+    },
+    {
+      "name": "bike_realtime_limit20_off0",
+      "url": "https://koala.osdp25w.xyz/api/bike/realtime-status/?limit=20&offset=0",
+      "status": 200,
+      "file": "/Users/xutingwei/bike2/penguin/tests/koala_samples/bike_realtime_limit20_off0__2025-09-14T12-34-23_275Z.json"
+    },
+    {
+      "name": "bike_status_options",
+      "url": "https://koala.osdp25w.xyz/api/bike/status-options/",
+      "status": 200,
+      "file": "/Users/xutingwei/bike2/penguin/tests/koala_samples/bike_status_options__2025-09-14T12-34-23_561Z.json"
+    },
+    {
+      "name": "bike_categories",
+      "url": "https://koala.osdp25w.xyz/api/bike/categories/",
+      "status": 200,
+      "file": "/Users/xutingwei/bike2/penguin/tests/koala_samples/bike_categories__2025-09-14T12-34-23_861Z.json"
+    },
+    {
+      "name": "bike_series",
+      "url": "https://koala.osdp25w.xyz/api/bike/series/",
+      "status": 200,
+      "file": "/Users/xutingwei/bike2/penguin/tests/koala_samples/bike_series__2025-09-14T12-34-24_164Z.json"
+    },
+    {
+      "name": "telemetry_status_options",
+      "url": "https://koala.osdp25w.xyz/api/telemetry/device-status-options/",
+      "status": 200,
+      "file": "/Users/xutingwei/bike2/penguin/tests/koala_samples/telemetry_status_options__2025-09-14T12-34-24_448Z.json"
+    },
+    {
+      "name": "telemetry_devices",
+      "url": "https://koala.osdp25w.xyz/api/telemetry/devices/",
+      "status": 200,
+      "file": "/Users/xutingwei/bike2/penguin/tests/koala_samples/telemetry_devices__2025-09-14T12-34-24_777Z.json"
+    },
+    {
+      "name": "telemetry_devices_available",
+      "url": "https://koala.osdp25w.xyz/api/telemetry/devices/?status=available",
+      "status": 200,
+      "file": "/Users/xutingwei/bike2/penguin/tests/koala_samples/telemetry_devices_available__2025-09-14T12-34-25_109Z.json"
+    },
+    {
+      "name": "telemetry_devices_model",
+      "url": "https://koala.osdp25w.xyz/api/telemetry/devices/?model=TD-2024-IoT",
+      "status": 200,
+      "file": "/Users/xutingwei/bike2/penguin/tests/koala_samples/telemetry_devices_model__2025-09-14T12-34-25_432Z.json"
+    },
+    {
+      "name": "telemetry_devices_imei_q",
+      "url": "https://koala.osdp25w.xyz/api/telemetry/devices/?IMEI_q=72950756",
+      "status": 200,
+      "file": "/Users/xutingwei/bike2/penguin/tests/koala_samples/telemetry_devices_imei_q__2025-09-14T12-34-25_825Z.json"
+    },
+    {
+      "name": "telemetry_devices_one",
+      "url": "https://koala.osdp25w.xyz/api/telemetry/devices/867291175673772/",
+      "status": 200,
+      "file": "/Users/xutingwei/bike2/penguin/tests/koala_samples/telemetry_devices_one__2025-09-14T12-34-26_127Z.json"
+    },
+    {
+      "name": "bike_error_log_status_paged",
+      "url": "https://koala.osdp25w.xyz/api/bike/error-log-status/?limit=10&offset=0",
+      "status": 200
+    },
+    {
+      "name": "bike_error_log_status_critical",
+      "url": "https://koala.osdp25w.xyz/api/bike/error-log-status/?level=critical",
+      "status": 200,
+      "file": "/Users/xutingwei/bike2/penguin/tests/koala_samples/bike_error_log_status_critical__2025-09-14T12-34-26_545Z.json"
+    },
+    {
+      "name": "bike_error_log_status_is_read",
+      "url": "https://koala.osdp25w.xyz/api/bike/error-log-status/?is_read=true",
+      "status": 200,
+      "file": "/Users/xutingwei/bike2/penguin/tests/koala_samples/bike_error_log_status_is_read__2025-09-14T12-34-26_865Z.json"
+    },
+    {
+      "name": "bike_error_log_status_one_212_slash",
+      "url": "https://koala.osdp25w.xyz/api/bike/error-log-status/212/",
+      "status": 405,
+      "file": "/Users/xutingwei/bike2/penguin/tests/koala_samples/bike_error_log_status_one_212_slash__2025-09-14T12-34-27_159Z.json"
+    },
+    {
+      "name": "bike_error_log_status_one_212_noslash",
+      "url": "https://koala.osdp25w.xyz/api/bike/error-log-status/212",
+      "status": 405,
+      "file": "/Users/xutingwei/bike2/penguin/tests/koala_samples/bike_error_log_status_one_212_noslash__2025-09-14T12-34-27_675Z.json"
+    },
+    {
+      "name": "rental_active",
+      "url": "https://koala.osdp25w.xyz/api/rental/staff/rentals/active_rentals/",
+      "status": 200,
+      "file": "/Users/xutingwei/bike2/penguin/tests/koala_samples/rental_active__2025-09-14T12-34-27_973Z.json"
+    },
+    {
+      "name": "rental_list",
+      "url": "https://koala.osdp25w.xyz/api/rental/staff/rentals/",
+      "status": 200,
+      "file": "/Users/xutingwei/bike2/penguin/tests/koala_samples/rental_list__2025-09-14T12-34-28_297Z.json"
+    },
+    {
+      "name": "rental_one_7",
+      "url": "https://koala.osdp25w.xyz/api/rental/staff/rentals/7/",
+      "status": 200,
+      "file": "/Users/xutingwei/bike2/penguin/tests/koala_samples/rental_one_7__2025-09-14T12-34-28_598Z.json"
+    },
+    {
+      "name": "bike_info_list",
+      "url": "https://koala.osdp25w.xyz/api/bike/bikes/",
+      "status": 200,
+      "file": "/Users/xutingwei/bike2/penguin/tests/koala_samples/bike_info_list__2025-09-14T12-34-28_930Z.json"
+    }
+  ]
+}

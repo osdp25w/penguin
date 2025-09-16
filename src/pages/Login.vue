@@ -16,21 +16,27 @@
 
       <!-- 帳號 / 密碼 -------------------------------------------------- -->
       <div class="space-y-5">
+        <label for="login-email" class="sr-only">Email</label>
         <input
+          id="login-email"
+          name="email"
           v-model.trim="email"
           type="email"
           placeholder="Email"
-          autocomplete="off"
+          autocomplete="username"
           class="w-64 max-w-full px-4 py-2 rounded-md border border-black/15
                  bg-white text-slate-800 placeholder:text-slate-400
                  focus:outline-none focus:ring-2 focus:ring-indigo-400"
         />
 
+        <label for="login-password" class="sr-only">Password</label>
         <input
+          id="login-password"
+          name="password"
           v-model.trim="password"
           type="password"
           placeholder="Password"
-          autocomplete="off"
+          autocomplete="current-password"
           class="w-64 max-w-full px-4 py-2 rounded-md border border-black/15
                  bg-white text-slate-800 placeholder:text-slate-400
                  focus:outline-none focus:ring-2 focus:ring-indigo-400"
@@ -76,7 +82,11 @@ async function submit () {
   loading.value = true
   try {
     await auth.login(email.value, password.value)
-    router.replace((route.query.redirect as string) || '/')
+    const redirect = (route.query.redirect as string) || '/'
+    // 會員（member）登入後一律進入場域地圖
+    const role = auth.user?.roleId || sessionStorage.getItem('penguin.role') || localStorage.getItem('penguin.role')
+    if (role === 'member') router.replace('/sites')
+    else router.replace(redirect)
   } finally {
     loading.value = false
   }

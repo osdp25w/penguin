@@ -20,7 +20,7 @@ export const rentalsHandlers = [
       const { bikeId, userName, phone, idLast4 } = body
 
       // Validate required fields
-      if (!bikeId || !userName || !phone || !idLast4) {
+      if (!bikeId || !userName) {
         return res(
           ctx.status(422),
           ctx.json({ message: '缺少必要欄位' })
@@ -50,8 +50,8 @@ export const rentalsHandlers = [
         rentalId: generateRentalId(),
         bikeId,
         userName: userName.trim(),
-        phone: phone.trim(),
-        idLast4: idLast4.trim(),
+        phone: (phone || '').trim(),
+        idLast4: (idLast4 || '').trim(),
         state: 'reserving',
         startTime: new Date().toISOString(),
         endTime: null,

@@ -47,6 +47,12 @@
             </div>
           </div>
           
+          <!-- 會員可填寫歸還地點 -->
+          <div v-if="isMember" class="mb-6 text-left">
+            <label class="block text-sm font-medium text-gray-700 mb-2">歸還地點（選填）</label>
+            <input v-model.trim="returnLocation" type="text" placeholder="例如 台大圖書館" class="w-full px-4 py-2 border border-gray-300 rounded-xl" />
+          </div>
+
           <!-- 底部按鈕 -->
           <div class="flex space-x-3">
             <button
@@ -75,8 +81,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useReturns } from '@/stores/returns'
+import { useRentals } from '@/stores/rentals'
+import { useAuth } from '@/stores/auth'
 import type { ReturnRecord } from '@/stores/returns'
 
 interface Vehicle {
@@ -98,6 +106,10 @@ const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
 const returnsStore = useReturns()
+const rentalsStore = useRentals()
+const auth = useAuth()
+const isMember = computed(() => auth.user?.roleId === 'member')
+const returnLocation = ref('')
 const loading = ref(false)
 
 // 方法
@@ -113,17 +125,26 @@ async function handleConfirmReturn() {
   loading.value = true
   
   try {
-    // 創建簡化的歸還記錄
+    // 走 Koala 租借歸還流程：根據車輛查詢進行中租借並 PATCH action=return
+    const ok = await rentalsStore.returnByBikeId(props.vehicle.id, { return_location: isMember.value ? returnLocation.value : undefined })
+    if (!ok) throw new Error('Koala 歸還動作失敗')
+
+    // 補一筆記錄供 UI 顯示；即使 /api/v1/returns 失敗也不阻擋
+    const now = new Date().toISOString()
     const returnData = {
       vehicleId: props.vehicle.id,
-      siteId: props.vehicle.siteId || 'unknown', // 使用車輛當前站點或預設值
-      odometer: 0, // 簡化版不需要填寫
-      battery: props.vehicle.batteryPct || 50, // 使用當前電量
+      siteId: props.vehicle.siteId || 'unknown',
+      odometer: 0,
+      battery: props.vehicle.batteryPct || 50,
       issues: undefined,
       photos: undefined
     }
-
-    const returnRecord = await returnsStore.confirmReturnVehicle(returnData)
+    let returnRecord: any = null
+    try {
+      returnRecord = await returnsStore.confirmReturnVehicle(returnData)
+    } catch {
+      returnRecord = { id: `local-${now}`, ...returnData, createdAt: now }
+    }
     emit('success', returnRecord)
     emit('close')
   } catch (error) {

@@ -1,0 +1,28 @@
+{
+  "url": "https://koala.osdp25w.xyz/api/bike/error-log-status/212/",
+  "status": 405,
+  "headers": {
+    "allow": "PUT, PATCH, OPTIONS",
+    "alt-svc": "h3=\":443\"; ma=86400",
+    "cf-cache-status": "DYNAMIC",
+    "cf-ray": "97efe4160e09841b-TPE",
+    "connection": "keep-alive",
+    "content-length": "85",
+    "content-type": "application/json",
+    "cross-origin-opener-policy": "same-origin",
+    "date": "Sun, 14 Sep 2025 12:29:37 GMT",
+    "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+    "referrer-policy": "same-origin",
+    "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=zVGU0d0PopMczUw1Jwh5a%2BLNIcWrj4XiWZS9X9Be%2FpnPlrSw60Q9lhYl0uC%2FJCYUl9bag1Oh2AwVhGIHiCs0vAsAu7nda1qp21ioHXEFvqyk8gwiA0Mdz%2BZRCw%3D%3D\"}]}",
+    "server": "cloudflare",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "vary": "origin",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY"
+  },
+  "body": {
+    "code": 4001,
+    "msg": "method not allowed",
+    "details": "不被允許的方法 \"GET\"。"
+  }
+}

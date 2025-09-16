@@ -3,6 +3,7 @@ import { Dialog, DialogPanel } from '@headlessui/vue';
 import { Plus, RefreshCw } from 'lucide-vue-next';
 import { useUsers } from '@/stores/users';
 import { maskNationalId } from '@/lib/encryption';
+import { formatPhoneForDisplay } from '@/lib/phone';
 // store
 const store = useUsers();
 onMounted(() => store.fetchAll());
@@ -26,11 +27,12 @@ function saveEdit() {
 // 新增
 const showDlg = ref(false);
 const temp = reactive({
-    email: '', fullName: '', roleId: '', active: true
+    email: '', fullName: '', roleId: '', active: true,
+    phone: '', nationalId: ''
 });
 const emailInput = ref(null);
 function openCreate() {
-    Object.assign(temp, { email: '', fullName: '', roleId: '', active: true });
+    Object.assign(temp, { email: '', fullName: '', roleId: '', active: true, phone: '', nationalId: '' });
     showDlg.value = true;
 }
 function addUser() {
@@ -38,17 +40,33 @@ function addUser() {
         alert('請完整填寫 Email、姓名與角色');
         return;
     }
-    const newUser = {
-        id: 'u_' + Date.now().toString(36),
+    if (!temp.phone) {
+        alert('請填寫電話');
+        return;
+    }
+    // 只有 real member 需要身份證號
+    if (temp.roleId === 'member' && temp.nationalId && !temp.nationalId.trim()) {
+        alert('一般會員需要身份證號');
+        return;
+    }
+    // 使用統一註冊方法支援所有用戶類型
+    const userTypeMap = {
+        'visitor': 'tourist',
+        'member': temp.nationalId ? 'real' : 'tourist', // 有身份證號的為一般會員，無的為遊客
+        'staff': 'staff',
+        'admin': 'admin'
+    };
+    const userType = userTypeMap[temp.roleId] || 'tourist';
+    store.registerUser({
         email: temp.email,
         fullName: temp.fullName,
-        roleId: temp.roleId,
-        active: temp.active,
-        createdAt: new Date().toISOString(),
-        lastLogin: ''
-    };
-    store.addUser(newUser);
-    showDlg.value = false;
+        phone: temp.phone,
+        nationalId: temp.nationalId || '', // 可選
+        userType: userType,
+        active: temp.active
+    })
+        .then(() => { showDlg.value = false; })
+        .catch(err => { alert((err === null || err === void 0 ? void 0 : err.message) || '用戶註冊失敗'); });
 }
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
@@ -157,7 +175,7 @@ for (const [u] of __VLS_getVForSourceType((__VLS_ctx.store.usersWithRole))) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
             ...{ class: "input" },
             type: "tel",
-            placeholder: "手機號碼",
+            placeholder: "手機號碼 (如: 0912345678)",
         });
         (__VLS_ctx.draft.phone);
         __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
@@ -214,7 +232,7 @@ for (const [u] of __VLS_getVForSourceType((__VLS_ctx.store.usersWithRole))) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
             ...{ class: "px-4 py-2 text-gray-900" },
         });
-        (u.phone || '-');
+        (__VLS_ctx.formatPhoneForDisplay(u.phone) || '-');
         __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
             ...{ class: "px-4 py-2 text-gray-900" },
         });
@@ -338,6 +356,45 @@ for (const [r] of __VLS_getVForSourceType((__VLS_ctx.store.roles))) {
         value: (r.id),
     });
     (r.name);
+}
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "flex items-center gap-3" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
+    ...{ class: "w-24" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
+    ...{ class: "input flex-1" },
+    type: "tel",
+    placeholder: "0912345678 或 +886912345678",
+});
+(__VLS_ctx.temp.phone);
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "flex items-center gap-3" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
+    ...{ class: "w-24" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
+    value: (__VLS_ctx.temp.nationalId),
+    ...{ class: "input flex-1" },
+    type: "text",
+    placeholder: "A123456789 (可選填，但一般會員必填)",
+});
+if (__VLS_ctx.temp.roleId === 'member') {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "text-sm text-gray-600" },
+    });
+}
+else if (__VLS_ctx.temp.roleId === 'visitor') {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "text-sm text-gray-600" },
+    });
+}
+else if (__VLS_ctx.temp.roleId === 'staff' || __VLS_ctx.temp.roleId === 'admin') {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "text-sm text-gray-600" },
+    });
 }
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "flex items-center gap-3" },
@@ -531,6 +588,24 @@ var __VLS_11;
 /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
 /** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
 /** @type {__VLS_StyleScopedClasses['w-24']} */ ;
+/** @type {__VLS_StyleScopedClasses['input']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-24']} */ ;
+/** @type {__VLS_StyleScopedClasses['input']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-24']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
 /** @type {__VLS_StyleScopedClasses['flex']} */ ;
 /** @type {__VLS_StyleScopedClasses['justify-end']} */ ;
@@ -548,6 +623,7 @@ const __VLS_self = (await import('vue')).defineComponent({
             Plus: Plus,
             RefreshCw: RefreshCw,
             maskNationalId: maskNationalId,
+            formatPhoneForDisplay: formatPhoneForDisplay,
             store: store,
             editingId: editingId,
             draft: draft,

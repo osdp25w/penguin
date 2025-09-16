@@ -14,14 +14,16 @@ export async function encryptNationalId(nationalId: string): Promise<string> {
   }
   
   try {
-    // 強制使用伺服器端加密 (禁用 WebCrypto)
+    // 使用 penguin fernet 服務進行敏感資訊加密
     const endpoint = import.meta.env.DEV ? '/local/fernet' : '/api/fernet/encrypt'
+
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         text: nationalId,
-        key: import.meta.env.DEV ? sensitiveKey : undefined // 生產環境使用伺服器端的 key
+        type: 'sensitive', // 指定為敏感資訊類型，使用 SENSITIVE_KEY
+        key: import.meta.env.DEV ? sensitiveKey : undefined // 開發環境使用前端 key
       })
     })
     
@@ -53,14 +55,16 @@ export async function decryptNationalId(encryptedNationalId: string): Promise<st
   }
   
   try {
-    // 強制使用伺服器端解密（與加密邏輯保持一致）
+    // 使用 penguin fernet 服務進行敏感資訊解密
     const endpoint = import.meta.env.DEV ? '/local/fernet/decrypt' : '/api/fernet/decrypt'
+
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         tokens: [encryptedNationalId],
-        key: import.meta.env.DEV ? sensitiveKey : undefined // 生產環境使用伺服器端的 key
+        type: 'sensitive', // 指定為敏感資訊類型，使用 SENSITIVE_KEY
+        key: import.meta.env.DEV ? sensitiveKey : undefined // 開發環境使用前端 key
       })
     })
     
@@ -81,25 +85,38 @@ export async function decryptNationalId(encryptedNationalId: string): Promise<st
 }
 
 /**
- * 加密密碼 (使用 VITE_KOALA_LOGIN_KEY)
+ * 加密密碼 (登入使用 VITE_KOALA_LOGIN_KEY，註冊/更新使用 VITE_KOALA_SENSITIVE_KEY)
  */
-export async function encryptPassword(password: string): Promise<string> {
-  const loginKey = import.meta?.env?.VITE_KOALA_LOGIN_KEY
+export async function encryptPassword(password: string, useForRegistration: boolean = false): Promise<string> {
+  // 根據用途選擇不同的 key
+  const rt: any = (globalThis as any)?.CONFIG || {}
+  let key: string | undefined
   
-  // 在生產環境中，不需要前端的 loginKey（伺服器端會使用自己的 key）
-  if (import.meta.env.DEV && !loginKey) {
-    throw new Error('VITE_KOALA_LOGIN_KEY not configured in development')
+  if (useForRegistration) {
+    // 註冊和更新使用 GENERIC_SECRET_SIGNING_KEY (對應 VITE_KOALA_SENSITIVE_KEY)
+    key = rt.KOALA_SENSITIVE_KEY || import.meta?.env?.VITE_KOALA_SENSITIVE_KEY
+  } else {
+    // 登入使用 LOGIN_SECRET_SIGNING_KEY (對應 VITE_KOALA_LOGIN_KEY)
+    key = rt.KOALA_LOGIN_KEY || import.meta?.env?.VITE_KOALA_LOGIN_KEY
+  }
+  
+  // 在生產環境中，不需要前端的 key（伺服器端會使用自己的 key）
+  if (import.meta.env.DEV && !key) {
+    const keyType = useForRegistration ? 'VITE_KOALA_SENSITIVE_KEY' : 'VITE_KOALA_LOGIN_KEY'
+    throw new Error(`${keyType} not configured in development`)
   }
   
   try {
-    // 強制使用伺服器端加密 (禁用 WebCrypto)
+    // 使用 penguin fernet 服務進行密碼加密
     const endpoint = import.meta.env.DEV ? '/local/fernet' : '/api/fernet/encrypt'
+
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         text: password,
-        key: import.meta.env.DEV ? loginKey : undefined // 生產環境使用伺服器端的 key
+        type: useForRegistration ? 'sensitive' : 'password', // 根據用途選擇加密類型
+        key: import.meta.env.DEV ? key : undefined // 開發環境使用前端 key
       })
     })
     

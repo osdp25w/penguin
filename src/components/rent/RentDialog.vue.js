@@ -2,144 +2,130 @@ var _a;
 import { ref, reactive, computed, watch, nextTick } from 'vue';
 import { useRentals } from '@/stores/rentals';
 import { CreateRentalSchema } from '@/types/rental';
+import { useAuth } from '@/stores/auth';
+import { Koala } from '@/services/koala';
 const props = defineProps();
 const emit = defineEmits();
 const rentalsStore = useRentals();
-// 表單資料
-const form = reactive({
-    userName: '',
-    phone: '',
-    idLast4: ''
-});
-// 錯誤狀態
-const errors = reactive({
-    userName: '',
-    phone: '',
-    idLast4: ''
-});
+const auth = useAuth();
+const isStaff = computed(() => { var _a, _b; return ((_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId) === 'admin' || ((_b = auth.user) === null || _b === void 0 ? void 0 : _b.roleId) === 'staff'; });
+const isProxy = ref(false); // staff/admin 預設可用自己的身份租借
+const currentUserName = computed(() => { var _a; return ((_a = auth.user) === null || _a === void 0 ? void 0 : _a.name) || ''; });
+const currentUserPhone = computed(() => { var _a; return ((_a = auth.user) === null || _a === void 0 ? void 0 : _a.phone) || ''; });
+const currentUserIdLast4 = computed(() => { var _a; return (((_a = auth.user) === null || _a === void 0 ? void 0 : _a.idNumber) ? String(auth.user.idNumber).slice(-4) : ''); });
 const loading = ref(false);
-// 計算屬性
-const isFormValid = computed(() => {
-    return form.userName.trim() &&
-        form.phone.trim() &&
-        form.idLast4.trim() &&
-        !errors.userName &&
-        !errors.phone &&
-        !errors.idLast4;
+const errors = reactive({ userName: '' });
+// staff 代租：成員選擇
+const memberOptions = ref([]);
+const filteredMemberOptions = ref([]);
+const selectedMemberId = ref('');
+const memberQuery = ref('');
+const canSubmit = computed(() => {
+    if (!props.vehicle)
+        return false;
+    if (!isStaff.value)
+        return !!currentUserName.value;
+    return isProxy.value ? !!selectedMemberId.value : !!currentUserName.value;
 });
-// 方法
-function validateField(field) {
-    errors[field] = '';
-    switch (field) {
-        case 'userName':
-            if (!form.userName.trim()) {
-                errors.userName = '請輸入使用者姓名';
-            }
-            else if (form.userName.length < 2 || form.userName.length > 30) {
-                errors.userName = '姓名長度必須在 2-30 字之間';
-            }
-            break;
-        case 'phone':
-            if (!form.phone.trim()) {
-                errors.phone = '請輸入聯絡電話';
-            }
-            else if (!/^(09\d{8}|(\+886|886)9\d{8})$/.test(form.phone)) {
-                errors.phone = '請輸入有效的台灣手機號碼';
-            }
-            break;
-        case 'idLast4':
-            if (!form.idLast4.trim()) {
-                errors.idLast4 = '請輸入身分證末四碼';
-            }
-            else if (!/^\d{4}$/.test(form.idLast4)) {
-                errors.idLast4 = '請輸入四位數字';
-            }
-            break;
-    }
-}
-function validateForm() {
-    validateField('userName');
-    validateField('phone');
-    validateField('idLast4');
-    return !errors.userName && !errors.phone && !errors.idLast4;
-}
 async function handleSubmit() {
-    if (!validateForm() || !props.vehicle)
+    var _a, _b, _c;
+    if (!props.vehicle)
         return;
     loading.value = true;
     rentalsStore.clearError();
     try {
-        // 驗證表單資料
-        const formData = CreateRentalSchema.parse({
-            bikeId: props.vehicle.id,
-            userName: form.userName.trim(),
-            phone: form.phone.trim(),
-            idLast4: form.idLast4.trim()
+        // 準備租借資料
+        let userName = currentUserName.value;
+        let phone = currentUserPhone.value;
+        let idLast4 = currentUserIdLast4.value;
+        if (isStaff.value && isProxy.value) {
+            const m = memberOptions.value.find(x => String(x.id) === selectedMemberId.value);
+            userName = (m === null || m === void 0 ? void 0 : m.full_name) || (m === null || m === void 0 ? void 0 : m.username) || '';
+            phone = (m === null || m === void 0 ? void 0 : m.phone) || (m === null || m === void 0 ? void 0 : m.email) || '';
+            const nat = m === null || m === void 0 ? void 0 : m.national_id;
+            if (nat)
+                idLast4 = nat.slice(-4);
+        }
+        // 處理可選欄位：確保符合 schema 規則或設為空字符串
+        if (!phone) {
+            // 如果 auth.user.phone 存在且符合台灣手機號碼格式，使用它；否則留空
+            const userPhone = ((_a = auth.user) === null || _a === void 0 ? void 0 : _a.phone) || '';
+            phone = /^(09\d{8}|(\+886|886)9\d{8})$/.test(userPhone) ? userPhone : '';
+        }
+        if (!idLast4) {
+            // 如果有 user idNumber，取末四碼；否則留空
+            if ((_b = auth.user) === null || _b === void 0 ? void 0 : _b.idNumber) {
+                const lastFour = String(auth.user.idNumber).slice(-4);
+                idLast4 = /^\d{4}$/.test(lastFour) ? lastFour : '';
+            }
+            else {
+                idLast4 = '';
+            }
+        }
+        const formData = CreateRentalSchema.parse({ bikeId: props.vehicle.id, userName, phone, idLast4 });
+        const isPhone = !!phone && /(^(09\d{8})$)|(^((\+886|886)9\d{8})$)/.test(phone);
+        const rental = await rentalsStore.createRental({
+            ...formData,
+            member_phone: isPhone ? phone : undefined,
+            member_email: !isPhone ? (((_c = auth.user) === null || _c === void 0 ? void 0 : _c.email) || undefined) : undefined
         });
-        // 建立租借單
-        const rental = await rentalsStore.createRental(formData);
-        // 開鎖
         await rentalsStore.unlockCurrent();
-        // 更新車輛狀態
         rentalsStore.setInUse(props.vehicle.id);
-        // 成功
         emit('success', rental);
-        clearForm();
         handleClose();
     }
     catch (error) {
         console.error('租借失敗:', error);
-        // 錯誤已經在 store 中處理
     }
     finally {
         loading.value = false;
     }
 }
 function handleClose() {
-    if (!loading.value) {
+    if (!loading.value)
         emit('close');
-        clearForm();
-    }
 }
-function clearForm() {
-    form.userName = '';
-    form.phone = '';
-    form.idLast4 = '';
-    errors.userName = '';
-    errors.phone = '';
-    errors.idLast4 = '';
-}
-// 監聽表單變化進行即時驗證
-watch(() => form.userName, () => validateField('userName'), { flush: 'post' });
-watch(() => form.phone, () => validateField('phone'), { flush: 'post' });
-watch(() => form.idLast4, () => validateField('idLast4'), { flush: 'post' });
-// 監聽 show 狀態變化
-watch(() => props.show, async (newShow) => {
-    if (newShow) {
+watch(() => props.show, async (open) => {
+    if (open) {
         await nextTick();
-        // 焦點設置到第一個可編輯欄位
-        const firstInput = document.querySelector('input[type="text"]:not([readonly])');
-        firstInput === null || firstInput === void 0 ? void 0 : firstInput.focus();
-    }
-    else {
-        clearForm();
+        if (isStaff.value && memberOptions.value.length === 0) {
+            try {
+                const list = await Koala.listMembers();
+                memberOptions.value = list;
+                filteredMemberOptions.value = list;
+            }
+            catch (e) {
+                console.warn('無法載入成員清單', e);
+            }
+        }
     }
 });
-// 鍵盤事件處理
-function handleKeydown(event) {
-    if (event.key === 'Escape') {
-        handleClose();
+function filterMembers() {
+    const q = memberQuery.value.trim().toLowerCase();
+    if (!q) {
+        filteredMemberOptions.value = memberOptions.value;
+        return;
     }
+    filteredMemberOptions.value = memberOptions.value.filter((m) => {
+        const s = `${m.full_name || ''} ${m.username || ''} ${m.phone || ''} ${m.email || ''}`.toLowerCase();
+        return s.includes(q);
+    });
 }
-// 添加鍵盤事件監聽
-watch(() => props.show, (newShow) => {
-    if (newShow) {
-        document.addEventListener('keydown', handleKeydown);
-    }
-    else {
-        document.removeEventListener('keydown', handleKeydown);
-    }
+// 顯示輔助：截斷字串與組裝成員選項
+const truncatedVehicleId = computed(() => {
+    var _a;
+    const id = ((_a = props.vehicle) === null || _a === void 0 ? void 0 : _a.id) || '';
+    return id.length > 18 ? `${id.slice(0, 8)}…${id.slice(-6)}` : id;
 });
+function short(val, max = 18) {
+    const s = String(val || '');
+    return s.length > max ? s.slice(0, max - 1) + '…' : s;
+}
+function memberLabel(m) {
+    const name = short(m.full_name || m.username || '—', 12);
+    const contact = short(m.phone || m.email || '無', 14);
+    return `${name}（${contact}）`;
+}
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
 let __VLS_components;
@@ -185,75 +171,128 @@ if (__VLS_ctx.show) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
         ...{ class: "block text-sm font-medium text-gray-700 mb-2" },
     });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.input, __VLS_intrinsicElements.input)({
-        value: (((_a = __VLS_ctx.vehicle) === null || _a === void 0 ? void 0 : _a.id) || ''),
-        type: "text",
-        readonly: true,
-        ...{ class: "w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 text-gray-600 cursor-not-allowed" },
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "relative md:max-w-[20rem] lg:max-w-[24rem]" },
     });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
-        ...{ class: "block text-sm font-medium text-gray-700 mb-2" },
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 text-gray-700 font-mono text-sm truncate" },
+        title: (((_a = __VLS_ctx.vehicle) === null || _a === void 0 ? void 0 : _a.id) || ''),
     });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "text-red-500" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.input, __VLS_intrinsicElements.input)({
-        value: (__VLS_ctx.form.userName),
-        type: "text",
-        placeholder: "請輸入姓名（2-30字）",
-        ...{ class: "w-full px-4 py-3 border rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" },
-        ...{ class: (__VLS_ctx.errors.userName ? 'border-red-300 bg-red-50' : 'border-gray-300') },
-        disabled: (__VLS_ctx.loading),
-    });
-    if (__VLS_ctx.errors.userName) {
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
-            ...{ class: "mt-1 text-xs text-red-600" },
+    (__VLS_ctx.truncatedVehicleId);
+    if (!__VLS_ctx.isStaff) {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
+            ...{ class: "block text-sm font-medium text-gray-700 mb-2" },
         });
-        (__VLS_ctx.errors.userName);
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "p-3 border border-gray-200 rounded-xl bg-gray-50 text-gray-800" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "font-medium" },
+        });
+        (__VLS_ctx.currentUserName);
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "text-sm text-gray-600" },
+        });
+        (__VLS_ctx.currentUserPhone || '未提供電話');
+        if (__VLS_ctx.currentUserIdLast4) {
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ class: "text-xs text-gray-500" },
+            });
+            (__VLS_ctx.currentUserIdLast4);
+        }
     }
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
-        ...{ class: "block text-sm font-medium text-gray-700 mb-2" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "text-red-500" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.input, __VLS_intrinsicElements.input)({
-        type: "tel",
-        placeholder: "09xxxxxxxx 或 +886xxxxxxxxx",
-        ...{ class: "w-full px-4 py-3 border rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" },
-        ...{ class: (__VLS_ctx.errors.phone ? 'border-red-300 bg-red-50' : 'border-gray-300') },
-        disabled: (__VLS_ctx.loading),
-    });
-    (__VLS_ctx.form.phone);
-    if (__VLS_ctx.errors.phone) {
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
-            ...{ class: "mt-1 text-xs text-red-600" },
+    else {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
+            ...{ class: "block text-sm font-medium text-gray-700 mb-2" },
         });
-        (__VLS_ctx.errors.phone);
-    }
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
-        ...{ class: "block text-sm font-medium text-gray-700 mb-2" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "text-red-500" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.input, __VLS_intrinsicElements.input)({
-        value: (__VLS_ctx.form.idLast4),
-        type: "text",
-        placeholder: "請輸入身分證末四碼",
-        maxlength: "4",
-        ...{ class: "w-full px-4 py-3 border rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" },
-        ...{ class: (__VLS_ctx.errors.idLast4 ? 'border-red-300 bg-red-50' : 'border-gray-300') },
-        disabled: (__VLS_ctx.loading),
-    });
-    if (__VLS_ctx.errors.idLast4) {
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
-            ...{ class: "mt-1 text-xs text-red-600" },
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "flex items-center gap-3 mb-2" },
         });
-        (__VLS_ctx.errors.idLast4);
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+            ...{ onClick: (...[$event]) => {
+                    if (!(__VLS_ctx.show))
+                        return;
+                    if (!!(!__VLS_ctx.isStaff))
+                        return;
+                    __VLS_ctx.isProxy = false;
+                } },
+            type: "button",
+            ...{ class: "px-3 py-1.5 text-sm rounded-full border" },
+            ...{ class: (__VLS_ctx.isProxy ? 'border-gray-300 text-gray-600' : 'border-indigo-600 text-indigo-700 bg-indigo-50') },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+            ...{ onClick: (...[$event]) => {
+                    if (!(__VLS_ctx.show))
+                        return;
+                    if (!!(!__VLS_ctx.isStaff))
+                        return;
+                    __VLS_ctx.isProxy = true;
+                } },
+            type: "button",
+            ...{ class: "px-3 py-1.5 text-sm rounded-full border" },
+            ...{ class: (__VLS_ctx.isProxy ? 'border-indigo-600 text-indigo-700 bg-indigo-50' : 'border-gray-300 text-gray-600') },
+        });
+        if (!__VLS_ctx.isProxy) {
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ class: "p-3 border border-gray-200 rounded-xl bg-gray-50 text-gray-800 md:max-w-[20rem] lg:max-w-[24rem]" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ class: "font-medium truncate" },
+                title: (__VLS_ctx.currentUserName),
+            });
+            (__VLS_ctx.short(__VLS_ctx.currentUserName, 18));
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ class: "text-sm text-gray-600 truncate" },
+                title: (__VLS_ctx.currentUserPhone),
+            });
+            (__VLS_ctx.short(__VLS_ctx.currentUserPhone || '未提供電話', 22));
+            if (__VLS_ctx.currentUserIdLast4) {
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                    ...{ class: "text-xs text-gray-500" },
+                });
+                (__VLS_ctx.currentUserIdLast4);
+            }
+        }
+        else {
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ class: "space-y-2" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ class: "relative md:max-w-[20rem] lg:max-w-[24rem]" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
+                ...{ onInput: (__VLS_ctx.filterMembers) },
+                value: (__VLS_ctx.memberQuery),
+                type: "text",
+                placeholder: "搜尋姓名/帳號/電話",
+                ...{ class: "w-full px-4 py-3 border border-gray-300 rounded-xl" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ class: "relative md:max-w-[20rem] lg:max-w-[24rem]" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.select, __VLS_intrinsicElements.select)({
+                value: (__VLS_ctx.selectedMemberId),
+                ...{ class: "w-full px-4 py-3 border border-gray-300 rounded-xl" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
+                value: "",
+            });
+            for (const [m] of __VLS_getVForSourceType((__VLS_ctx.filteredMemberOptions))) {
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
+                    key: (m.id),
+                    value: (String(m.id)),
+                });
+                (__VLS_ctx.memberLabel(m));
+            }
+            if (__VLS_ctx.errors.userName) {
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+                    ...{ class: "mt-1 text-xs text-red-600" },
+                });
+                (__VLS_ctx.errors.userName);
+            }
+        }
     }
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "flex space-x-3 pt-4" },
@@ -267,7 +306,7 @@ if (__VLS_ctx.show) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
         type: "submit",
         ...{ class: "flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" },
-        disabled: (__VLS_ctx.loading || !__VLS_ctx.isFormValid),
+        disabled: (__VLS_ctx.loading || !__VLS_ctx.canSubmit),
     });
     if (__VLS_ctx.loading) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
@@ -340,6 +379,9 @@ if (__VLS_ctx.show) {
 /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
 /** @type {__VLS_StyleScopedClasses['mb-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['relative']} */ ;
+/** @type {__VLS_StyleScopedClasses['md:max-w-[20rem]']} */ ;
+/** @type {__VLS_StyleScopedClasses['lg:max-w-[24rem]']} */ ;
 /** @type {__VLS_StyleScopedClasses['w-full']} */ ;
 /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
@@ -347,62 +389,79 @@ if (__VLS_ctx.show) {
 /** @type {__VLS_StyleScopedClasses['border-gray-300']} */ ;
 /** @type {__VLS_StyleScopedClasses['rounded-xl']} */ ;
 /** @type {__VLS_StyleScopedClasses['bg-gray-50']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
+/** @type {__VLS_StyleScopedClasses['font-mono']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['truncate']} */ ;
+/** @type {__VLS_StyleScopedClasses['block']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
+/** @type {__VLS_StyleScopedClasses['mb-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['p-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-gray-200']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-xl']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-gray-50']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-800']} */ ;
+/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
-/** @type {__VLS_StyleScopedClasses['cursor-not-allowed']} */ ;
-/** @type {__VLS_StyleScopedClasses['block']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-/** @type {__VLS_StyleScopedClasses['mb-2']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-red-500']} */ ;
-/** @type {__VLS_StyleScopedClasses['w-full']} */ ;
-/** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-/** @type {__VLS_StyleScopedClasses['border']} */ ;
-/** @type {__VLS_StyleScopedClasses['rounded-xl']} */ ;
-/** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
-/** @type {__VLS_StyleScopedClasses['focus:outline-none']} */ ;
-/** @type {__VLS_StyleScopedClasses['focus:ring-2']} */ ;
-/** @type {__VLS_StyleScopedClasses['focus:ring-indigo-500']} */ ;
-/** @type {__VLS_StyleScopedClasses['focus:border-transparent']} */ ;
-/** @type {__VLS_StyleScopedClasses['mt-1']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-red-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
 /** @type {__VLS_StyleScopedClasses['block']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
 /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
 /** @type {__VLS_StyleScopedClasses['mb-2']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-red-500']} */ ;
-/** @type {__VLS_StyleScopedClasses['w-full']} */ ;
-/** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['mb-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['px-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['py-1.5']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
 /** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['px-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['py-1.5']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
+/** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['p-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-gray-200']} */ ;
 /** @type {__VLS_StyleScopedClasses['rounded-xl']} */ ;
-/** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
-/** @type {__VLS_StyleScopedClasses['focus:outline-none']} */ ;
-/** @type {__VLS_StyleScopedClasses['focus:ring-2']} */ ;
-/** @type {__VLS_StyleScopedClasses['focus:ring-indigo-500']} */ ;
-/** @type {__VLS_StyleScopedClasses['focus:border-transparent']} */ ;
-/** @type {__VLS_StyleScopedClasses['mt-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-gray-50']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-800']} */ ;
+/** @type {__VLS_StyleScopedClasses['md:max-w-[20rem]']} */ ;
+/** @type {__VLS_StyleScopedClasses['lg:max-w-[24rem]']} */ ;
+/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
+/** @type {__VLS_StyleScopedClasses['truncate']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['truncate']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-red-600']} */ ;
-/** @type {__VLS_StyleScopedClasses['block']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-/** @type {__VLS_StyleScopedClasses['mb-2']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-red-500']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
+/** @type {__VLS_StyleScopedClasses['space-y-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['relative']} */ ;
+/** @type {__VLS_StyleScopedClasses['md:max-w-[20rem]']} */ ;
+/** @type {__VLS_StyleScopedClasses['lg:max-w-[24rem]']} */ ;
 /** @type {__VLS_StyleScopedClasses['w-full']} */ ;
 /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
 /** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-gray-300']} */ ;
 /** @type {__VLS_StyleScopedClasses['rounded-xl']} */ ;
-/** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
-/** @type {__VLS_StyleScopedClasses['focus:outline-none']} */ ;
-/** @type {__VLS_StyleScopedClasses['focus:ring-2']} */ ;
-/** @type {__VLS_StyleScopedClasses['focus:ring-indigo-500']} */ ;
-/** @type {__VLS_StyleScopedClasses['focus:border-transparent']} */ ;
+/** @type {__VLS_StyleScopedClasses['relative']} */ ;
+/** @type {__VLS_StyleScopedClasses['md:max-w-[20rem]']} */ ;
+/** @type {__VLS_StyleScopedClasses['lg:max-w-[24rem]']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-full']} */ ;
+/** @type {__VLS_StyleScopedClasses['px-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['py-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-gray-300']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-xl']} */ ;
 /** @type {__VLS_StyleScopedClasses['mt-1']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-red-600']} */ ;
@@ -445,12 +504,23 @@ var __VLS_dollars;
 const __VLS_self = (await import('vue')).defineComponent({
     setup() {
         return {
-            form: form,
-            errors: errors,
+            isStaff: isStaff,
+            isProxy: isProxy,
+            currentUserName: currentUserName,
+            currentUserPhone: currentUserPhone,
+            currentUserIdLast4: currentUserIdLast4,
             loading: loading,
-            isFormValid: isFormValid,
+            errors: errors,
+            filteredMemberOptions: filteredMemberOptions,
+            selectedMemberId: selectedMemberId,
+            memberQuery: memberQuery,
+            canSubmit: canSubmit,
             handleSubmit: handleSubmit,
             handleClose: handleClose,
+            filterMembers: filterMembers,
+            truncatedVehicleId: truncatedVehicleId,
+            short: short,
+            memberLabel: memberLabel,
         };
     },
     __typeEmits: {},

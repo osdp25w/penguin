@@ -1,0 +1,29 @@
+{
+  "url": "https://koala.osdp25w.xyz/api/bike/error-log-status/?is_read=true",
+  "status": 200,
+  "headers": {
+    "allow": "GET, HEAD, OPTIONS",
+    "alt-svc": "h3=\":443\"; ma=86400",
+    "cf-cache-status": "DYNAMIC",
+    "cf-ray": "97f0969b7fc04a97-TPE",
+    "connection": "keep-alive",
+    "content-encoding": "br",
+    "content-type": "application/json",
+    "cross-origin-opener-policy": "same-origin",
+    "date": "Sun, 14 Sep 2025 14:31:29 GMT",
+    "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+    "referrer-policy": "same-origin",
+    "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=JhwQGgQersq6khB9518GQn7ANRJx7unKjhv9%2BUCZIuoweff7g8%2FPNowa21Dc8%2BSNm49J3aUJNhjKCeiVM4lq5SR91fi1atoV4X0C%2BtGNXBnKNsTx1QLErBI6Qw%3D%3D\"}]}",
+    "server": "cloudflare",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "transfer-encoding": "chunked",
+    "vary": "origin",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY"
+  },
+  "body": {
+    "code": 2000,
+    "msg": "success",
+    "data": []
+  }
+}

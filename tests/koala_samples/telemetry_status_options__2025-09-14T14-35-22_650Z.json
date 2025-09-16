@@ -1,0 +1,29 @@
+{
+  "url": "https://koala.osdp25w.xyz/api/telemetry/device-status-options/",
+  "status": 403,
+  "headers": {
+    "allow": "GET, OPTIONS",
+    "alt-svc": "h3=\":443\"; ma=86400",
+    "cf-cache-status": "DYNAMIC",
+    "cf-ray": "97f09c4b3ad256f4-TPE",
+    "connection": "keep-alive",
+    "content-encoding": "br",
+    "content-type": "application/json",
+    "cross-origin-opener-policy": "same-origin",
+    "date": "Sun, 14 Sep 2025 14:35:22 GMT",
+    "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+    "referrer-policy": "same-origin",
+    "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=RRVXDxb0ENWzBmUMCAOop2JxX9Oegtpzb56RGTB3vEJgVxVjVOhkljwatBsnyLMXbU%2FutFZxKB%2FCg0UkhcFOyU6u5OD1733wglukcFzWBpskhq450946yU741g%3D%3D\"}]}",
+    "server": "cloudflare",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "transfer-encoding": "chunked",
+    "vary": "Accept, origin",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY"
+  },
+  "body": {
+    "code": 3002,
+    "msg": "permission denied",
+    "details": null
+  }
+}

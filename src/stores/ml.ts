@@ -3,6 +3,7 @@
  *  依賴：Pinia 2.x
  * ──────────────────────────────────────────────────────────── */
 import { defineStore } from 'pinia'
+import { predictStrategy, predictCarbon, predictPower, predictBatteryRisk } from '@/ml/runners'
 
 /* ╭────────────────────── 型別定義 ───────────────────────╮ */
 export interface StrategyResult {
@@ -30,60 +31,58 @@ export const useML = defineStore('ml', {
 
   actions: {
     /* ────────────── 單一模型 ────────────── */
-    fetchStrategy (p: { distance: number }) {
-      return this._post<StrategyResult>('strategy', 'strategy', p)
+    async fetchStrategy (p: { distance: number; preference01?: number; terrain01?: number; wind01?: number }) {
+      try {
+        this.loading = true
+        const out = await predictStrategy({ distanceKm: p.distance, preference01: p.preference01, terrain01: p.terrain01, wind01: p.wind01 })
+        this.strategy = { polyline: out.polyline, estTime: String(out.estTime), estEnergy: String(out.estEnergy) }
+        this.errMsg = ''
+        return this.strategy
+      } catch (e:any) {
+        this.errMsg = e.message ?? 'strategy failed'
+        throw e
+      } finally { this.loading = false }
     },
-    fetchCarbon   (p: { distance: number }) {
-      return this._post<CarbonResult>('carbon', 'carbon', p)
+    async fetchCarbon   (p: { distance: number }) {
+      try {
+        this.loading = true
+        const out = await predictCarbon({ distanceKm: p.distance })
+        this.carbon = { saved: out.saved }
+        this.errMsg = ''
+        return this.carbon
+      } catch (e:any) {
+        this.errMsg = e.message ?? 'carbon failed'
+        throw e
+      } finally { this.loading = false }
     },
-    fetchPower    (p: { speed: number }) {
-      return this._post<PowerResult>('power', 'power', p)
+    async fetchPower    (p: { speed: number }) {
+      try {
+        this.loading = true
+        const out = await predictPower({ speedKph: p.speed })
+        this.power = { kWh: out.kWh, nextCharge: out.nextCharge }
+        this.errMsg = ''
+        return this.power
+      } catch (e:any) {
+        this.errMsg = e.message ?? 'power failed'
+        throw e
+      } finally { this.loading = false }
     },
 
     /* ────────────── 故障機率 (GET) ────────────── */
-    async fetchBatteryRisk (): Promise<BatteryRisk[]> {
+    async fetchBatteryRisk (ids: string[] = []): Promise<BatteryRisk[]> {
       try {
         this.loading = true
-        const res = await fetch('/api/v1/ml/battery')
-        if (!res.ok) throw new Error(res.statusText)
-
-        const data: BatteryRisk[] = await res.json()
-        this.batteries = data
+        const out = await predictBatteryRisk(ids)
+        this.batteries = out
         this.errMsg = ''
-        return data                          // 呼叫端可直接取得
-      } catch (e: any) {
-        this.errMsg = e.message ?? 'fetch battery risk failed'
+        return out
+      } catch (e:any) {
+        this.errMsg = e.message ?? 'battery risk failed'
         throw e
-      } finally {
-        this.loading = false
-      }
+      } finally { this.loading = false }
     },
 
     /* ────────────── 共用 POST helper ────────────── */
-    async _post<R>(
-      path    : string,
-      key     : 'strategy' | 'carbon' | 'power',
-      payload : unknown
-    ): Promise<R> {
-      try {
-        this.loading = true
-        const res = await fetch(`/api/v1/ml/${path}`, {
-          method : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body   : JSON.stringify(payload)
-        })
-        if (!res.ok) throw new Error(res.statusText)
-
-        const data: R = await res.json()
-        ;(this as any)[key] = data          // 動態欄位寫入
-        this.errMsg = ''
-        return data                         // 回傳解析結果
-      } catch (e: any) {
-        this.errMsg = e.message ?? 'ML request failed'
-        throw e
-      } finally {
-        this.loading = false
-      }
-    }
+    async _post<R>() { throw new Error('disabled') }
   }
 })

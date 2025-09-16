@@ -1,7 +1,7 @@
 // src/stores/auth.ts
 import { defineStore } from 'pinia'
 import { Koala } from '@/services/koala'
-import { clearAuthStorage, loadUserProfile } from '@/lib/api'
+import { clearAuthStorage, loadUserProfile, saveUserProfile } from '@/lib/api'
 
 /* -------------------------------------------------------------- */
 /*  型別定義                                                       */
@@ -10,14 +10,19 @@ export interface User {
   id        : string
   name      : string
   email     : string
-  roleId    : 'admin' | 'staff' | 'manager' | 'user'
+  roleId    : 'admin' | 'staff' | 'member' | 'visitor'  // 只保留後端支援的角色
   phone?    : string
   avatarUrl?: string
   idNumber? : string  // 身份證號（解密後用於顯示）
 }
 
-const TOKEN_KEY = 'penguin.jwt'
+const ACCESS_TOKEN_KEY = 'auth_access_token'
+const REFRESH_TOKEN_KEY = 'auth_refresh_token'
 const ROLE_KEY  = 'penguin.role'
+const LEGACY_TOKEN_KEY = 'penguin.jwt' // 相容舊版本
+
+// Token 檢查快取，避免頻繁驗證
+let tokenCheckCache: { token: string; validUntil: number } | null = null
 
 /* -------------------------------------------------------------- */
 /*  Pinia Store：Auth                                             */
@@ -25,16 +30,46 @@ const ROLE_KEY  = 'penguin.role'
 export const useAuth = defineStore('auth', {
   /* ---------------- State ------------------------------------- */
   state : () => ({
-    token: localStorage.getItem(TOKEN_KEY) || '',
+    accessToken: localStorage.getItem(ACCESS_TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY) || '', // 支援舊 token
+    refreshToken: localStorage.getItem(REFRESH_TOKEN_KEY) || '',
     user : ((): User | null => {
       // Attempt to restore cached profile if present
       const p = loadUserProfile<any>()
       if (!p) return null
+
+      // 調試：輸出原始 profile 資料
+      console.log('[Auth] Raw profile data for role mapping:', {
+        id: p.id,
+        username: p.username,
+        type: p.type,
+        profile_type: p.profile_type,
+        full_name: p.full_name,
+        email: p.email
+      })
+
+      const roleId = p.type === 'admin' || p.username?.includes('admin')
+        ? 'admin'
+        : p.profile_type === 'staff'
+        ? 'staff'
+        : p.type === 'real'
+        ? 'member'
+        : 'visitor'
+
+      console.log('[Auth] Mapped role:', roleId)
+
+      // 確保 role 存儲到 sessionStorage/localStorage
+      try {
+        sessionStorage.setItem(ROLE_KEY, roleId)
+        localStorage.setItem(ROLE_KEY, roleId)
+      } catch (e) {
+        console.warn('[Auth] Failed to store role to storage:', e)
+      }
+
       const mapped: User = {
         id: String(p.id ?? p.user_id ?? p.uuid ?? ''),
         name: p.full_name || p.username || p.name || '',
         email: p.email || '',
-        roleId: (p.username?.includes('admin') ? 'admin' : p.profile_type === 'staff' ? 'staff' : p.type === 'manager' ? 'manager' : 'user') as any,
+        roleId: roleId as any,
         avatarUrl: p.avatar_url || p.avatarUrl || undefined,
         phone: p.phone
       }
@@ -45,18 +80,153 @@ export const useAuth = defineStore('auth', {
 
   /* ---------------- Getters ----------------------------------- */
   getters: {
-    isLogin : (s) => !!s.token,
+    isLogin : (s) => !!s.accessToken,
     isAdmin : (s) => s.user?.roleId === 'admin',
-    userName: (s) => s.user?.name ?? ''
+    userName: (s) => s.user?.name ?? '',
+    // 相容性 getter
+    token: (s) => s.accessToken
   },
 
   /* ---------------- Actions ----------------------------------- */
   actions: {
+    /* ---------- Token Refresh -------------------------------- */
+    async refreshTokens() {
+      try {
+        console.log('[Auth] Attempting token refresh...')
+
+        if (!this.refreshToken) {
+          throw new Error('No refresh token available')
+        }
+
+        const response = await fetch('/api/account/auth/refresh/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            refresh_token: this.refreshToken
+          })
+        })
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        }
+
+        const data = await response.json()
+
+        if (data.code !== 2000) {
+          throw new Error(data.message || 'Token refresh failed')
+        }
+
+        // 更新 tokens
+        this.accessToken = data.data.tokens.access_token
+        this.refreshToken = data.data.tokens.refresh_token
+
+        // 更新本地儲存
+        localStorage.setItem(ACCESS_TOKEN_KEY, this.accessToken)
+        localStorage.setItem(REFRESH_TOKEN_KEY, this.refreshToken)
+        // 清除舊 token
+        localStorage.removeItem(LEGACY_TOKEN_KEY)
+
+        // 清除 token 檢查快取，因為 token 已更新
+        tokenCheckCache = null
+
+        console.log('[Auth] Token refresh successful')
+
+        return data.data.tokens
+      } catch (error: any) {
+        console.error('[Auth] Token refresh failed:', error)
+        // Token refresh 失敗時清除所有 token 並退出登入
+        this.logout()
+        throw error
+      }
+    },
+
+    /* ---------- 檢查 Token 是否即將過期 -------------------- */
+    isTokenExpiringSoon(token: string, thresholdMinutes: number = 5): boolean {
+      try {
+        // 簡單的 JWT token 解析（不驗證簽名）
+        const payload = JSON.parse(atob(token.split('.')[1]))
+        const exp = payload.exp * 1000 // Convert to milliseconds
+        const now = Date.now()
+        const timeUntilExpiry = exp - now
+        const thresholdMs = thresholdMinutes * 60 * 1000
+
+        return timeUntilExpiry <= thresholdMs
+      } catch (error) {
+        console.warn('[Auth] Failed to parse token expiry:', error)
+        return true // 當無法解析時假設即將過期
+      }
+    },
+
+    /* ---------- 自動刷新 Token 如果需要 -------------------- */
+    async ensureValidToken(): Promise<string> {
+      if (!this.accessToken) {
+        throw new Error('No access token available')
+      }
+
+      // 快取檢查 - 如果 token 相同且還在有效期內，直接返回
+      const now = Date.now()
+      if (tokenCheckCache?.token === this.accessToken && now < tokenCheckCache.validUntil) {
+        return this.accessToken
+      }
+
+      // 檢查 token 是否即將過期
+      if (this.isTokenExpiringSoon(this.accessToken)) {
+        console.log('[Auth] Access token expiring soon, refreshing...')
+        await this.refreshTokens()
+        // 清除快取，因為 token 已更新
+        tokenCheckCache = null
+      }
+
+      // 設定快取 - 30秒內不重複檢查同一個 token
+      tokenCheckCache = {
+        token: this.accessToken,
+        validUntil: now + 30000 // 30秒快取
+      }
+
+      return this.accessToken
+    },
+
+    /* ---------- 初始化 Token 狀態 -------------------------- */
+    async initTokens() {
+      try {
+        const accessToken = this.accessToken
+        const refreshToken = this.refreshToken
+
+        if (accessToken && refreshToken) {
+          // 檢查 access token 是否即將過期，如果是的話嘗試刷新
+          if (this.isTokenExpiringSoon(accessToken)) {
+            console.log('[Auth] Access token expired on init, attempting refresh...')
+            try {
+              await this.refreshTokens()
+            } catch (error) {
+              console.warn('[Auth] Failed to refresh token on init:', error)
+              await this.logout() // 刷新失敗則登出
+            }
+          }
+        } else if (accessToken && !refreshToken) {
+          // 只有 access token 沒有 refresh token（可能是舊版本）
+          console.log('[Auth] Found legacy token without refresh token')
+          if (this.isTokenExpiringSoon(accessToken)) {
+            console.log('[Auth] Legacy token expired, logging out')
+            await this.logout()
+          }
+        }
+      } catch (error) {
+        console.error('[Auth] Error in initTokens:', error)
+        // 不拋出錯誤，避免阻塞應用啟動
+      }
+    },
+
     /* ---------- 登入 ------------------------------------------ */
     async login (email: string, password: string) {
       try {
         const { access, refresh, profile } = await Koala.login(email, password)
         if (!access) throw new Error('帳號或密碼錯誤')
+        if (!refresh) {
+          console.warn('[Auth] No refresh token received from login API')
+        }
 
         // 處理身份證號解密（登入時）
         let idNumber = ''
@@ -77,18 +247,33 @@ export const useAuth = defineStore('auth', {
           id: String(profile.id ?? profile.user_id ?? ''),
           name: profile.full_name || profile.username || profile.name || '',
           email: profile.email || email,
-          // 判斷邏輯：profile_type === 'staff' 表示是 staff 系統，需要進一步查詢實際角色
-          // 由於登入時沒有返回實際角色，暫時根據 username 判斷
-          roleId: (profile.username?.includes('admin') ? 'admin' : profile.profile_type === 'staff' ? 'staff' : profile.type === 'manager' ? 'manager' : 'user') as any,
+            // 判斷邏輯：profile_type === 'staff' 表示是 staff 系統，需要進一步查詢實際角色
+          roleId: (() => {
+            const role = profile.type === 'admin' || profile.username?.includes('admin') ? 'admin' : profile.profile_type === 'staff' ? 'staff' : profile.type === 'real' ? 'member' : 'visitor'
+            console.log('[Auth] Role mapping:', { profile, mappedRole: role })
+            return role
+          })() as any,
           avatarUrl: profile.avatar_url || undefined,
           phone: profile.phone,
           idNumber: idNumber || undefined
         } : null
 
-        this.token = access
+        this.accessToken = access
+        this.refreshToken = refresh || '' // 儲存 refresh token
         this.user  = mapped
         this.err   = ''
-        localStorage.setItem(TOKEN_KEY, access)
+
+        // 儲存 profile 到 localStorage，以便頁面重新整理後能還原角色資訊
+        if (profile) {
+          saveUserProfile(profile)
+          console.log('[Auth] Profile saved to localStorage:', profile)
+        }
+        localStorage.setItem(ACCESS_TOKEN_KEY, access)
+        if (refresh) {
+          localStorage.setItem(REFRESH_TOKEN_KEY, refresh)
+        }
+        // 清除舊 token
+        localStorage.removeItem(LEGACY_TOKEN_KEY)
         if (mapped) {
           sessionStorage.setItem(ROLE_KEY, mapped.roleId)
           try { localStorage.setItem(ROLE_KEY, mapped.roleId) } catch {}
@@ -111,16 +296,20 @@ export const useAuth = defineStore('auth', {
     /* ---------- 登出 ------------------------------------------ */
     async logout () {
       try { await Koala.logout() } catch {}
-      this.token = ''
+      this.accessToken = ''
+      this.refreshToken = ''
       this.user  = null
       clearAuthStorage()
+      localStorage.removeItem(ACCESS_TOKEN_KEY)
+      localStorage.removeItem(REFRESH_TOKEN_KEY)
+      localStorage.removeItem(LEGACY_TOKEN_KEY)
       sessionStorage.removeItem(ROLE_KEY)
       try { localStorage.removeItem(ROLE_KEY) } catch {}
     },
 
     /* ---------- 載入完整用戶資料 ------------------------------ */
     async fetchFullUserProfile() {
-      if (!this.token || !this.user?.id) return
+      if (!this.accessToken || !this.user?.id) return
 
       try {
         const isStaffUser = this.user.roleId === 'admin' || this.user.roleId === 'staff'
@@ -189,7 +378,7 @@ export const useAuth = defineStore('auth', {
     /* ---------- 獲取個人資料 ---------------------------------- */
     async fetchMe() {
       // Koala collection does not expose a /me endpoint; restore from cache if any
-      if (!this.token) return
+      if (!this.accessToken) return
       const p = loadUserProfile<any>()
       if (p) {
         // 處理身份證號解密（如果有的話）
@@ -212,12 +401,17 @@ export const useAuth = defineStore('auth', {
           id: String(p.id ?? p.user_id ?? ''),
           name: p.full_name || p.username || p.name || '',
           email: p.email || '',
-          roleId: (p.username?.includes('admin') ? 'admin' : p.profile_type === 'staff' ? 'staff' : p.type === 'manager' ? 'manager' : 'user') as any,
+          roleId: (p.type === 'admin' || p.username?.includes('admin') ? 'admin' : p.profile_type === 'staff' ? 'staff' : p.type === 'real' ? 'member' : 'visitor') as any,
           avatarUrl: p.avatar_url || undefined,
           phone: p.phone,
           idNumber: idNumber || undefined
         }
         this.user = mapped
+
+        // 更新 localStorage 中的 profile
+        saveUserProfile(p)
+        console.log('[Auth] Profile updated in localStorage after fetchMe')
+
         try { sessionStorage.setItem(ROLE_KEY, mapped.roleId) } catch {}
         return mapped
       }
@@ -233,8 +427,11 @@ export const useAuth = defineStore('auth', {
       password?: string
       idNumber?: string
     }) {
-      if (!this.token) throw new Error('未登入')
+      if (!this.accessToken) throw new Error('未登入')
       if (!this.user?.id) throw new Error('無法獲取用戶 ID')
+
+      // 確保 token 有效
+      const validToken = await this.ensureValidToken()
 
       try {
         // 根據用戶角色選擇對應的 API
@@ -256,11 +453,21 @@ export const useAuth = defineStore('auth', {
         // 身份證號加密處理 (只有 Member 需要)
         if (!isStaffUser && payload.idNumber) {
           try {
-            const { encryptNationalId } = await import('@/lib/encryption')
+            const { encryptNationalId, looksEncrypted } = await import('@/lib/encryption')
+
+            // 檢查是否已經是加密的資料 - 如果是，表示前端有問題，應該傳明文
+            if (looksEncrypted(payload.idNumber)) {
+              console.warn('National ID appears to be already encrypted. This should not happen.')
+              throw new Error('身分證號格式錯誤，請重新輸入明文身分證號')
+            }
+
+            // 加密明文身分證號
+            console.log('Encrypting national ID for backend:', payload.idNumber)
             apiPayload.national_id = await encryptNationalId(payload.idNumber)
-          } catch (encErr) {
-            console.warn('Failed to encrypt national ID:', encErr)
-            apiPayload.national_id = payload.idNumber // 回退到未加密
+            console.log('Encrypted national ID:', apiPayload.national_id)
+          } catch (encErr: any) {
+            console.error('Failed to encrypt national ID:', encErr)
+            throw new Error('身分證號加密失敗：' + (encErr.message || '未知錯誤'))
           }
         }
 
@@ -268,7 +475,8 @@ export const useAuth = defineStore('auth', {
         if (payload.password) {
           try {
             const { encryptPassword } = await import('@/lib/encryption')
-            apiPayload.password = await encryptPassword(payload.password)
+            // 更新個人資料時使用註冊模式（GENERIC_SECRET_SIGNING_KEY）
+            apiPayload.password = await encryptPassword(payload.password, true)
           } catch (encErr) {
             console.warn('Failed to encrypt password:', encErr)
             throw new Error('密碼加密失敗，請重試')
@@ -280,9 +488,9 @@ export const useAuth = defineStore('auth', {
 
         const res = await fetch(apiEndpoint, {
           method: 'PATCH',
-          headers: { 
-            'Authorization': `Bearer ${this.token}`,
-            'Content-Type': 'application/json' 
+          headers: {
+            'Authorization': `Bearer ${validToken}`,
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify(apiPayload)
         })

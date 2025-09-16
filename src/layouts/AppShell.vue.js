@@ -23,14 +23,40 @@ const userInitials = computed(() => {
 const currentPageTitle = computed(() => {
     return route.meta.title || '總覽';
 });
-const navigation = [
+const allNavigation = [
     { name: '總覽', href: '/', icon: 'i-ph-house' },
     { name: '場域地圖', href: '/sites', icon: 'i-ph-map-pin' },
     { name: '車輛清單', href: '/vehicles', icon: 'i-ph-bicycle' },
     { name: '警報中心', href: '/alerts', icon: 'i-ph-warning-circle' },
     { name: 'ML 預測', href: '/ml', icon: 'i-ph-chart-line-up' },
+    { name: '遙測設備', href: '/admin/telemetry', icon: 'i-ph-wifi-high' },
+    { name: '場域管理', href: '/admin/sites', icon: 'i-ph-map-pin-line' },
     { name: '帳號管理', href: '/admin/users', icon: 'i-ph-users' },
 ];
+// 依角色過濾：member 只能看到「場域地圖」，admin/staff 可見管理功能
+const navigation = computed(() => {
+    var _a, _b;
+    const role = ((_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId) || sessionStorage.getItem('penguin.role') || localStorage.getItem('penguin.role');
+    console.log('[AppShell] Navigation filtering:', {
+        role,
+        userRole: (_b = auth.user) === null || _b === void 0 ? void 0 : _b.roleId,
+        sessionRole: sessionStorage.getItem('penguin.role'),
+        localRole: localStorage.getItem('penguin.role')
+    });
+    if (role === 'member') {
+        return allNavigation.filter(i => i.href === '/sites');
+    }
+    const isPrivileged = role === 'admin' || role === 'staff';
+    const adminPaths = ['/admin/users', '/admin/sites', '/admin/telemetry'];
+    const filtered = allNavigation.filter(i => (adminPaths.includes(i.href) ? isPrivileged : true));
+    console.log('[AppShell] Navigation filtered result:', {
+        isPrivileged,
+        allItemsCount: allNavigation.length,
+        filteredItemsCount: filtered.length,
+        filtered: filtered.map(i => ({ name: i.name, href: i.href }))
+    });
+    return filtered;
+});
 const userMenuItems = [
     { name: '個人資料', action: 'profile', icon: 'i-ph-user' },
     { name: '登出', action: 'logout', icon: 'i-ph-sign-out' },
@@ -107,12 +133,14 @@ const __VLS_1 = __VLS_asFunctionalComponent(__VLS_0, new __VLS_0({
     variant: "ghost",
     size: "sm",
     ...{ class: "lg:hidden" },
+    'aria-label': "開啟側邊選單",
 }));
 const __VLS_2 = __VLS_1({
     ...{ 'onClick': {} },
     variant: "ghost",
     size: "sm",
     ...{ class: "lg:hidden" },
+    'aria-label': "開啟側邊選單",
 }, ...__VLS_functionalComponentArgsRest(__VLS_1));
 let __VLS_4;
 let __VLS_5;

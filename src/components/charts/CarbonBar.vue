@@ -10,23 +10,65 @@ import { CanvasRenderer } from 'echarts/renderers'
 use([BarChart, GridComponent, TooltipComponent, CanvasRenderer])
 
 const props = withDefaults(defineProps<{
-  labels : string[]
-  values : number[]
+  labels: string[]
+  values: number[]
   loading?: boolean
-}>(), { labels: () => [], values: () => [], loading: false })
+  granularity?: 'hour' | 'day' | 'month' | 'year'
+}>(), { labels: () => [], values: () => [], loading: false, granularity: 'day' })
 
-const option = computed(() => ({
-  tooltip:{ trigger:'axis', formatter:(p:any)=>`${p[0].axisValue}<br/>減碳 ${p[0].data} kg` },
-  xAxis  : { type:'category', data: props.labels, axisLabel:{ color:'#a1a1aa' } },
-  yAxis  : { name:'kg', splitLine:{ show:false }, axisLabel:{ color:'#a1a1aa' } },
-  series : [{
-    type:'bar', data: props.values, barWidth:'60%',
-    itemStyle:{ color:'#4ade80', borderRadius:[4,4,0,0] }
-  }],
-  grid:{ top:20, bottom:40, left:50, right:10 },
-  backgroundColor:'transparent',
-  textStyle:{ color:'#e5e7eb', fontFamily:'Inter' }
-}))
+const option = computed(() => {
+  const granularityLabels = {
+    hour: '小時',
+    day: '日',
+    month: '月',
+    year: '年'
+  }
+
+  const xAxisConfig = {
+    type: 'category',
+    data: props.labels,
+    axisLabel: {
+      color: '#a1a1aa',
+      rotate: props.granularity === 'hour' ? 0 : 45,
+      formatter: (value: string) => {
+        if (props.granularity === 'day' && value.includes('-')) {
+          return value.split('-').slice(1).join('/')
+        }
+        return value
+      }
+    }
+  }
+
+  return {
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params: any) => {
+        const param = params[0]
+        const unit = props.granularity === 'hour' ? '小時' : '日'
+        return `${param.axisValue}<br/>減碳量: ${param.data} kg CO₂`
+      }
+    },
+    xAxis: xAxisConfig,
+    yAxis: {
+      name: 'kg CO₂',
+      nameTextStyle: { color: '#a1a1aa' },
+      splitLine: { show: false },
+      axisLabel: { color: '#a1a1aa' }
+    },
+    series: [{
+      type: 'bar',
+      data: props.values,
+      barWidth: props.values.length > 15 ? '80%' : '60%',
+      itemStyle: {
+        color: '#4ade80',
+        borderRadius: [4, 4, 0, 0]
+      }
+    }],
+    grid: { top: 30, bottom: 50, left: 60, right: 20 },
+    backgroundColor: 'transparent',
+    textStyle: { color: '#e5e7eb', fontFamily: 'Inter' }
+  }
+})
 </script>
 
 <template>

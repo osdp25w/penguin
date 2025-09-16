@@ -11,8 +11,12 @@ onMounted(() => store.fetchOpen());
 const toggleStream = () => {
     if (store.isLive)
         location.reload();
-    else
+    else {
+        // 重新載入警報資料
+        store.fetchOpen();
+        // 啟動 WebSocket（如果需要）
         store.startStream();
+    }
 };
 /* 時間格式化 ------------------------------------------------------ */
 const formatTime = (dateStr) => {
@@ -121,6 +125,17 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.d
 __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
     ...{ class: "text-gray-500" },
 });
+if (__VLS_ctx.store.usingMock) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "rounded-lg border border-amber-300 bg-amber-50 text-amber-800 p-3 flex items-start gap-2" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+        ...{ class: "i-ph-info w-5 h-5 mt-0.5" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "text-sm" },
+    });
+}
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "grid gap-4" },
 });
@@ -267,6 +282,20 @@ if (__VLS_ctx.store.errMsg) {
 /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
+/** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-amber-300']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-amber-50']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-amber-800']} */ ;
+/** @type {__VLS_StyleScopedClasses['p-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-start']} */ ;
+/** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['i-ph-info']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-5']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-5']} */ ;
+/** @type {__VLS_StyleScopedClasses['mt-0.5']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
 /** @type {__VLS_StyleScopedClasses['grid']} */ ;
 /** @type {__VLS_StyleScopedClasses['gap-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['card']} */ ;

@@ -7,6 +7,6 @@ data:
   config.public.js: |
     // Public runtime config (non-sensitive)
     window.CONFIG = Object.assign(window.CONFIG || {}, {
-      // Use same-origin; client paths already include "/api/..."
-      API_BASE: ''
+      // Use koala.osdp25w.xyz for direct API calls
+      API_BASE: 'https://koala.osdp25w.xyz'
     });

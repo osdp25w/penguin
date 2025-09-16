@@ -3,6 +3,22 @@ import { faker } from '@faker-js/faker';
 import { SiteSchema } from '@/types/site';
 import { z } from 'zod';
 const SEED_MOCK_ENABLED = import.meta.env.VITE_SEED_MOCK === '1';
+// Export function for direct use when API fails
+export function getDemoSites(region) {
+    const allSites = [];
+    // Generate sites for both regions
+    for (let i = 0; i < 8; i++) {
+        allSites.push(generateMockSite('hualien', i));
+    }
+    for (let i = 0; i < 6; i++) {
+        allSites.push(generateMockSite('taitung', i + 8));
+    }
+    // Filter by region if specified
+    if (region) {
+        return allSites.filter(site => site.region === region);
+    }
+    return allSites;
+}
 // 區域邊界配置（從環境變數讀取）
 const REGION_BOUNDS = {
     hualien: {

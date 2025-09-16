@@ -39,18 +39,42 @@ async function bootstrap() {
     const pinia = createPinia();
     app.use(pinia);
     app.use(router);
-    // 初始化 auth store 狀態
-    const { useAuth } = await import('@/stores/auth');
-    const auth = useAuth();
-    // 如果有 token，嘗試獲取用戶資訊
-    if (auth.token && auth.fetchMe) {
+    // 先啟動應用，再初始化進階功能
+    app.mount('#app');
+    // 非阻塞式初始化進階功能
+    initAdvancedFeatures().catch(console.warn);
+}
+// 非阻塞式初始化進階功能
+async function initAdvancedFeatures() {
+    try {
+        // HTTP 攔截器已移除，統一使用 api.ts 的 token 處理機制
+        // 初始化 auth store 狀態
+        const { useAuth } = await import('@/stores/auth');
+        const auth = useAuth();
+        // 初始化 token 狀態（檢查是否需要 refresh）
         try {
-            await auth.fetchMe();
+            await auth.initTokens();
         }
         catch (error) {
-            console.warn('Failed to fetch user info:', error);
+            console.warn('Failed to initialize tokens:', error);
         }
+        // 如果有有效的 token，嘗試獲取用戶資訊
+        if (auth.accessToken && auth.fetchMe) {
+            try {
+                await auth.fetchMe();
+            }
+            catch (error) {
+                console.warn('Failed to fetch user info:', error);
+            }
+        }
+        // 啟動自動 token 刷新服務
+        const { startAutoRefresh, setupVisibilityChangeRefresh } = await import('@/lib/token-auto-refresh');
+        startAutoRefresh(10, 15); // 每 10 分鐘檢查，剩餘 15 分鐘時刷新
+        setupVisibilityChangeRefresh(5); // 頁面恢復時檢查 token
+        console.log('[App] Advanced features initialized');
     }
-    app.mount('#app');
+    catch (error) {
+        console.error('[App] Failed to initialize advanced features:', error);
+    }
 }
 bootstrap();

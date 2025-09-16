@@ -1,0 +1,56 @@
+{
+  "url": "https://koala.osdp25w.xyz/api/bike/error-log-status/?level=critical",
+  "status": 200,
+  "headers": {
+    "allow": "GET, HEAD, OPTIONS",
+    "alt-svc": "h3=\":443\"; ma=86400",
+    "cf-cache-status": "DYNAMIC",
+    "cf-ray": "97efe154dfed4a48-TPE",
+    "connection": "keep-alive",
+    "content-encoding": "br",
+    "content-type": "application/json",
+    "cross-origin-opener-policy": "same-origin",
+    "date": "Sun, 14 Sep 2025 12:27:44 GMT",
+    "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+    "referrer-policy": "same-origin",
+    "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=XGlTIvmI7gxHeg4%2FLsNldxAh3O%2BOWQP5qqM28cYdCpwYfPxkEb7a%2BJLwWOYEhUt8onaEPrBVENELGTedrnfAYH6Ov%2FpBd%2BEk6NsVnFVj1M6F1u2GXhqQOThNew%3D%3D\"}]}",
+    "server": "cloudflare",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "transfer-encoding": "chunked",
+    "vary": "origin",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY"
+  },
+  "body": {
+    "code": 2000,
+    "msg": "success",
+    "data": [
+      {
+        "id": 55,
+        "error_log": {
+          "id": 16,
+          "code": "battery_level:critical",
+          "bike": {
+            "bike_id": "UP001",
+            "bike_name": "Urban Pro 001",
+            "bike_model": "UP-2024-001",
+            "series_id": 1,
+            "category_id": 1,
+            "telemetry_device_imei": "867295075673001",
+            "created_at": "2025-09-13T02:04:05.853581+08:00",
+            "updated_at": "2025-09-13T02:04:05.853599+08:00"
+          },
+          "level": "critical",
+          "level_display": "Critical",
+          "title": "電池電量極低",
+          "detail": "車輛 UP001 電池電量極低 (7%)，即將無法使用",
+          "telemetry_device_imei": "867295075673001",
+          "telemetry_record": 33206,
+          "created_at": "2025-09-14T02:45:34.839219+08:00"
+        },
+        "is_read": false,
+        "read_at": null
+      }
+    ]
+  }
+}

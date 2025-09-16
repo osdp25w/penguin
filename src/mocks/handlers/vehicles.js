@@ -3,9 +3,10 @@ import { faker } from '@faker-js/faker';
 const SEED_MOCK_ENABLED = import.meta.env.VITE_SEED_MOCK === '1';
 // 生成新格式的車輛資料
 function generateNewVehicleData() {
-    if (!SEED_MOCK_ENABLED) {
-        return { total: 0, vehicles: [] };
-    }
+    // Always generate data for fallback use
+    // if (!SEED_MOCK_ENABLED) {
+    //   return { total: 0, vehicles: [] }
+    // }
     const vehicles = [];
     const names = ['Bike0594', 'Bike0123', 'Bike0456', 'Bike0789', 'Bike0321', 'Bike0654', 'Bike0987', 'Bike0111', 'Bike0222', 'Bike0333',
         '花蓮號', '太魯閣號', '七星潭號', '清水斷崖號', '慈濟號', '東大門號', '鯉魚潭號', '瑞穗號', '玉里號', '富里號',

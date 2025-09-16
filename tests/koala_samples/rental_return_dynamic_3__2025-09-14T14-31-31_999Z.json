@@ -1,0 +1,49 @@
+{
+  "url": "https://koala.osdp25w.xyz/api/rental/staff/rentals/3/",
+  "status": 200,
+  "headers": {
+    "allow": "GET, PUT, PATCH, HEAD, OPTIONS",
+    "alt-svc": "h3=\":443\"; ma=86400",
+    "cf-cache-status": "DYNAMIC",
+    "cf-ray": "97f096a91ee24a97-TPE",
+    "connection": "keep-alive",
+    "content-encoding": "br",
+    "content-type": "application/json",
+    "cross-origin-opener-policy": "same-origin",
+    "date": "Sun, 14 Sep 2025 14:31:32 GMT",
+    "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+    "referrer-policy": "same-origin",
+    "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=vJzYroPxmI1n7%2FzjOgRbvSqXkrBg0uoPZSsktL02m2xT5d6p%2FDSIFjpzE0o7ysKYnqEnl4Qbuk5bxSdzVdHBK0MJA8ie6DgeKaM2xBgpwjc1CihHtIk3V5ZttQ%3D%3D\"}]}",
+    "server": "cloudflare",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "transfer-encoding": "chunked",
+    "vary": "origin",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY"
+  },
+  "body": {
+    "code": 2000,
+    "msg": "success",
+    "data": {
+      "id": 3,
+      "bike": {
+        "bike_id": "UP002",
+        "bike_name": "Urban Pro 002",
+        "bike_model": "UP-2024-002"
+      },
+      "member": {
+        "id": 2,
+        "full_name": "Pony Member Real2",
+        "phone": "+886912345672"
+      },
+      "start_time": "2025-09-14T20:56:30.352982+08:00",
+      "end_time": "2025-09-14T22:31:32.058255+08:00",
+      "rental_status": "completed",
+      "return_location": "",
+      "total_fee": "0.00",
+      "memo": "",
+      "duration_minutes": 95,
+      "updated_at": "2025-09-14T22:31:32.062378+08:00"
+    }
+  }
+}

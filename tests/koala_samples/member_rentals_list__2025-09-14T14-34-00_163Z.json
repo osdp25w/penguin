@@ -1,0 +1,29 @@
+{
+  "url": "https://koala.osdp25w.xyz/api/rental/member/rentals/",
+  "status": 403,
+  "headers": {
+    "allow": "GET, POST, HEAD, OPTIONS",
+    "alt-svc": "h3=\":443\"; ma=86400",
+    "cf-cache-status": "DYNAMIC",
+    "cf-ray": "97f09a46de5d840f-TPE",
+    "connection": "keep-alive",
+    "content-encoding": "br",
+    "content-type": "application/json",
+    "cross-origin-opener-policy": "same-origin",
+    "date": "Sun, 14 Sep 2025 14:34:00 GMT",
+    "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+    "referrer-policy": "same-origin",
+    "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=r7RIofBBXdpg%2Bx3Szrhi1k7JSquMZ8a6oToUSsnF%2FrvKvM2XCllN1MajKg1xQENbrtFIsTFR7XrePQguqdJ%2BkHiZHLQiu5FUKQeb7llPTPVaoeNKebzLHPr4Dw%3D%3D\"}]}",
+    "server": "cloudflare",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "transfer-encoding": "chunked",
+    "vary": "origin",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY"
+  },
+  "body": {
+    "code": 3002,
+    "msg": "permission denied",
+    "details": null
+  }
+}

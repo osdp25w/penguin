@@ -1,8 +1,11 @@
 // src/lib/api.ts
 // Lightweight fetch wrapper for Koala APIs with base URL and auth handling
-const ACCESS_KEY = 'penguin.jwt';
-const REFRESH_KEY = 'penguin.refresh';
+const ACCESS_KEY = 'auth_access_token';
+const REFRESH_KEY = 'auth_refresh_token';
 const USER_KEY = 'penguin.user';
+// 往下兼容
+const LEGACY_ACCESS_KEY = 'penguin.jwt';
+const LEGACY_REFRESH_KEY = 'penguin.refresh';
 function runtime() {
     try {
         return (globalThis === null || globalThis === void 0 ? void 0 : globalThis.CONFIG) || {};
@@ -12,23 +15,16 @@ function runtime() {
     }
 }
 function getBaseUrl() {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d, _e, _f;
     const rt = runtime();
     const envBase = ((_b = (_a = import.meta) === null || _a === void 0 ? void 0 : _a.env) === null || _b === void 0 ? void 0 : _b.VITE_KOALA_BASE_URL) || ((_d = (_c = import.meta) === null || _c === void 0 ? void 0 : _c.env) === null || _d === void 0 ? void 0 : _d.VITE_API_BASE);
-    // Development: prefer local proxy to avoid CORS
-    if ((_f = (_e = import.meta) === null || _e === void 0 ? void 0 : _e.env) === null || _f === void 0 ? void 0 : _f.DEV) {
-        let base = envBase !== null && envBase !== void 0 ? envBase : '/koala';
-        if (/^https?:/i.test(base))
-            base = '/koala';
-        return String(base).replace(/\/$/, '');
-    }
-    // Production: prefer runtime config (same-origin by default)
-    const base = ((_h = (_g = rt.API_BASE) !== null && _g !== void 0 ? _g : envBase) !== null && _h !== void 0 ? _h : '').replace(/\/$/, '');
+    // Use direct URL - no proxy in both dev and production
+    const base = ((_f = (_e = rt.API_BASE) !== null && _e !== void 0 ? _e : envBase) !== null && _f !== void 0 ? _f : 'https://koala.osdp25w.xyz').replace(/\/$/, '');
     return base;
 }
 function getAccessToken() {
     try {
-        return localStorage.getItem(ACCESS_KEY);
+        return localStorage.getItem(ACCESS_KEY) || localStorage.getItem(LEGACY_ACCESS_KEY);
     }
     catch (_a) {
         return null;
@@ -36,7 +32,7 @@ function getAccessToken() {
 }
 function getRefreshToken() {
     try {
-        return localStorage.getItem(REFRESH_KEY);
+        return localStorage.getItem(REFRESH_KEY) || localStorage.getItem(LEGACY_REFRESH_KEY);
     }
     catch (_a) {
         return null;
@@ -56,37 +52,26 @@ export function clearAuthStorage() {
         localStorage.removeItem(ACCESS_KEY);
         localStorage.removeItem(REFRESH_KEY);
         localStorage.removeItem(USER_KEY);
+        // 清除舊 keys
+        localStorage.removeItem(LEGACY_ACCESS_KEY);
+        localStorage.removeItem(LEGACY_REFRESH_KEY);
     }
     catch (_a) { }
 }
 async function request(path, opts = {}) {
-    var _a, _b;
+    var _a, _b, _c, _d;
     const base = getBaseUrl();
     // Accept full URL; for absolute API paths ('/api/...') don't prepend base
     let url;
     if (/^https?:/i.test(path))
         url = path;
     else if (path.startsWith('/api')) {
-        // Check if base already contains /api to avoid duplication
-        if (base && base.includes('/api')) {
-            // Remove /api from path to avoid duplication
-            url = `${base}${path.replace('/api', '')}`;
-        }
-        else {
-            url = path;
-        }
+        // Always use base URL for API paths, no relative paths
+        url = `${base}${path}`;
     }
     else
         url = `${base}${path.startsWith('/') ? '' : '/'}${path}`;
-    // Last-resort rewrite: if running from local/LAN dev and URL points to Koala domain, rewrite to proxy
-    try {
-        const isLocal = typeof window !== 'undefined' && /^https?:\/\/(localhost|127\.0\.0\.1|10\.|172\.(1[6-9]|2\d|3[0-1])|192\.168\.)/i.test(window.location.origin);
-        if (isLocal && /^https?:\/\/koala\.osdp25w\.xyz\//i.test(url)) {
-            const u = new URL(url);
-            url = `/koala${u.pathname}${u.search}`;
-        }
-    }
-    catch (_c) { }
+    // Direct call to koala.osdp25w.xyz - no proxy rewriting
     const headers = {
         'Content-Type': 'application/json',
         ...(opts.headers || {})
@@ -96,16 +81,7 @@ async function request(path, opts = {}) {
         headers['Authorization'] = `Bearer ${token}`;
     const exec = async () => fetch(url, { ...opts, headers });
     let res = await exec();
-    if (res.status === 401) {
-        // Try refresh once
-        const ok = await refreshToken();
-        if (ok) {
-            const newToken = getAccessToken();
-            if (newToken)
-                headers['Authorization'] = `Bearer ${newToken}`;
-            res = await exec();
-        }
-    }
+    // 401 handling removed - let auth store handle token refresh via upper layers
     if (!res.ok) {
         const text = await res.text().catch(() => '');
         throw new Error(text || res.statusText);
@@ -115,15 +91,17 @@ async function request(path, opts = {}) {
     if (!ct.includes('application/json'))
         return undefined;
     const data = await res.json();
-    // Auto-decrypt sensitive values if a key is provided
+    // Auto-decrypt sensitive values
+    // 在生產環境中，即使沒有前端 key 也要嘗試使用伺服器端解密
     const rt = runtime();
     const sensitiveKey = rt.KOALA_SENSITIVE_KEY || ((_b = (_a = import.meta) === null || _a === void 0 ? void 0 : _a.env) === null || _b === void 0 ? void 0 : _b.VITE_KOALA_SENSITIVE_KEY);
-    if (sensitiveKey) {
+    // 在生產環境中，即使沒有 key 也嘗試解密（伺服器會使用自己的 key）
+    if (sensitiveKey || !((_d = (_c = import.meta) === null || _c === void 0 ? void 0 : _c.env) === null || _d === void 0 ? void 0 : _d.DEV)) {
         try {
-            const dec = await decryptSensitiveDeep(data, sensitiveKey);
+            const dec = await decryptSensitiveDeep(data, sensitiveKey || '');
             return dec;
         }
-        catch (_d) {
+        catch (_e) {
             // ignore decryption errors, return raw data
             return data;
         }
@@ -149,7 +127,7 @@ async function decryptSensitiveDeep(input, key) {
     // 強制使用服務器端解密，禁用 WebCrypto
     const mapping = new Map();
     try {
-        // 使用服務器端解密端點
+        // 使用服務器端解密端點 - 加解密服務仍在 penguin nginx
         const endpoint = '/api/fernet/decrypt';
         const r = await fetch(endpoint, {
             method: 'POST',
@@ -196,28 +174,94 @@ export const http = {
 };
 // Token refresh flow
 export async function refreshToken() {
-    var _a, _b, _c, _d;
+    var _a, _b;
+    const base = getBaseUrl();
+    const refresh = getRefreshToken();
+    if (!refresh) {
+        console.warn('[refreshToken] No refresh token available');
+        return false;
+    }
+    try {
+        console.log('[refreshToken] Attempting to refresh access token...');
+        const res = await fetch(`${base}/api/account/auth/refresh/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: refresh })
+        });
+        if (!res.ok) {
+            console.warn('[refreshToken] Refresh failed with status:', res.status);
+            // If refresh fails, clear tokens to force re-login
+            clearAuthStorage();
+            return false;
+        }
+        const data = await res.json();
+        console.log('[refreshToken] Response received:', {
+            code: data === null || data === void 0 ? void 0 : data.code,
+            hasTokens: !!((_a = data === null || data === void 0 ? void 0 : data.data) === null || _a === void 0 ? void 0 : _a.tokens)
+        });
+        // Handle different response formats
+        let access;
+        let newRefresh;
+        if ((data === null || data === void 0 ? void 0 : data.code) === 2000 && ((_b = data === null || data === void 0 ? void 0 : data.data) === null || _b === void 0 ? void 0 : _b.tokens)) {
+            // Standard Koala response format
+            access = data.data.tokens.access_token;
+            newRefresh = data.data.tokens.refresh_token;
+        }
+        else if (data === null || data === void 0 ? void 0 : data.access_token) {
+            // Alternative format
+            access = data.access_token;
+            newRefresh = data.refresh_token;
+        }
+        else if (data === null || data === void 0 ? void 0 : data.token) {
+            // Simple format
+            access = data.token;
+        }
+        if (access) {
+            setTokens(access, newRefresh || refresh); // Keep old refresh if no new one
+            console.log('[refreshToken] Token refreshed successfully');
+            return true;
+        }
+        else {
+            console.warn('[refreshToken] No access token in response');
+            clearAuthStorage();
+            return false;
+        }
+    }
+    catch (error) {
+        console.error('[refreshToken] Network error:', error);
+        return false;
+    }
+}
+// Enhanced refresh with profile update
+export async function refreshTokenWithProfile() {
     const base = getBaseUrl();
     const refresh = getRefreshToken();
     if (!refresh)
-        return false;
+        return { success: false };
     try {
         const res = await fetch(`${base}/api/account/auth/refresh/`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ refresh_token: refresh })
         });
-        if (!res.ok)
-            return false;
+        if (!res.ok) {
+            clearAuthStorage();
+            return { success: false };
+        }
         const data = await res.json();
-        const access = ((_b = (_a = data === null || data === void 0 ? void 0 : data.data) === null || _a === void 0 ? void 0 : _a.tokens) === null || _b === void 0 ? void 0 : _b.access_token) || (data === null || data === void 0 ? void 0 : data.access_token) || (data === null || data === void 0 ? void 0 : data.token);
-        const newRefresh = ((_d = (_c = data === null || data === void 0 ? void 0 : data.data) === null || _c === void 0 ? void 0 : _c.tokens) === null || _d === void 0 ? void 0 : _d.refresh_token) || (data === null || data === void 0 ? void 0 : data.refresh_token);
-        if (access)
-            setTokens(access, newRefresh);
-        return !!access;
+        if ((data === null || data === void 0 ? void 0 : data.code) === 2000 && (data === null || data === void 0 ? void 0 : data.data)) {
+            const { tokens, profile } = data.data;
+            if (tokens === null || tokens === void 0 ? void 0 : tokens.access_token) {
+                setTokens(tokens.access_token, tokens.refresh_token || refresh);
+                if (profile)
+                    saveUserProfile(profile);
+                return { success: true, profile };
+            }
+        }
+        return { success: false };
     }
-    catch (_e) {
-        return false;
+    catch (_a) {
+        return { success: false };
     }
 }
 export function saveUserProfile(profile) {

@@ -1,0 +1,145 @@
+{
+  "url": "https://koala.osdp25w.xyz/api/bike/realtime-status/?limit=5&offset=3",
+  "status": 200,
+  "headers": {
+    "allow": "GET, HEAD, OPTIONS",
+    "alt-svc": "h3=\":443\"; ma=86400",
+    "cf-cache-status": "DYNAMIC",
+    "cf-ray": "97f09a200f72840f-TPE",
+    "connection": "keep-alive",
+    "content-encoding": "br",
+    "content-type": "application/json",
+    "cross-origin-opener-policy": "same-origin",
+    "date": "Sun, 14 Sep 2025 14:33:53 GMT",
+    "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+    "referrer-policy": "same-origin",
+    "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=fO23ZWW6PADJTUiefnUAdizTQhZ5ecm34gb8u8fRnHEgcr0cDjNm%2F5z%2FwaUzvGUKa5M4HD25mjYu715MEsOl4f1KDGuIjk6CBfwCnVn0xDui5LUzJtosXSBYjg%3D%3D\"}]}",
+    "server": "cloudflare",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "transfer-encoding": "chunked",
+    "vary": "origin",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY"
+  },
+  "body": {
+    "code": 2000,
+    "msg": "success",
+    "data": {
+      "count": 12,
+      "next": "http://koala.osdp25w.xyz/api/bike/realtime-status/?limit=5&offset=8",
+      "previous": "http://koala.osdp25w.xyz/api/bike/realtime-status/?limit=5",
+      "results": [
+        {
+          "bike": {
+            "bike_id": "ME001",
+            "bike_name": "Mountain Explorer 001",
+            "bike_model": "ME-2024-001",
+            "series_id": 2,
+            "category_id": 1,
+            "telemetry_device_imei": "867295075673011",
+            "created_at": "2025-09-13T02:04:05.853694+08:00",
+            "updated_at": "2025-09-13T02:04:05.853700+08:00"
+          },
+          "latitude": 25042919,
+          "longitude": 121564294,
+          "lat_decimal": 25.042919,
+          "lng_decimal": 121.564294,
+          "soc": 6,
+          "vehicle_speed": 0,
+          "status": "idle",
+          "current_member": null,
+          "last_seen": "2025-09-14T02:18:02.325707+08:00",
+          "updated_at": "2025-09-14T02:18:02.349998+08:00"
+        },
+        {
+          "bike": {
+            "bike_id": "ME002",
+            "bike_name": "Mountain Explorer 002",
+            "bike_model": "ME-2024-002",
+            "series_id": 2,
+            "category_id": 1,
+            "telemetry_device_imei": "867295075673012",
+            "created_at": "2025-09-13T02:04:05.853720+08:00",
+            "updated_at": "2025-09-13T02:04:05.853726+08:00"
+          },
+          "latitude": 25050461,
+          "longitude": 121524734,
+          "lat_decimal": 25.050461,
+          "lng_decimal": 121.524734,
+          "soc": 88,
+          "vehicle_speed": 0,
+          "status": "idle",
+          "current_member": null,
+          "last_seen": "2025-09-13T02:04:05.852987+08:00",
+          "updated_at": "2025-09-13T02:04:05.858779+08:00"
+        },
+        {
+          "bike": {
+            "bike_id": "CC001",
+            "bike_name": "City Cruiser 001",
+            "bike_model": "CC-2024-001",
+            "series_id": 3,
+            "category_id": 1,
+            "telemetry_device_imei": "867295075673021",
+            "created_at": "2025-09-13T02:04:05.853746+08:00",
+            "updated_at": "2025-09-13T02:04:05.853751+08:00"
+          },
+          "latitude": 25040575,
+          "longitude": 121567511,
+          "lat_decimal": 25.040575,
+          "lng_decimal": 121.567511,
+          "soc": 10,
+          "vehicle_speed": 0,
+          "status": "idle",
+          "current_member": null,
+          "last_seen": "2025-09-14T02:27:43.222939+08:00",
+          "updated_at": "2025-09-14T02:27:43.224594+08:00"
+        },
+        {
+          "bike": {
+            "bike_id": "CC002",
+            "bike_name": "City Cruiser 002",
+            "bike_model": "CC-2024-002",
+            "series_id": 3,
+            "category_id": 1,
+            "telemetry_device_imei": "867295075673022",
+            "created_at": "2025-09-13T02:04:05.853771+08:00",
+            "updated_at": "2025-09-13T02:04:05.853776+08:00"
+          },
+          "latitude": 25037462,
+          "longitude": 121565937,
+          "lat_decimal": 25.037462,
+          "lng_decimal": 121.565937,
+          "soc": 13,
+          "vehicle_speed": 0,
+          "status": "maintenance",
+          "current_member": null,
+          "last_seen": "2025-09-14T02:18:02.325700+08:00",
+          "updated_at": "2025-09-14T02:18:02.344338+08:00"
+        },
+        {
+          "bike": {
+            "bike_id": "CR001",
+            "bike_name": "Classic Road 001",
+            "bike_model": "CR-2024-001",
+            "series_id": 4,
+            "category_id": 2,
+            "telemetry_device_imei": "867295075673031",
+            "created_at": "2025-09-13T02:04:05.853795+08:00",
+            "updated_at": "2025-09-13T02:04:05.853801+08:00"
+          },
+          "latitude": 25039314,
+          "longitude": 121523414,
+          "lat_decimal": 25.039314,
+          "lng_decimal": 121.523414,
+          "soc": 100,
+          "vehicle_speed": 0,
+          "status": "maintenance",
+          "current_member": null,
+          "last_seen": "2025-09-13T02:04:05.853126+08:00",
+          "updated_at": "2025-09-13T02:04:05.858880+08:00"
+        }
+      ]
+    }
+  }
+}

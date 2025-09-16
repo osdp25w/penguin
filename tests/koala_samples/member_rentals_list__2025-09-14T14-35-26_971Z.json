@@ -1,0 +1,72 @@
+{
+  "url": "https://koala.osdp25w.xyz/api/rental/member/rentals/",
+  "status": 200,
+  "headers": {
+    "allow": "GET, POST, HEAD, OPTIONS",
+    "alt-svc": "h3=\":443\"; ma=86400",
+    "cf-cache-status": "DYNAMIC",
+    "cf-ray": "97f09c66284b56f4-TPE",
+    "connection": "keep-alive",
+    "content-encoding": "br",
+    "content-type": "application/json",
+    "cross-origin-opener-policy": "same-origin",
+    "date": "Sun, 14 Sep 2025 14:35:27 GMT",
+    "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+    "referrer-policy": "same-origin",
+    "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=8GBofRt7XLVFFifsBmfCdoln3EI%2B4d3sTRbKJSWYpfIBWD%2FcxlKgRGmNoBDJKfoIXyEvgWiY5kH6UFuKDL2J3cOYGy86IVCoZ21K39rR7gPUFBuCjBsJCXLgWw%3D%3D\"}]}",
+    "server": "cloudflare",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "transfer-encoding": "chunked",
+    "vary": "origin",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY"
+  },
+  "body": {
+    "code": 2000,
+    "msg": "success",
+    "data": [
+      {
+        "id": 2,
+        "bike": {
+          "bike_id": "SS001",
+          "bike_name": "Smart Scooter 001",
+          "bike_model": "SS-2024-001"
+        },
+        "member": {
+          "id": 1,
+          "full_name": "Pony Member Real1",
+          "phone": "+886912345679"
+        },
+        "start_time": "2025-09-13T02:10:26.120369+08:00",
+        "end_time": "2025-09-14T22:33:59.882663+08:00",
+        "rental_status": "completed",
+        "pickup_location": "",
+        "return_location": "",
+        "total_fee": "0.00",
+        "duration_minutes": 2663,
+        "created_at": "2025-09-13T02:10:26.120732+08:00"
+      },
+      {
+        "id": 1,
+        "bike": {
+          "bike_id": "UP003",
+          "bike_name": "Urban Pro 003",
+          "bike_model": "UP-2024-003"
+        },
+        "member": {
+          "id": 1,
+          "full_name": "Pony Member Real1",
+          "phone": "+886912345679"
+        },
+        "start_time": "2025-09-13T02:06:41.258449+08:00",
+        "end_time": "2025-09-13T02:07:10.491761+08:00",
+        "rental_status": "completed",
+        "pickup_location": "",
+        "return_location": "",
+        "total_fee": "0.00",
+        "duration_minutes": 0,
+        "created_at": "2025-09-13T02:06:41.258728+08:00"
+      }
+    ]
+  }
+}

@@ -108,12 +108,25 @@ const handleClose = () => {
     }
 };
 // Load current user data
-const loadUserData = () => {
+const loadUserData = async () => {
     if (auth.user) {
         form.name = auth.user.name || '';
         form.email = auth.user.email || '';
         form.phone = auth.user.phone || '';
-        form.idNumber = auth.user.idNumber || '';
+        // 處理身分證號 - 確保顯示解密後的資料供用戶編輯
+        let idNumber = auth.user.idNumber || '';
+        if (idNumber && idNumber.startsWith('gAAAAA')) {
+            try {
+                const { decryptNationalId } = await import('@/lib/encryption');
+                idNumber = await decryptNationalId(idNumber);
+                console.log('Decrypted national ID for editing:', idNumber);
+            }
+            catch (err) {
+                console.warn('Failed to decrypt national ID for editing:', err);
+                idNumber = ''; // 解密失敗時清空，讓用戶重新輸入
+            }
+        }
+        form.idNumber = idNumber;
     }
 };
 // Lifecycle

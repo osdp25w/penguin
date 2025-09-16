@@ -1,9 +1,12 @@
 // src/lib/api.ts
 // Lightweight fetch wrapper for Koala APIs with base URL and auth handling
 
-const ACCESS_KEY = 'penguin.jwt'
-const REFRESH_KEY = 'penguin.refresh'
+const ACCESS_KEY = 'auth_access_token'
+const REFRESH_KEY = 'auth_refresh_token'
 const USER_KEY   = 'penguin.user'
+// 往下兼容
+const LEGACY_ACCESS_KEY = 'penguin.jwt'
+const LEGACY_REFRESH_KEY = 'penguin.refresh'
 
 function runtime(): any {
   try { return (globalThis as any)?.CONFIG || {} } catch { return {} }
@@ -12,23 +15,21 @@ function runtime(): any {
 function getBaseUrl() {
   const rt = runtime()
   const envBase = (import.meta as any)?.env?.VITE_KOALA_BASE_URL || (import.meta as any)?.env?.VITE_API_BASE
-  // Development: prefer local proxy to avoid CORS
-  if ((import.meta as any)?.env?.DEV) {
-    let base = envBase ?? '/koala'
-    if (/^https?:/i.test(base)) base = '/koala'
-    return String(base).replace(/\/$/, '')
-  }
-  // Production: prefer runtime config (same-origin by default)
-  const base = (rt.API_BASE ?? envBase ?? '').replace(/\/$/, '')
+  // Use direct URL - no proxy in both dev and production
+  const base = (rt.API_BASE ?? envBase ?? 'https://koala.osdp25w.xyz').replace(/\/$/, '')
   return base
 }
 
 function getAccessToken(): string | null {
-  try { return localStorage.getItem(ACCESS_KEY) } catch { return null }
+  try {
+    return localStorage.getItem(ACCESS_KEY) || localStorage.getItem(LEGACY_ACCESS_KEY)
+  } catch { return null }
 }
 
 function getRefreshToken(): string | null {
-  try { return localStorage.getItem(REFRESH_KEY) } catch { return null }
+  try {
+    return localStorage.getItem(REFRESH_KEY) || localStorage.getItem(LEGACY_REFRESH_KEY)
+  } catch { return null }
 }
 
 function setTokens(access?: string, refresh?: string) {
@@ -43,6 +44,9 @@ export function clearAuthStorage() {
     localStorage.removeItem(ACCESS_KEY)
     localStorage.removeItem(REFRESH_KEY)
     localStorage.removeItem(USER_KEY)
+    // 清除舊 keys
+    localStorage.removeItem(LEGACY_ACCESS_KEY)
+    localStorage.removeItem(LEGACY_REFRESH_KEY)
   } catch {}
 }
 
@@ -54,23 +58,11 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   let url: string
   if (/^https?:/i.test(path)) url = path
   else if (path.startsWith('/api')) {
-    // Check if base already contains /api to avoid duplication
-    if (base && base.includes('/api')) {
-      // Remove /api from path to avoid duplication
-      url = `${base}${path.replace('/api', '')}`
-    } else {
-      url = path
-    }
+    // Always use base URL for API paths, no relative paths
+    url = `${base}${path}`
   }
   else url = `${base}${path.startsWith('/') ? '' : '/'}${path}`
-  // Last-resort rewrite: if running from local/LAN dev and URL points to Koala domain, rewrite to proxy
-  try {
-    const isLocal = typeof window !== 'undefined' && /^https?:\/\/(localhost|127\.0\.0\.1|10\.|172\.(1[6-9]|2\d|3[0-1])|192\.168\.)/i.test(window.location.origin)
-    if (isLocal && /^https?:\/\/koala\.osdp25w\.xyz\//i.test(url)) {
-      const u = new URL(url)
-      url = `/koala${u.pathname}${u.search}`
-    }
-  } catch {}
+  // Direct call to koala.osdp25w.xyz - no proxy rewriting
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -83,15 +75,7 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const exec = async () => fetch(url, { ...opts, headers })
 
   let res = await exec()
-  if (res.status === 401) {
-    // Try refresh once
-    const ok = await refreshToken()
-    if (ok) {
-      const newToken = getAccessToken()
-      if (newToken) headers['Authorization'] = `Bearer ${newToken}`
-      res = await exec()
-    }
-  }
+  // 401 handling removed - let auth store handle token refresh via upper layers
 
   if (!res.ok) {
     const text = await res.text().catch(() => '')
@@ -139,7 +123,7 @@ async function decryptSensitiveDeep(input: any, key: string): Promise<any> {
   const mapping = new Map<string, string>()
   
   try {
-    // 使用服務器端解密端點
+    // 使用服務器端解密端點 - 加解密服務仍在 penguin nginx
     const endpoint = '/api/fernet/decrypt'
     const r = await fetch(endpoint, {
       method: 'POST',
@@ -187,7 +171,69 @@ export const http = {
 export async function refreshToken(): Promise<boolean> {
   const base = getBaseUrl()
   const refresh = getRefreshToken()
-  if (!refresh) return false
+  if (!refresh) {
+    console.warn('[refreshToken] No refresh token available')
+    return false
+  }
+
+  try {
+    console.log('[refreshToken] Attempting to refresh access token...')
+    const res = await fetch(`${base}/api/account/auth/refresh/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refresh })
+    })
+    
+    if (!res.ok) {
+      console.warn('[refreshToken] Refresh failed with status:', res.status)
+      // If refresh fails, clear tokens to force re-login
+      clearAuthStorage()
+      return false
+    }
+    
+    const data: any = await res.json()
+    console.log('[refreshToken] Response received:', { 
+      code: data?.code, 
+      hasTokens: !!data?.data?.tokens 
+    })
+    
+    // Handle different response formats
+    let access: string | undefined
+    let newRefresh: string | undefined
+    
+    if (data?.code === 2000 && data?.data?.tokens) {
+      // Standard Koala response format
+      access = data.data.tokens.access_token
+      newRefresh = data.data.tokens.refresh_token
+    } else if (data?.access_token) {
+      // Alternative format
+      access = data.access_token
+      newRefresh = data.refresh_token
+    } else if (data?.token) {
+      // Simple format
+      access = data.token
+    }
+    
+    if (access) {
+      setTokens(access, newRefresh || refresh) // Keep old refresh if no new one
+      console.log('[refreshToken] Token refreshed successfully')
+      return true
+    } else {
+      console.warn('[refreshToken] No access token in response')
+      clearAuthStorage()
+      return false
+    }
+  } catch (error) {
+    console.error('[refreshToken] Network error:', error)
+    return false
+  }
+}
+
+// Enhanced refresh with profile update
+export async function refreshTokenWithProfile(): Promise<{ success: boolean; profile?: any }> {
+  const base = getBaseUrl()
+  const refresh = getRefreshToken()
+  if (!refresh) return { success: false }
 
   try {
     const res = await fetch(`${base}/api/account/auth/refresh/`, {
@@ -195,14 +241,26 @@ export async function refreshToken(): Promise<boolean> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: refresh })
     })
-    if (!res.ok) return false
+    
+    if (!res.ok) {
+      clearAuthStorage()
+      return { success: false }
+    }
+    
     const data: any = await res.json()
-    const access = data?.data?.tokens?.access_token || data?.access_token || data?.token
-    const newRefresh = data?.data?.tokens?.refresh_token || data?.refresh_token
-    if (access) setTokens(access, newRefresh)
-    return !!access
+    
+    if (data?.code === 2000 && data?.data) {
+      const { tokens, profile } = data.data
+      if (tokens?.access_token) {
+        setTokens(tokens.access_token, tokens.refresh_token || refresh)
+        if (profile) saveUserProfile(profile)
+        return { success: true, profile }
+      }
+    }
+    
+    return { success: false }
   } catch {
-    return false
+    return { success: false }
   }
 }
 

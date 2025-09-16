@@ -88,20 +88,35 @@ function fernetEncrypt(keyB64u, text) {
   return bufToB64u(Buffer.concat([body, mac]));
 }
 
-// Fernet 加密端點（使用服務環境變數中的 KOALA_LOGIN_KEY）
+// Fernet 加密端點
 app.post('/api/fernet/encrypt', (req, res) => {
   try {
-    const { text } = req.body;
-    const key = process.env.KOALA_LOGIN_KEY;
+    const { text, key: requestKey, type = 'password' } = req.body;
+
+    let encryptionKey = requestKey;
+
+    if (!encryptionKey) {
+      // 根據加密類型選擇正確的金鑰
+      if (type === 'sensitive' || type === 'national_id') {
+        // 敏感資訊（身分證、電話等）使用 SENSITIVE_KEY
+        encryptionKey = process.env.KOALA_SENSITIVE_KEY;
+        console.log('Using SENSITIVE_KEY for', type);
+      } else {
+        // 密碼等使用 LOGIN_KEY
+        encryptionKey = process.env.KOALA_LOGIN_KEY;
+        console.log('Using LOGIN_KEY for', type);
+      }
+    }
 
     if (!text) {
       return res.status(400).json({ error: 'Missing text' });
     }
-    if (!key) {
+    if (!encryptionKey) {
       return res.status(500).json({ error: 'Server key not configured' });
     }
 
-    const token = fernetEncrypt(key, text);
+    const token = fernetEncrypt(encryptionKey, text);
+    console.log(`Encrypted ${type}:`, text.substring(0, 3) + '***', '->', token.substring(0, 20) + '...');
     res.json({ token });
   } catch (error) {
     console.error('Encryption error:', error);
@@ -109,25 +124,61 @@ app.post('/api/fernet/encrypt', (req, res) => {
   }
 });
 
-// Fernet 解密端點（批量解密，支持不同金鑰）
+// Fernet 解密端點
 app.post('/api/fernet/decrypt', (req, res) => {
   try {
-    const { tokens, key } = req.body;
+    const { tokens, key, type = 'auto' } = req.body;
 
     if (!tokens || !Array.isArray(tokens)) {
       return res.status(400).json({ error: 'Missing tokens array' });
     }
 
-    // 在開發環境使用前端提供的金鑰，生產環境使用服務器端金鑰
-    const decryptKey = key || process.env.KOALA_SENSITIVE_KEY;
-    
-    if (!decryptKey) {
-      return res.status(500).json({ error: 'Server key not configured' });
-    }
-
     const values = tokens.map(token => {
       try {
-        return fernetDecrypt(decryptKey, token);
+        // 如果前端提供了 key，優先使用
+        if (key) {
+          return fernetDecrypt(key, token);
+        }
+
+        // 根據解密類型選擇金鑰
+        if (type === 'sensitive' || type === 'national_id') {
+          // 敏感資訊使用 SENSITIVE_KEY
+          if (process.env.KOALA_SENSITIVE_KEY) {
+            console.log('Decrypting with SENSITIVE_KEY for', type);
+            return fernetDecrypt(process.env.KOALA_SENSITIVE_KEY, token);
+          }
+        } else if (type === 'password') {
+          // 密碼使用 LOGIN_KEY
+          if (process.env.KOALA_LOGIN_KEY) {
+            console.log('Decrypting with LOGIN_KEY for', type);
+            return fernetDecrypt(process.env.KOALA_LOGIN_KEY, token);
+          }
+        } else {
+          // auto 模式：先嘗試 SENSITIVE_KEY，再嘗試 LOGIN_KEY
+          console.log('Auto-detecting key for token...');
+
+          try {
+            if (process.env.KOALA_SENSITIVE_KEY) {
+              const result = fernetDecrypt(process.env.KOALA_SENSITIVE_KEY, token);
+              console.log('Successfully decrypted with SENSITIVE_KEY');
+              return result;
+            }
+          } catch (sensitiveErr) {
+            console.log('Failed with SENSITIVE_KEY, trying LOGIN_KEY...');
+          }
+
+          try {
+            if (process.env.KOALA_LOGIN_KEY) {
+              const result = fernetDecrypt(process.env.KOALA_LOGIN_KEY, token);
+              console.log('Successfully decrypted with LOGIN_KEY');
+              return result;
+            }
+          } catch (loginErr) {
+            console.log('Failed with LOGIN_KEY as well');
+          }
+        }
+
+        throw new Error(`Failed to decrypt with specified key type: ${type}`);
       } catch (error) {
         console.error('Decrypt error for token:', token.substring(0, 20) + '...', error.message);
         return token; // 解密失敗時返回原始值
@@ -144,4 +195,6 @@ app.post('/api/fernet/decrypt', (req, res) => {
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Fernet service running on port ${PORT}`);
+  console.log('LOGIN_KEY configured:', !!process.env.KOALA_LOGIN_KEY);
+  console.log('SENSITIVE_KEY configured:', !!process.env.KOALA_SENSITIVE_KEY);
 });
