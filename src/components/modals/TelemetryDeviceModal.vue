@@ -14,7 +14,7 @@
           </div>
 
           <form class="space-y-4" @submit.prevent="handleSubmit">
-            <div>
+            <div class="max-w-[18rem]">
               <label class="block text-sm font-medium text-gray-700 mb-1">IMEI <span class="text-red-500">*</span></label>
               <input
                 v-model.trim="form.IMEI"
@@ -27,11 +27,11 @@
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
+              <div class="max-w-[16rem]">
                 <label class="block text-sm font-medium text-gray-700 mb-1">名稱</label>
                 <input v-model.trim="form.name" type="text" class="input-base w-full" placeholder="裝置名稱" />
               </div>
-              <div>
+              <div class="max-w-[16rem]">
                 <label class="block text-sm font-medium text-gray-700 mb-1">型號</label>
                 <input v-model.trim="form.model" type="text" class="input-base w-full" placeholder="例如 TD-2024-IoT" />
               </div>
@@ -75,7 +75,15 @@ const emit = defineEmits<{
 
 const submitting = ref(false)
 const isEdit = computed(() => !!props.device)
-const statusOptions = computed(() => props.statusOptions || ['available', 'in-use', 'maintenance', 'disabled', 'deployed'])
+// 確保始終有完整的狀態選項
+const statusOptions = computed(() => {
+  const options = props.statusOptions
+  // 如果沒有傳入選項或選項不完整，使用預設值
+  if (!options || options.length < 5) {
+    return ['available', 'in-use', 'maintenance', 'disabled', 'deployed']
+  }
+  return options
+})
 
 function statusLabel(status?: string) {
   const labelMap: Record<string, string> = {

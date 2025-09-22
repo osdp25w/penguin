@@ -59,7 +59,7 @@
             class="w-3 h-3 rounded-full"
             :style="{ backgroundColor: vehicle.color }"
           ></div>
-          <span class="font-medium text-black">{{ vehicle.id }}</span>
+          <span class="font-medium text-black">{{ vehicle.label || vehicle.id }}</span>
           <span class="text-gray-500 text-xs">({{ vehicle.pointCount }}點)</span>
         </label>
       </div>
@@ -79,6 +79,7 @@ interface VehicleInfo {
   id: string
   color: string
   pointCount: number
+  label?: string
 }
 
 interface Props {
@@ -105,9 +106,10 @@ const filteredVehicles = computed(() => {
   }
   
   const query = searchQuery.value.toLowerCase()
-  return props.availableVehicles.filter(vehicle => 
-    vehicle.id.toLowerCase().includes(query)
-  )
+  return props.availableVehicles.filter(vehicle => {
+    const label = vehicle.label || vehicle.id
+    return label.toLowerCase().includes(query)
+  })
 })
 
 // 防止循環更新的標誌

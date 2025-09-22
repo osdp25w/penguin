@@ -5,6 +5,52 @@ import { useVehicles } from '@/stores/vehicles'
 import { http } from '@/lib/api'
 import { useAuth } from '@/stores/auth'
 
+function unwrapKoalaResponse(res: any) {
+  if (!res) return res
+  if (typeof res.code === 'number' && res.code !== 2000) {
+    const detail = res?.details
+    let message = res?.msg || res?.message || 'Koala API error'
+    if (detail) {
+      if (typeof detail === 'string') message = detail
+      else if (Array.isArray(detail)) message = detail.join(', ')
+      else if (detail.non_field_errors && Array.isArray(detail.non_field_errors)) {
+        message = detail.non_field_errors[0]
+      } else if (detail.bike_id && Array.isArray(detail.bike_id)) {
+        message = detail.bike_id[0]
+      }
+    }
+    const error = new Error(message)
+    ;(error as any).details = detail || res
+    throw error
+  }
+  return res?.data ?? res
+}
+
+function mapKoalaRental(raw: any, fallback: CreateRentalForm & { member_email?: string; member_phone?: string }): Rental {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      rentalId: String(Date.now()),
+      bikeId: fallback.bikeId,
+      userName: fallback.userName,
+      phone: fallback.phone,
+      idLast4: fallback.idLast4,
+      state: 'in_use',
+      startedAt: new Date().toISOString()
+    }
+  }
+
+  const bike = raw.bike || {}
+  return {
+    rentalId: String(raw.id ?? raw.rental_id ?? Date.now()),
+    bikeId: bike.bike_id || fallback.bikeId,
+    userName: raw.member?.full_name || fallback.userName,
+    phone: raw.member?.phone || fallback.phone,
+    idLast4: fallback.idLast4,
+    state: raw.rental_status === 'active' ? 'in_use' : 'in_use',
+    startedAt: raw.start_time || new Date().toISOString()
+  }
+}
+
 export const useRentals = defineStore('rentals', () => {
   const vehiclesStore = useVehicles()
   const auth = useAuth()
@@ -13,6 +59,10 @@ export const useRentals = defineStore('rentals', () => {
   const current = ref<Rental | undefined>()
   const loading = ref(false)
   const error = ref<string | undefined>()
+  const memberRentals = ref<any[]>([])
+  const memberRentalsTotal = ref(0)
+  const memberRentalsLoading = ref(false)
+  const memberRentalsError = ref<string | undefined>()
 
   // Actions
   async function createRental(form: CreateRentalForm & { member_email?: string; member_phone?: string; memo?: string; pickup_location?: string }): Promise<Rental> {
@@ -25,28 +75,29 @@ export const useRentals = defineStore('rentals', () => {
         const payload: any = { bike_id: form.bikeId, memo: form.memo }
         if (form.member_phone) payload.member_phone = form.member_phone
         else if (form.member_email) payload.member_email = form.member_email
-        res = await http.post('/api/rental/staff/rentals/', payload)
+        const response: any = await http.post('/api/rental/staff/rentals/', payload)
+        res = unwrapKoalaResponse(response)
       } else {
         // member 自行租借
         const payload: any = { bike_id: form.bikeId }
         if (form.pickup_location) payload.pickup_location = form.pickup_location
-        res = await http.post('/api/rental/member/rentals/', payload)
+        const response: any = await http.post('/api/rental/member/rentals/', payload)
+        res = unwrapKoalaResponse(response)
       }
 
-      // Normalize to Rental type for UI
-      const rental: Rental = {
-        rentalId: String(res?.id || res?.rental_id || Date.now()),
-        bikeId: form.bikeId,
-        userName: form.userName,
-        phone: form.phone,
-        idLast4: form.idLast4,
-        state: 'in_use',
-        startedAt: new Date().toISOString()
-      }
+      const rental: Rental = mapKoalaRental(res, form)
       current.value = rental
 
       // 同步更新車輛狀態
       vehiclesStore.updateVehicleStatus(form.bikeId, 'in-use')
+
+      if (!isPrivileged) {
+        try {
+          await fetchMemberRentals()
+        } catch (fetchErr) {
+          console.warn('[Rentals] Unable to refresh member rentals after create:', fetchErr)
+        }
+      }
 
       return rental
     } catch (err: any) {
@@ -114,6 +165,11 @@ export const useRentals = defineStore('rentals', () => {
         const payload: any = { action: 'return' }
         if (opts?.return_location) payload.return_location = opts.return_location
         await http.patch(`/api/rental/member/rentals/${id}/`, payload)
+        try {
+          await fetchMemberRentals()
+        } catch (fetchErr) {
+          console.warn('[Rentals] Unable to refresh member rentals after return:', fetchErr)
+        }
       }
       return true
     } catch (error) {
@@ -209,11 +265,111 @@ export const useRentals = defineStore('rentals', () => {
     current.value = undefined
   }
 
+  async function fetchMemberRentals(params?: { limit?: number; offset?: number }, opts?: { updateState?: boolean }): Promise<{ data: any[]; total: number }> {
+    try {
+      if (opts?.updateState !== false) {
+        memberRentalsLoading.value = true
+        memberRentalsError.value = undefined
+      }
+      const limit = params?.limit ?? 50
+      const offset = params?.offset ?? 0
+      const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+      const path = qs.toString() ? `/api/rental/member/rentals/?${qs}` : '/api/rental/member/rentals/'
+      const res: any = await http.get(path)
+      const payload = unwrapKoalaResponse(res)
+      const rows = Array.isArray(payload) ? payload : Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : res?.results || []
+      const total = res?.count ?? res?.total ?? rows.length
+      if (opts?.updateState !== false) {
+        memberRentals.value = rows
+        memberRentalsTotal.value = total
+        memberRentalsLoading.value = false
+      }
+      return { data: rows, total }
+    } catch (error) {
+      console.error('[Rentals] Failed to load member rentals:', error)
+      if (opts?.updateState !== false) {
+        memberRentalsError.value = error instanceof Error ? error.message : '取得租借紀錄失敗'
+        memberRentalsLoading.value = false
+      }
+      throw error
+    }
+  }
+
+  async function fetchMemberRentalDetail(id: string | number): Promise<any | null> {
+    if (!id && id !== 0) return null
+    try {
+      const res: any = await http.get(`/api/rental/member/rentals/${id}/`)
+      return res?.data ?? res ?? null
+    } catch (error) {
+      console.error('[Rentals] Failed to load member rental detail:', error)
+      throw error
+    }
+  }
+
+  function clearMemberRentals() {
+    memberRentals.value = []
+    memberRentalsTotal.value = 0
+    memberRentalsError.value = undefined
+    memberRentalsLoading.value = false
+  }
+
+  async function fetchStaffRentals(params?: { limit?: number; offset?: number; status?: string }): Promise<{ data: any[]; total: number }> {
+    try {
+      const limit = params?.limit ?? 50
+      const offset = params?.offset ?? 0
+      const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+      if (params?.status) qs.set('status', params.status)
+      const path = qs.toString() ? `/api/rental/staff/rentals/?${qs}` : '/api/rental/staff/rentals/'
+      const res: any = await http.get(path)
+
+      let rows: any[] = []
+      let total = 0
+      if (res?.code === 2000 && res?.data) {
+        const section = res.data
+        if (Array.isArray(section)) {
+          rows = section
+          total = section.length
+        } else if (Array.isArray(section.results)) {
+          rows = section.results
+          total = section.count ?? rows.length
+        } else if (Array.isArray(section.rentals)) {
+          rows = section.rentals
+          total = section.total ?? rows.length
+        }
+      }
+
+      if (!rows.length) {
+        rows = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : res?.results || res?.rentals || []
+        total = res?.count ?? res?.total ?? rows.length
+      }
+
+      return { data: rows, total }
+    } catch (error) {
+      console.error('[Rentals] Failed to load staff rentals:', error)
+      throw error
+    }
+  }
+
+  async function fetchStaffRentalDetail(id: string | number): Promise<any | null> {
+    if (!id && id !== 0) return null
+    try {
+      const res: any = await http.get(`/api/rental/staff/rentals/${id}/`)
+      return res?.data ?? res ?? null
+    } catch (error) {
+      console.error('[Rentals] Failed to load staff rental detail:', error)
+      throw error
+    }
+  }
+
   return {
     // State
     current,
     loading,
     error,
+    memberRentals,
+    memberRentalsTotal,
+    memberRentalsLoading,
+    memberRentalsError,
 
     // Actions
     createRental,
@@ -224,6 +380,11 @@ export const useRentals = defineStore('rentals', () => {
     returnByRentalId,
     setInUse,
     clearError,
-    clearCurrent
+    clearCurrent,
+    fetchMemberRentals,
+    fetchMemberRentalDetail,
+    fetchStaffRentals,
+    fetchStaffRentalDetail,
+    clearMemberRentals
   }
 })

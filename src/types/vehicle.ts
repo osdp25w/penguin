@@ -8,6 +8,8 @@ export const VehicleSchema = z.object({
   speedKph: z.number().optional(),
   batteryPct: z.number().min(0).max(100).optional(),
   batteryLevel: z.number().min(0).max(100).optional(),
+  voltage: z.number().optional(),
+  controllerTemp: z.number().optional(),
   signal: z.enum(['良好', '中等', '弱']).optional(),
   status: z.enum(['可租借', '使用中', '離線', '維修', '低電量', 'available', 'in-use', 'rented', 'maintenance', 'charging', 'low-battery']).optional(),
   lastSeen: z.string().optional(),

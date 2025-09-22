@@ -1,83 +1,106 @@
 <template>
   <div class="fixed inset-0 z-50 overflow-y-auto">
     <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="handleClose"></div>
+      <!-- Backdrop with blur effect -->
+      <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity" @click="handleClose"></div>
 
       <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
 
-      <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full sm:p-6">
+      <div class="inline-block align-bottom bg-white rounded-2xl px-6 pt-6 pb-6 text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-xl sm:w-full">
         <!-- Header -->
         <div class="flex items-center justify-between mb-6">
-          <h3 class="text-lg font-medium text-gray-900">
-            個人資料
-          </h3>
-          <Button variant="ghost" size="sm" @click="handleClose">
-            <i class="i-ph-x w-4 h-4"></i>
-          </Button>
+          <div class="flex items-center gap-3">
+            <!-- User Avatar -->
+            <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
+              <span class="text-lg font-semibold text-gray-600">{{ userInitials }}</span>
+            </div>
+            <div>
+              <h3 class="text-xl font-semibold text-gray-900">
+                個人資料
+              </h3>
+              <p class="text-sm text-gray-500">管理您的個人資訊</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            @click="handleClose"
+          >
+            <i class="i-ph-x w-5 h-5"></i>
+          </button>
         </div>
 
         <!-- Form -->
-        <form @submit.prevent="handleSubmit" class="space-y-4">
+        <form @submit.prevent="handleSubmit" class="space-y-6">
+          <!-- Basic Information Section -->
+          <div class="space-y-4">
+            <div class="mb-4">
+              <h4 class="text-sm font-medium text-gray-900 mb-4">基本資訊</h4>
+            </div>
 
-          <!-- Name -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">
-              姓名 <span class="text-red-500">*</span>
-            </label>
-            <input
-              v-model="form.name"
-              type="text"
-              placeholder="請輸入姓名"
-              class="input-base"
-              :class="{ 'border-red-300': errors.name }"
-            >
-            <p v-if="errors.name" class="mt-1 text-sm text-red-600">{{ errors.name }}</p>
-          </div>
+            <!-- 表單欄位 -->
+            <div class="space-y-4">
+              <!-- Name -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                  姓名 <span class="text-red-500">*</span>
+                </label>
+                <input
+                  v-model="form.name"
+                  type="text"
+                  placeholder="請輸入姓名"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                  :class="{ 'border-red-300': errors.name }"
+                >
+                <p v-if="errors.name" class="mt-1 text-xs text-red-600">{{ errors.name }}</p>
+              </div>
 
-          <!-- Email -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">
-              電子信箱 <span class="text-red-500">*</span>
-            </label>
-            <input
-              v-model="form.email"
-              type="email"
-              placeholder="請輸入電子信箱"
-              class="input-base"
-              :class="{ 'border-red-300': errors.email }"
-            >
-            <p v-if="errors.email" class="mt-1 text-sm text-red-600">{{ errors.email }}</p>
-          </div>
+              <!-- Phone -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                  電話號碼
+                </label>
+                <input
+                  v-model="form.phone"
+                  type="tel"
+                  placeholder="0912-345-678"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                  :class="{ 'border-red-300': errors.phone }"
+                >
+                <p v-if="errors.phone" class="mt-1 text-xs text-red-600">{{ errors.phone }}</p>
+              </div>
 
-          <!-- Phone -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">
-              電話號碼
-            </label>
-            <input
-              v-model="form.phone"
-              type="tel"
-              placeholder="請輸入電話號碼"
-              class="input-base"
-              :class="{ 'border-red-300': errors.phone }"
-            >
-            <p v-if="errors.phone" class="mt-1 text-sm text-red-600">{{ errors.phone }}</p>
-          </div>
+              <!-- Email -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                  電子信箱 <span class="text-red-500">*</span>
+                </label>
+                <input
+                  v-model="form.email"
+                  type="email"
+                  placeholder="example@mail.com"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                  :class="{ 'border-red-300': errors.email }"
+                >
+                <p v-if="errors.email" class="mt-1 text-xs text-red-600">{{ errors.email }}</p>
+              </div>
 
-          <!-- ID Number -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">
-              身分證號碼
-            </label>
-            <input
-              v-model="form.idNumber"
-              type="text"
-              placeholder="請輸入身分證號碼"
-              class="input-base"
-              :class="{ 'border-red-300': errors.idNumber }"
-              maxlength="10"
-            >
-            <p v-if="errors.idNumber" class="mt-1 text-sm text-red-600">{{ errors.idNumber }}</p>
+              <!-- ID Number -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                  身分證號碼
+                </label>
+                <input
+                  v-model="form.idNumber"
+                  type="text"
+                  placeholder="A123456789"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                  :class="{ 'border-red-300': errors.idNumber }"
+                  maxlength="10"
+                >
+                <p v-if="errors.idNumber" class="mt-1 text-xs text-red-600">{{ errors.idNumber }}</p>
+              </div>
+            </div>
           </div>
 
           <!-- Password Section -->
@@ -86,7 +109,7 @@
               <h4 class="text-sm font-medium text-gray-900">更改密碼</h4>
               <button
                 type="button"
-                class="text-sm text-brand-primary hover:text-brand-secondary"
+                class="text-sm text-indigo-600 hover:text-indigo-500"
                 @click="showPasswordFields = !showPasswordFields"
               >
                 {{ showPasswordFields ? '取消更改' : '更改密碼' }}
@@ -103,40 +126,43 @@
                   v-model="form.currentPassword"
                   type="password"
                   placeholder="請輸入目前密碼"
-                  class="input-base"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                   :class="{ 'border-red-300': errors.currentPassword }"
                 >
-                <p v-if="errors.currentPassword" class="mt-1 text-sm text-red-600">{{ errors.currentPassword }}</p>
+                <p v-if="errors.currentPassword" class="mt-1 text-xs text-red-600">{{ errors.currentPassword }}</p>
               </div>
 
-              <!-- New Password -->
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">
-                  新密碼 <span class="text-red-500">*</span>
-                </label>
-                <input
-                  v-model="form.password"
-                  type="password"
-                  placeholder="請輸入新密碼"
-                  class="input-base"
-                  :class="{ 'border-red-300': errors.password }"
-                >
-                <p v-if="errors.password" class="mt-1 text-sm text-red-600">{{ errors.password }}</p>
-              </div>
+              <!-- New Password and Confirm in two columns -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <!-- New Password -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">
+                    新密碼 <span class="text-red-500">*</span>
+                  </label>
+                  <input
+                    v-model="form.password"
+                    type="password"
+                    placeholder="至少6個字元"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                    :class="{ 'border-red-300': errors.password }"
+                  >
+                  <p v-if="errors.password" class="mt-1 text-xs text-red-600">{{ errors.password }}</p>
+                </div>
 
-              <!-- Confirm Password -->
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">
-                  確認新密碼 <span class="text-red-500">*</span>
-                </label>
-                <input
-                  v-model="form.confirmPassword"
-                  type="password"
-                  placeholder="請再次輸入新密碼"
-                  class="input-base"
-                  :class="{ 'border-red-300': errors.confirmPassword }"
-                >
-                <p v-if="errors.confirmPassword" class="mt-1 text-sm text-red-600">{{ errors.confirmPassword }}</p>
+                <!-- Confirm Password -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">
+                    確認新密碼 <span class="text-red-500">*</span>
+                  </label>
+                  <input
+                    v-model="form.confirmPassword"
+                    type="password"
+                    placeholder="再次輸入密碼"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                    :class="{ 'border-red-300': errors.confirmPassword }"
+                  >
+                  <p v-if="errors.confirmPassword" class="mt-1 text-xs text-red-600">{{ errors.confirmPassword }}</p>
+                </div>
               </div>
             </div>
           </div>

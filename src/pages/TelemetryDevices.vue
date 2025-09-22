@@ -25,14 +25,14 @@
           <label for="td-status" class="block text-sm font-medium text-gray-700 mb-1">狀態</label>
           <select id="td-status" name="status" v-model="filters.status" class="input-base w-full" aria-label="狀態">
             <option value="">全部</option>
-            <option v-for="s in statusOptions" :key="s" :value="s">{{ s }}</option>
+            <option v-for="s in statusOptions" :key="s" :value="s">{{ statusLabel(s) }}</option>
           </select>
         </div>
-        <div>
+        <div class="max-w-[14rem]">
           <label for="td-model" class="block text-sm font-medium text-gray-700 mb-1">型號</label>
           <input id="td-model" name="model" v-model.trim="filters.model" class="input-base w-full" placeholder="例如 TD-2024-IoT" />
         </div>
-        <div>
+        <div class="max-w-[14rem]">
           <label for="td-imei" class="block text-sm font-medium text-gray-700 mb-1">IMEI</label>
           <input id="td-imei" name="imei" v-model.trim="filters.imei" class="input-base w-full" placeholder="輸入 IMEI" />
         </div>
@@ -47,12 +47,44 @@
       <div class="overflow-x-auto">
         <table class="w-full">
           <thead class="bg-gray-50">
-            <tr>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">IMEI</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">名稱</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">型號</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">狀態</th>
-              <th class="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">操作</th>
+            <tr class="text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+              <th class="px-4 py-3 cursor-pointer hover:bg-gray-100 transition-colors" @click="handleSort('imei')">
+                <div class="flex items-center gap-1">
+                  IMEI
+                  <i v-if="sortConfig.field === 'imei'"
+                     :class="sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down'"
+                     class="w-3 h-3"></i>
+                  <i v-else class="i-ph-caret-up-down w-3 h-3 opacity-30"></i>
+                </div>
+              </th>
+              <th class="px-4 py-3 cursor-pointer hover:bg-gray-100 transition-colors" @click="handleSort('name')">
+                <div class="flex items-center gap-1">
+                  名稱
+                  <i v-if="sortConfig.field === 'name'"
+                     :class="sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down'"
+                     class="w-3 h-3"></i>
+                  <i v-else class="i-ph-caret-up-down w-3 h-3 opacity-30"></i>
+                </div>
+              </th>
+              <th class="px-4 py-3 cursor-pointer hover:bg-gray-100 transition-colors" @click="handleSort('model')">
+                <div class="flex items-center gap-1">
+                  型號
+                  <i v-if="sortConfig.field === 'model'"
+                     :class="sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down'"
+                     class="w-3 h-3"></i>
+                  <i v-else class="i-ph-caret-up-down w-3 h-3 opacity-30"></i>
+                </div>
+              </th>
+              <th class="px-4 py-3 cursor-pointer hover:bg-gray-100 transition-colors" @click="handleSort('status')">
+                <div class="flex items-center gap-1">
+                  狀態
+                  <i v-if="sortConfig.field === 'status'"
+                     :class="sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down'"
+                     class="w-3 h-3"></i>
+                  <i v-else class="i-ph-caret-up-down w-3 h-3 opacity-30"></i>
+                </div>
+              </th>
+              <th class="px-4 py-3 text-right">操作</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
@@ -68,8 +100,20 @@
               </td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2 justify-end">
-                  <Button variant="outline" size="xs" @click="openEditModal(d)">編輯</Button>
-                  <Button variant="ghost" size="xs" class="text-red-600" @click="confirmDelete(d)">刪除</Button>
+                  <button
+                    @click="openEditModal(d)"
+                    class="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-indigo-500 transition-colors"
+                  >
+                    <i class="i-ph-pencil-simple w-3.5 h-3.5 mr-1"></i>
+                    編輯
+                  </button>
+                  <button
+                    @click="confirmDelete(d)"
+                    class="inline-flex items-center px-3 py-1.5 border border-red-300 text-xs font-medium rounded-md text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-red-500 transition-colors"
+                  >
+                    <i class="i-ph-trash w-3.5 h-3.5 mr-1"></i>
+                    刪除
+                  </button>
                 </div>
               </td>
             </tr>
@@ -136,7 +180,21 @@ const route = useRoute()
 const router = useRouter()
 
 const filters = ref<{ status: string; model: string; imei: string }>({ status: '', model: '', imei: '' })
-const statusOptions = computed(() => telemetry.statusOptions)
+
+// Sorting configuration
+const sortConfig = ref({
+  field: '' as string,
+  order: 'asc' as 'asc' | 'desc'
+})
+// 確保始終有完整的狀態選項列表
+const statusOptions = computed(() => {
+  const options = telemetry.statusOptions
+  // 如果 store 中的選項為空或不完整，使用預設值
+  if (!options || options.length < 5) {
+    return ['available', 'in-use', 'maintenance', 'disabled', 'deployed']
+  }
+  return options
+})
 
 const paging = usePaging({
   fetcher: async ({ limit, offset }) => {
@@ -152,7 +210,51 @@ const paging = usePaging({
   queryPrefix: 'telemetry'
 })
 
-const rows = computed(() => paging.data.value)
+const rows = computed(() => {
+  let list = [...paging.data.value]
+
+  // Apply sorting
+  if (sortConfig.value.field) {
+    list.sort((a, b) => {
+      let aVal: any = ''
+      let bVal: any = ''
+
+      switch (sortConfig.value.field) {
+        case 'imei':
+          aVal = a.IMEI
+          bVal = b.IMEI
+          break
+        case 'name':
+          aVal = a.name || ''
+          bVal = b.name || ''
+          break
+        case 'model':
+          aVal = a.model || ''
+          bVal = b.model || ''
+          break
+        case 'status':
+          aVal = statusLabel(a.status)
+          bVal = statusLabel(b.status)
+          break
+      }
+
+      const compareResult = aVal < bVal ? -1 : aVal > bVal ? 1 : 0
+      return sortConfig.value.order === 'asc' ? compareResult : -compareResult
+    })
+  }
+
+  return list
+})
+
+// Sorting function
+function handleSort(field: string) {
+  if (sortConfig.value.field === field) {
+    sortConfig.value.order = sortConfig.value.order === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortConfig.value.field = field
+    sortConfig.value.order = 'asc'
+  }
+}
 
 function normStatus(status?: string) {
   const s = String(status || '').toLowerCase().trim()
@@ -228,10 +330,15 @@ async function submitModal(device: any, isEdit: boolean) {
   await paging.refresh()
 }
 
-// watch filters from url
+// watch filters from url (但不在初始化時觸發)
+let isInitializing = true
 watch(
   () => [filters.value.status, filters.value.model, filters.value.imei],
-  () => applyFilters(),
+  () => {
+    if (!isInitializing) {
+      applyFilters()
+    }
+  },
   { deep: true }
 )
 
@@ -270,8 +377,12 @@ onMounted(async () => {
       total: paging.total.value,
       loading: paging.loading.value
     })
+
+    // 初始化完成，允許 watch 觸發
+    isInitializing = false
   } catch (error) {
     console.error('[TelemetryDevices] Error during initialization:', error)
+    isInitializing = false
   }
 })
 </script>

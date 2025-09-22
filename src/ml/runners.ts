@@ -6,9 +6,25 @@ import { toStrategyInput, toCarbonInput, toPowerInput, toBatteryInput, toCadence
 export interface StrategyOut { polyline: { lat:number; lon:number }[]; estTime: number; estEnergy: number }
 export interface CarbonOut { saved: number }
 export interface PowerOut { kWh: number; nextCharge: string }
-export interface BatteryOut { id: string; health: number; faultP: number }
+export interface BatteryOut { id: string; health: number; faultP: number; capacity?: number }
+
+export interface BatteryFeatureInput {
+  id?: string
+  soc?: number
+  socPct?: number
+  socPercent?: number
+  stateOfCharge?: number
+  voltage?: number
+  mv10?: number
+  packVoltage?: number
+  temperature?: number
+  temp?: number
+  ctrlTemp?: number
+}
 
 function clamp(n:number,min:number,max:number){return Math.max(min,Math.min(max,n))}
+
+let batteryMetaPromise: Promise<any> | null = null
 
 export async function predictStrategy(input: {
   distanceKm: number
@@ -84,27 +100,130 @@ export async function predictPower(input: { speedKph: number; tempC?: number; wi
   return { kWh, nextCharge: next }
 }
 
-export async function predictBatteryRisk(ids: string[], t?: Telemetry): Promise<BatteryOut[]> {
-  const sess = await getSession(getModelPath('battery'))
+function isTelemetry(value: unknown): value is Telemetry {
+  return !!value && typeof value === 'object' && 'MSG' in (value as any)
+}
+
+function toBatteryInputFromFeatures(input?: BatteryFeatureInput | null): number[] {
+  if (!input) return toBatteryInput(undefined)
+
+  let soc = input.soc ?? input.socPct ?? input.socPercent ?? input.stateOfCharge
+  if (soc == null) soc = 0
+  if (soc > 1.5) soc = soc / 100 // assume percentage
+  soc = Math.max(0, Math.min(1.2, soc))
+
+  const voltageRaw =
+    input.voltage ??
+    (typeof input.mv10 === 'number' ? input.mv10 / 10 : undefined) ??
+    input.packVoltage
+  const voltage = Number((voltageRaw ?? 48).toFixed(2))
+
+  const tempRaw = input.temperature ?? input.temp ?? input.ctrlTemp
+  const temperature = Number(((tempRaw ?? 35)).toFixed(2))
+
+  return [Number(soc.toFixed(4)), voltage, temperature]
+}
+
+export async function predictBatteryRisk(ids: string[], input?: Telemetry | BatteryFeatureInput | BatteryFeatureInput[]): Promise<BatteryOut[]> {
+  const idList = (ids ?? []).map(id => String(id))
+  console.log('[BatteryRisk] Starting prediction for IDs:', idList)
+  const modelPath = getModelPath('battery')
+  console.log('[BatteryRisk] Model path:', modelPath)
+
+  const sess = await getSession(modelPath)
+  console.log('[BatteryRisk] Session loaded:', !!sess)
+
   if (sess) {
     try {
-      const feats = toBatteryInput(t)
-      const out = await runSession(sess, { input: feats })
-      const keys = Object.keys(out || {})
-      const first = keys.length ? (out as any)[keys[0]] : undefined
-      // for classifiers, sometimes output is probability vector; try first element
-      let p = Number(out?.prob?.data?.[0])
-      if (!Number.isFinite(p)) p = Number(first?.data?.[0])
-      if (!Number.isFinite(p)) p = 0.1
-      return ids.map((id) => ({ id, health: +(100 - p*100).toFixed(1), faultP: +p.toFixed(2) }))
-    } catch {}
+      const inputsArray: { id: string; feats: number[] }[] = []
+
+      if (Array.isArray(input)) {
+        const map = new Map<string, BatteryFeatureInput>()
+        for (const item of input) {
+          if (!item) continue
+          const key = String(item.id ?? '')
+          if (!key) continue
+          map.set(key, item)
+        }
+        const targets = idList.length ? idList : Array.from(map.keys())
+        for (const id of targets) {
+          const feats = toBatteryInputFromFeatures(map.get(id))
+          inputsArray.push({ id, feats })
+        }
+        if (!idList.length) idList.push(...targets)
+      } else if (input && !isTelemetry(input)) {
+        const feats = toBatteryInputFromFeatures(input)
+        const targets = idList.length ? idList : ['battery']
+        for (const id of targets) inputsArray.push({ id, feats })
+        if (!idList.length) idList.push(...targets)
+      } else {
+        const feats = toBatteryInput(isTelemetry(input) ? input : undefined)
+        const targets = idList.length ? idList : ['battery']
+        for (const id of targets) inputsArray.push({ id, feats })
+        if (!idList.length) idList.push(...targets)
+      }
+
+      if (!batteryMetaPromise) {
+        const fetcher = typeof fetch === 'function' ? fetch : undefined
+        batteryMetaPromise = fetcher
+          ? fetcher('/models/battery_capacity_metadata.json').then(r => r.json()).catch(() => ({}))
+          : Promise.resolve({})
+      }
+      const meta = await batteryMetaPromise
+      const rated = Number(meta?.rated_capacity) || Number(meta?.capacity_range?.[1]) || 2.0
+      const apt = rated * 0.7
+
+      const results: BatteryOut[] = []
+      for (const row of inputsArray) {
+        const out = await runSession(sess, { input: row.feats })
+        console.log('[BatteryRisk] Model output keys:', Object.keys(out || {}))
+
+        const firstKey = Object.keys(out || {})[0]
+        const tensor = firstKey ? (out as any)[firstKey] : undefined
+        let capacity: number | null = null
+        if (tensor && typeof tensor === 'object' && 'data' in tensor) {
+          const val = Number(tensor.data?.[0])
+          if (Number.isFinite(val)) capacity = val
+        }
+        if (capacity == null) {
+          capacity = Number(firstKey ? (out as any)[firstKey] : 0)
+        }
+        if (!Number.isFinite(capacity)) capacity = 0.0
+
+        const healthPct = Math.max(0, Math.min(120, (capacity / rated) * 100))
+        let fault = 0
+        if (capacity < apt) {
+          fault = Math.min(1, (apt - capacity) / (rated - apt))
+        } else {
+          fault = Math.max(0, (rated - capacity) / rated * 0.2)
+        }
+
+        results.push({
+          id: row.id,
+          health: +healthPct.toFixed(1),
+          faultP: +Math.max(0, Math.min(1, fault)).toFixed(2),
+          capacity: +capacity!.toFixed(3)
+        })
+      }
+
+      console.log('[BatteryRisk] Model result:', results)
+      return results
+    } catch (err) {
+      console.error('[BatteryRisk] Model error:', err)
+    }
   }
+
   // Heuristic: random but stable per id
-  return ids.map((id, i) => {
+  console.log('[BatteryRisk] Using heuristic fallback for IDs:', idList)
+  const fallbackResult = (idList.length ? idList : ['battery']).map((id) => {
     const x = (id.split('').reduce((a,c)=>a+c.charCodeAt(0),0) % 100) / 100
     const p = 0.05 + (x * 0.2) // 5% - 25%
-    return { id, health: +(100 - p*100).toFixed(1), faultP: +p.toFixed(2) }
+    const rated = 2.0
+    const capacity = rated * (1 - p * 0.5)
+    return { id, health: +(100 - p*100).toFixed(1), faultP: +p.toFixed(2), capacity: +capacity.toFixed(3) }
   })
+  console.log('[BatteryRisk] Heuristic result:', fallbackResult)
+  return fallbackResult
 }
 
 /*

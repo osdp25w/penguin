@@ -59,7 +59,7 @@ export function clearAuthStorage() {
     catch (_a) { }
 }
 async function request(path, opts = {}) {
-    var _a, _b, _c, _d;
+    var _a, _b;
     const base = getBaseUrl();
     // Accept full URL; for absolute API paths ('/api/...') don't prepend base
     let url;
@@ -91,18 +91,15 @@ async function request(path, opts = {}) {
     if (!ct.includes('application/json'))
         return undefined;
     const data = await res.json();
-    // Auto-decrypt sensitive values
-    // 在生產環境中，即使沒有前端 key 也要嘗試使用伺服器端解密
+    // Auto-decrypt sensitive values (client-side)
     const rt = runtime();
     const sensitiveKey = rt.KOALA_SENSITIVE_KEY || ((_b = (_a = import.meta) === null || _a === void 0 ? void 0 : _a.env) === null || _b === void 0 ? void 0 : _b.VITE_KOALA_SENSITIVE_KEY);
-    // 在生產環境中，即使沒有 key 也嘗試解密（伺服器會使用自己的 key）
-    if (sensitiveKey || !((_d = (_c = import.meta) === null || _c === void 0 ? void 0 : _c.env) === null || _d === void 0 ? void 0 : _d.DEV)) {
+    if (sensitiveKey) {
         try {
-            const dec = await decryptSensitiveDeep(data, sensitiveKey || '');
+            const dec = await decryptSensitiveDeep(data, sensitiveKey);
             return dec;
         }
-        catch (_e) {
-            // ignore decryption errors, return raw data
+        catch (_c) {
             return data;
         }
     }
@@ -110,11 +107,11 @@ async function request(path, opts = {}) {
 }
 // Recursively decrypt any Fernet-looking strings in an object/array
 async function decryptSensitiveDeep(input, key) {
-    const { fernetDecrypt, looksLikeFernet } = await import('@/lib/fernet');
+    const { fernetDecrypt, looksLikeFernetToken } = await import('@/lib/fernet_client');
     // Collect tokens map for batch decryption
     const tokens = new Set();
     const collect = (val) => {
-        if (typeof val === 'string' && looksLikeFernet(val))
+        if (typeof val === 'string' && looksLikeFernetToken(val))
             tokens.add(val);
         else if (Array.isArray(val))
             val.forEach(collect);
@@ -124,31 +121,12 @@ async function decryptSensitiveDeep(input, key) {
     collect(input);
     if (tokens.size === 0)
         return input;
-    // 強制使用服務器端解密，禁用 WebCrypto
     const mapping = new Map();
-    try {
-        // 使用服務器端解密端點 - 加解密服務仍在 penguin nginx
-        const endpoint = '/api/fernet/decrypt';
-        const r = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                tokens: Array.from(tokens),
-                key: import.meta.env.DEV ? key : undefined // 生產環境使用服務器端金鑰
-            })
-        });
-        if (r.ok) {
-            const j = await r.json();
-            const arr = (j === null || j === void 0 ? void 0 : j.values) || [];
-            Array.from(tokens).forEach((tok, i) => {
-                const dec = arr[i];
-                if (typeof dec === 'string')
-                    mapping.set(tok, dec);
-            });
+    for (const tok of tokens) {
+        try {
+            mapping.set(tok, await fernetDecrypt(tok, key));
         }
-    }
-    catch (_a) {
-        // 解密失敗，保持原始值
+        catch (_a) { }
     }
     const replace = (val) => {
         if (typeof val === 'string' && mapping.has(val))

@@ -149,6 +149,65 @@ export const useVehicles = defineStore('vehicles', {
             }
             console.log('車輛創建成功 (本地):', v.id);
         },
+        async fetchVehicleDetail(id) {
+            var _a;
+            if (!id)
+                return null;
+            try {
+                const { http } = await import('@/lib/api');
+                const res = await http.get(`/api/bike/bikes/${id}/`);
+                const data = (_a = res === null || res === void 0 ? void 0 : res.data) !== null && _a !== void 0 ? _a : res;
+                if (!data)
+                    return null;
+                const vehicle = this._normalizeBikeDetail(data);
+                this._mergeVehicle(vehicle);
+                return vehicle;
+            }
+            catch (error) {
+                console.error('取得車輛詳情失敗:', error);
+                this.errMsg = '取得車輛詳情失敗';
+                return null;
+            }
+        },
+        async updateVehicleInfo(id, patch) {
+            var _a;
+            if (!id)
+                return null;
+            try {
+                const { http } = await import('@/lib/api');
+                const res = await http.patch(`/api/bike/bikes/${id}/`, patch);
+                const data = (_a = res === null || res === void 0 ? void 0 : res.data) !== null && _a !== void 0 ? _a : res;
+                if (!data)
+                    return null;
+                const vehicle = this._normalizeBikeDetail(data);
+                this._mergeVehicle(vehicle);
+                return vehicle;
+            }
+            catch (error) {
+                console.error('更新車輛資訊失敗:', error);
+                this.errMsg = '更新車輛資訊失敗';
+                throw error;
+            }
+        },
+        async removeVehicle(id) {
+            if (!id)
+                return false;
+            try {
+                const { http } = await import('@/lib/api');
+                const res = await http.del(`/api/bike/bikes/${id}/`);
+                const code = res === null || res === void 0 ? void 0 : res.code;
+                if (code && code !== 2000 && code !== 2001 && code !== 4002) {
+                    console.warn('[removeVehicle] Unexpected response:', res);
+                }
+                this._removeVehicleFromCollections(id);
+                return true;
+            }
+            catch (error) {
+                console.error('刪除車輛失敗:', error);
+                this.errMsg = '刪除車輛失敗';
+                throw error;
+            }
+        },
         /** Fetch vehicles by site ID for map */
         async fetchBySite(siteId) {
             if (!siteId)
@@ -239,6 +298,8 @@ export const useVehicles = defineStore('vehicles', {
                                 name: bike.bike_name || bike.name || 'E-Bike',
                                 batteryLevel: realtimeData.soc || realtimeData.battery_level || realtimeData.soc_pct || realtimeData.battery_pct || 0,
                                 batteryPct: realtimeData.soc || realtimeData.battery_level || realtimeData.soc_pct || realtimeData.battery_pct || 0,
+                                voltage: Number(realtimeData.voltage || realtimeData.pack_voltage || realtimeData.battery_voltage || bike.voltage || 0),
+                                controllerTemp: Number(realtimeData.controller_temperature || realtimeData.ctrl_temp || realtimeData.temperature || bike.controller_temperature || 0),
                                 status: this._mapApiStatus(realtimeData.status || realtimeData.rental_status || 'available'),
                                 siteId: realtimeData.site_id || realtimeData.station_id || bike.site_id || 'unknown',
                                 lat,
@@ -304,6 +365,74 @@ export const useVehicles = defineStore('vehicles', {
                 'error': 'maintenance' // 錯誤 → 維護中
             };
             return statusMap[apiStatus] || 'available';
+        },
+        _normalizeBikeDetail(dto) {
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1;
+            const rawId = (_b = (_a = dto === null || dto === void 0 ? void 0 : dto.bike_id) !== null && _a !== void 0 ? _a : dto === null || dto === void 0 ? void 0 : dto.id) !== null && _b !== void 0 ? _b : '';
+            const id = String(rawId);
+            const statusRaw = (_d = (_c = dto === null || dto === void 0 ? void 0 : dto.status) !== null && _c !== void 0 ? _c : dto === null || dto === void 0 ? void 0 : dto.rental_status) !== null && _d !== void 0 ? _d : dto === null || dto === void 0 ? void 0 : dto.bike_status;
+            const status = statusRaw ? this._mapApiStatus(String(statusRaw)) : undefined;
+            const battery = (_g = (_f = (_e = dto === null || dto === void 0 ? void 0 : dto.soc) !== null && _e !== void 0 ? _e : dto === null || dto === void 0 ? void 0 : dto.battery_level) !== null && _f !== void 0 ? _f : dto === null || dto === void 0 ? void 0 : dto.batteryPct) !== null && _g !== void 0 ? _g : dto === null || dto === void 0 ? void 0 : dto.battery_pct;
+            const lat = (_j = (_h = dto === null || dto === void 0 ? void 0 : dto.lat_decimal) !== null && _h !== void 0 ? _h : dto === null || dto === void 0 ? void 0 : dto.lat) !== null && _j !== void 0 ? _j : (_k = dto === null || dto === void 0 ? void 0 : dto.location) === null || _k === void 0 ? void 0 : _k.lat;
+            const lon = (_m = (_l = dto === null || dto === void 0 ? void 0 : dto.lng_decimal) !== null && _l !== void 0 ? _l : dto === null || dto === void 0 ? void 0 : dto.lon) !== null && _m !== void 0 ? _m : (_o = dto === null || dto === void 0 ? void 0 : dto.location) === null || _o === void 0 ? void 0 : _o.lng;
+            const vehicle = {
+                id,
+                name: (_q = (_p = dto === null || dto === void 0 ? void 0 : dto.bike_name) !== null && _p !== void 0 ? _p : dto === null || dto === void 0 ? void 0 : dto.name) !== null && _q !== void 0 ? _q : `車輛-${id}`,
+                model: (_r = dto === null || dto === void 0 ? void 0 : dto.bike_model) !== null && _r !== void 0 ? _r : dto === null || dto === void 0 ? void 0 : dto.model,
+                siteId: (dto === null || dto === void 0 ? void 0 : dto.site_id) ? String(dto.site_id) : ((_s = dto === null || dto === void 0 ? void 0 : dto.site) === null || _s === void 0 ? void 0 : _s.id) ? String(dto.site.id) : undefined,
+                telemetryImei: (_v = (_u = (_t = dto === null || dto === void 0 ? void 0 : dto.telemetry_device_imei) !== null && _t !== void 0 ? _t : dto === null || dto === void 0 ? void 0 : dto.telemetryDeviceImei) !== null && _u !== void 0 ? _u : dto === null || dto === void 0 ? void 0 : dto.telemetry_imei) !== null && _v !== void 0 ? _v : null,
+                status,
+                batteryPct: typeof battery === 'number' ? battery : undefined,
+                batteryLevel: typeof battery === 'number' ? battery : undefined,
+                lat: typeof lat === 'number' ? lat : undefined,
+                lon: typeof lon === 'number' ? lon : undefined,
+                location: (typeof lat === 'number' && typeof lon === 'number') ? { lat, lng: lon } : undefined,
+                soh: (_x = (_w = dto === null || dto === void 0 ? void 0 : dto.soh) !== null && _w !== void 0 ? _w : dto === null || dto === void 0 ? void 0 : dto.battery_health) !== null && _x !== void 0 ? _x : undefined,
+                lastSeen: (_z = (_y = dto === null || dto === void 0 ? void 0 : dto.updated_at) !== null && _y !== void 0 ? _y : dto === null || dto === void 0 ? void 0 : dto.last_seen) !== null && _z !== void 0 ? _z : dto === null || dto === void 0 ? void 0 : dto.lastSeen,
+                createdAt: (_0 = dto === null || dto === void 0 ? void 0 : dto.created_at) !== null && _0 !== void 0 ? _0 : dto === null || dto === void 0 ? void 0 : dto.createdAt,
+                lastUpdate: (_1 = dto === null || dto === void 0 ? void 0 : dto.updated_at) !== null && _1 !== void 0 ? _1 : dto === null || dto === void 0 ? void 0 : dto.lastUpdate
+            };
+            return vehicle;
+        },
+        _mergeVehicle(vehicle) {
+            if (!vehicle || !vehicle.id)
+                return;
+            const updateArray = (arr) => {
+                const idx = arr.findIndex(v => v.id === vehicle.id);
+                if (idx >= 0) {
+                    arr[idx] = { ...arr[idx], ...vehicle };
+                }
+                else {
+                    arr.unshift(vehicle);
+                }
+            };
+            updateArray(this.items);
+            updateArray(this.vehicles);
+            if (vehicle.siteId) {
+                const siteId = String(vehicle.siteId);
+                const list = this.bySite[siteId] || [];
+                const idx = list.findIndex(v => v.id === vehicle.id);
+                if (idx >= 0) {
+                    list[idx] = { ...list[idx], ...vehicle };
+                    this.bySite[siteId] = list;
+                }
+                else {
+                    this.bySite[siteId] = [vehicle, ...list];
+                }
+            }
+        },
+        _removeVehicleFromCollections(id) {
+            this.items = this.items.filter(v => v.id !== id);
+            this.vehicles = this.vehicles.filter(v => v.id !== id);
+            Object.keys(this.bySite).forEach(siteId => {
+                const arr = (this.bySite[siteId] || []).filter(v => v.id !== id);
+                if (arr.length > 0)
+                    this.bySite[siteId] = arr;
+                else
+                    delete this.bySite[siteId];
+            });
+            if (this.total > 0)
+                this.total -= 1;
         },
         /** 獲取車輛電池詳細資訊 */
         async fetchBatteryMetrics(vehicleId) {

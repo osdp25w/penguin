@@ -20,6 +20,10 @@
         >
           {{ filter.label }}
         </button>
+        <div class="ml-auto flex items-center gap-2">
+          <button class="text-xs text-blue-600 hover:underline" @click="selectAll">全選</button>
+          <button class="text-xs text-gray-600 hover:underline" @click="clearAll">全部取消選擇</button>
+        </div>
       </div>
       
       <!-- 搜索框 -->
@@ -217,22 +221,31 @@ watch(() => props.modelValue, (newValue) => {
 
 // 監聽快速過濾變化，自動更新選中的車輛
 watch(quickFilter, () => {
-  isUpdatingInternally = true
   // 根據當前過濾條件更新選中車輛
   selectedVehicles.value = filteredVehicles.value.map(v => v.id)
-  nextTick(() => {
-    isUpdatingInternally = false
-  })
+  // 立即發射更新事件
+  emit('update:modelValue', selectedVehicles.value)
 })
 
 // 初始化時選中所有車輛
 watch(() => props.availableVehicles, (newVehicles) => {
   if (newVehicles.length > 0 && selectedVehicles.value.length === 0) {
-    isUpdatingInternally = true
     selectedVehicles.value = newVehicles.map(v => v.id)
-    nextTick(() => {
-      isUpdatingInternally = false
-    })
+    // 立即發射更新事件
+    emit('update:modelValue', selectedVehicles.value)
   }
 }, { immediate: true })
+
+function selectAll() {
+  // 依目前顯示（含快速過濾與關鍵字）全選
+  selectedVehicles.value = filteredDisplayVehicles.value.map(v => v.id)
+  // 立即發射更新事件
+  emit('update:modelValue', selectedVehicles.value)
+}
+
+function clearAll() {
+  selectedVehicles.value = []
+  // 立即發射更新事件
+  emit('update:modelValue', selectedVehicles.value)
+}
 </script>

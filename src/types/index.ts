@@ -36,6 +36,8 @@ export interface Role {
 
 export interface User {
   id        : string
+  /** 原始後端資料表的 ID（數值／字串），用於 API 呼叫 */
+  originId? : string
   email     : string
   fullName  : string
   roleId    : string

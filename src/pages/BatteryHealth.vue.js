@@ -4,9 +4,9 @@ import { useBatteries, useML } from '@/stores';
 /* ───────────── 取資料 ───────────── */
 const batStore = useBatteries();
 const mlStore = useML();
-onMounted(() => {
-    batStore.fetchAll();
-    mlStore.fetchBatteryRisk();
+onMounted(async () => {
+    await batStore.fetchAll();
+    await mlStore.fetchBatteryRisk([], batStore.items);
 });
 /**
  * 將故障機率 (faultP) 併入電池清單
@@ -61,9 +61,9 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.h2, __VLS_intrinsicElements.h2
     ...{ class: "text-2xl font-bold" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
-    ...{ onClick: (() => { __VLS_ctx.batStore.fetchAll(); __VLS_ctx.mlStore.fetchBatteryRisk(); }) },
+    ...{ onClick: (async () => { await __VLS_ctx.batStore.fetchAll(); await __VLS_ctx.mlStore.fetchBatteryRisk([], __VLS_ctx.batStore.items); }) },
     ...{ class: "btn i-ph-arrow-clockwise text-sm" },
-    disabled: (__VLS_ctx.batStore.loading || __VLS_ctx.mlStore.loading),
+    disabled: (__VLS_ctx.batStore.isLoading || __VLS_ctx.mlStore.loading),
 });
 if (__VLS_ctx.rows.length) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
@@ -138,7 +138,7 @@ if (__VLS_ctx.rows.length) {
         ...{ class: "h-72 w-full" },
     }, ...__VLS_functionalComponentArgsRest(__VLS_1));
 }
-if (__VLS_ctx.batStore.loading || __VLS_ctx.mlStore.loading) {
+if (__VLS_ctx.batStore.isLoading || __VLS_ctx.mlStore.loading) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
         ...{ class: "text-gray-600" },
     });

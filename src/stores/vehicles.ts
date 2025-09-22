@@ -163,6 +163,58 @@ export const useVehicles = defineStore('vehicles', {
       console.log('車輛創建成功 (本地):', v.id)
     },
 
+    async fetchVehicleDetail(id: string): Promise<Vehicle | null> {
+      if (!id) return null
+      try {
+        const { http } = await import('@/lib/api')
+        const res: any = await http.get(`/api/bike/bikes/${id}/`)
+        const data = res?.data ?? res
+        if (!data) return null
+        const vehicle = this._normalizeBikeDetail(data)
+        this._mergeVehicle(vehicle)
+        return vehicle
+      } catch (error) {
+        console.error('取得車輛詳情失敗:', error)
+        this.errMsg = '取得車輛詳情失敗'
+        return null
+      }
+    },
+
+    async updateVehicleInfo(id: string, patch: Record<string, any>): Promise<Vehicle | null> {
+      if (!id) return null
+      try {
+        const { http } = await import('@/lib/api')
+        const res: any = await http.patch(`/api/bike/bikes/${id}/`, patch)
+        const data = res?.data ?? res
+        if (!data) return null
+        const vehicle = this._normalizeBikeDetail(data)
+        this._mergeVehicle(vehicle)
+        return vehicle
+      } catch (error) {
+        console.error('更新車輛資訊失敗:', error)
+        this.errMsg = '更新車輛資訊失敗'
+        throw error
+      }
+    },
+
+    async removeVehicle(id: string): Promise<boolean> {
+      if (!id) return false
+      try {
+        const { http } = await import('@/lib/api')
+        const res: any = await http.del(`/api/bike/bikes/${id}/`)
+        const code = res?.code
+        if (code && code !== 2000 && code !== 2001 && code !== 4002) {
+          console.warn('[removeVehicle] Unexpected response:', res)
+        }
+        this._removeVehicleFromCollections(id)
+        return true
+      } catch (error) {
+        console.error('刪除車輛失敗:', error)
+        this.errMsg = '刪除車輛失敗'
+        throw error
+      }
+    },
+
     /** Fetch vehicles by site ID for map */
     async fetchBySite(siteId: string) {
       if (!siteId) return
@@ -280,6 +332,8 @@ export const useVehicles = defineStore('vehicles', {
                 name: bike.bike_name || bike.name || 'E-Bike',
                 batteryLevel: realtimeData.soc || realtimeData.battery_level || realtimeData.soc_pct || realtimeData.battery_pct || 0,
                 batteryPct: realtimeData.soc || realtimeData.battery_level || realtimeData.soc_pct || realtimeData.battery_pct || 0,
+                voltage: Number(realtimeData.voltage || realtimeData.pack_voltage || realtimeData.battery_voltage || bike.voltage || 0),
+                controllerTemp: Number(realtimeData.controller_temperature || realtimeData.ctrl_temp || realtimeData.temperature || bike.controller_temperature || 0),
                 status: this._mapApiStatus(realtimeData.status || realtimeData.rental_status || 'available'),
                 siteId: realtimeData.site_id || realtimeData.station_id || bike.site_id || 'unknown',
                 lat,
@@ -350,6 +404,73 @@ export const useVehicles = defineStore('vehicles', {
         'error': 'maintenance'      // 錯誤 → 維護中
       }
       return statusMap[apiStatus] || 'available'
+    },
+
+    _normalizeBikeDetail(dto: any): Vehicle {
+      const rawId = dto?.bike_id ?? dto?.id ?? ''
+      const id = String(rawId)
+      const statusRaw = dto?.status ?? dto?.rental_status ?? dto?.bike_status
+      const status = statusRaw ? this._mapApiStatus(String(statusRaw)) : undefined
+      const battery = dto?.soc ?? dto?.battery_level ?? dto?.batteryPct ?? dto?.battery_pct
+      const lat = dto?.lat_decimal ?? dto?.lat ?? dto?.location?.lat
+      const lon = dto?.lng_decimal ?? dto?.lon ?? dto?.location?.lng
+
+      const vehicle: Vehicle = {
+        id,
+        name: dto?.bike_name ?? dto?.name ?? `車輛-${id}`,
+        model: dto?.bike_model ?? dto?.model,
+        siteId: dto?.site_id ? String(dto.site_id) : dto?.site?.id ? String(dto.site.id) : undefined,
+        telemetryImei: dto?.telemetry_device_imei ?? dto?.telemetryDeviceImei ?? dto?.telemetry_imei ?? null,
+        status,
+        batteryPct: typeof battery === 'number' ? battery : undefined,
+        batteryLevel: typeof battery === 'number' ? battery : undefined,
+        lat: typeof lat === 'number' ? lat : undefined,
+        lon: typeof lon === 'number' ? lon : undefined,
+        location: (typeof lat === 'number' && typeof lon === 'number') ? { lat, lng: lon } : undefined,
+        soh: dto?.soh ?? dto?.battery_health ?? undefined,
+        lastSeen: dto?.updated_at ?? dto?.last_seen ?? dto?.lastSeen,
+        createdAt: dto?.created_at ?? dto?.createdAt,
+        lastUpdate: dto?.updated_at ?? dto?.lastUpdate
+      }
+      return vehicle
+    },
+
+    _mergeVehicle(vehicle: Vehicle) {
+      if (!vehicle || !vehicle.id) return
+      const updateArray = (arr: Vehicle[]) => {
+        const idx = arr.findIndex(v => v.id === vehicle.id)
+        if (idx >= 0) {
+          arr[idx] = { ...arr[idx], ...vehicle }
+        } else {
+          arr.unshift(vehicle)
+        }
+      }
+
+      updateArray(this.items)
+      updateArray(this.vehicles)
+
+      if (vehicle.siteId) {
+        const siteId = String(vehicle.siteId)
+        const list = this.bySite[siteId] || []
+        const idx = list.findIndex(v => v.id === vehicle.id)
+        if (idx >= 0) {
+          list[idx] = { ...list[idx], ...vehicle }
+          this.bySite[siteId] = list
+        } else {
+          this.bySite[siteId] = [vehicle, ...list]
+        }
+      }
+    },
+
+    _removeVehicleFromCollections(id: string) {
+      this.items = this.items.filter(v => v.id !== id)
+      this.vehicles = this.vehicles.filter(v => v.id !== id)
+      Object.keys(this.bySite).forEach(siteId => {
+        const arr = (this.bySite[siteId] || []).filter(v => v.id !== id)
+        if (arr.length > 0) this.bySite[siteId] = arr
+        else delete this.bySite[siteId]
+      })
+      if (this.total > 0) this.total -= 1
     },
 
     /** 獲取車輛電池詳細資訊 */

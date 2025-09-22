@@ -78,6 +78,7 @@ import { useRentals } from '@/stores/rentals'
 import { CreateRentalSchema } from '@/types/rental'
 import { useAuth } from '@/stores/auth'
 import { Koala } from '@/services/koala'
+import { useToasts } from '@/stores/toasts'
 
 interface Vehicle { id: string }
 const props = defineProps<{ show: boolean; vehicle: Vehicle | null }>()
@@ -85,6 +86,7 @@ const emit = defineEmits<{ close: []; success: [rental: any] }>()
 
 const rentalsStore = useRentals()
 const auth = useAuth()
+const toasts = useToasts()
 
 const isStaff = computed(() => auth.user?.roleId === 'admin' || auth.user?.roleId === 'staff')
 // staff 僅保留代租功能（不提供「為自己」）
@@ -127,8 +129,8 @@ async function handleSubmit() {
       }
       userName = m?.full_name || m?.username || ''
       phone = m?.phone || ''
-      const nat: string | undefined = m?.national_id
-      if (nat) idLast4 = nat.slice(-4)
+      // Staff 代租時不需要身分證末四碼
+      idLast4 = ''
     }
 
     // 處理可選欄位：確保符合 schema 規則或設為空字符串
@@ -157,10 +159,21 @@ async function handleSubmit() {
     })
     await rentalsStore.unlockCurrent()
     rentalsStore.setInUse(props.vehicle.id)
+    toasts.success('租借成功，車輛已啟用')
     emit('success', rental)
     handleClose()
-  } catch (error) {
+  } catch (error: any) {
     console.error('租借失敗:', error)
+    let message = error?.message || error?.detail || '租借失敗，請稍後再試'
+    if (message.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(message)
+        message = parsed?.msg || parsed?.message || message
+        const bikeError = parsed?.details?.bike_id?.[0]
+        if (bikeError) message = bikeError
+      } catch {}
+    }
+    toasts.error(message)
   } finally {
     loading.value = false
   }

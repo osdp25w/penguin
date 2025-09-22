@@ -16,7 +16,7 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.h2, __VLS_intrinsicElements.h2
     ...{ class: "text-2xl font-bold" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
-    ...{ onClick: (__VLS_ctx.ml.fetchBatteryRisk) },
+    ...{ onClick: (() => { void __VLS_ctx.ml.fetchBatteryRisk(); }) },
     ...{ class: "btn" },
     disabled: (__VLS_ctx.ml.loading),
 });

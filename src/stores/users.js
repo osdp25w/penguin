@@ -9,7 +9,8 @@ export const useUsers = defineStore('users', {
         loading: false, // 讀取中
         errMsg: '', // 錯誤訊息
         users: [], // 使用者清單
-        roles: [] // 角色清單
+        roles: [], // 角色清單
+        availabilityCache: {}
     }),
     /* ---------- getters ---------------------------------------------- */
     getters: {
@@ -96,8 +97,11 @@ export const useUsers = defineStore('users', {
                             console.warn('Failed to decrypt national ID:', err);
                         }
                     }
+                    const originId = String((_c = (_b = (_a = u.id) !== null && _a !== void 0 ? _a : u.user_id) !== null && _b !== void 0 ? _b : u.uuid) !== null && _c !== void 0 ? _c : '');
                     return {
-                        id: String((_c = (_b = (_a = u.id) !== null && _a !== void 0 ? _a : u.user_id) !== null && _b !== void 0 ? _b : u.uuid) !== null && _c !== void 0 ? _c : ''),
+                        // 使用複合 ID 以避免 staff.id 與 member.id 數值相同造成 UI key/編輯衝突
+                        id: `${kind}:${originId}`,
+                        originId: originId,
                         email: u.email || '',
                         fullName: u.full_name || u.username || '',
                         roleId: (u.type === 'admin' ? 'admin' : u.type === 'staff' ? 'staff' : u.type === 'real' ? 'member' : u.type === 'tourist' ? 'visitor' : 'user'),
@@ -148,12 +152,11 @@ export const useUsers = defineStore('users', {
                 this.errMsg = '';
                 const patch = { is_active: next };
                 const isStaffUser = (user.kind === 'staff') || user.roleId === 'admin' || user.roleId === 'staff';
-                if (isStaffUser) {
-                    await Koala.updateStaff(user.id, patch);
-                }
-                else {
-                    await Koala.updateMember(user.id, patch);
-                }
+                const targetId = user.originId || user.id;
+                if (isStaffUser)
+                    await Koala.updateStaff(targetId, patch);
+                else
+                    await Koala.updateMember(targetId, patch);
                 this.users[idx].active = next;
             }
             catch (e) {
@@ -162,6 +165,31 @@ export const useUsers = defineStore('users', {
             }
             finally {
                 this.loading = false;
+            }
+        },
+        /* ②-1 檢查 Email / Username 是否可用 ------------------------------ */
+        async checkAvailability(payload) {
+            var _a, _b, _c, _d, _e, _f;
+            if (!payload.email && !payload.username) {
+                throw new Error('缺少 email 或 username 參數');
+            }
+            const cacheKey = `${(_a = payload.email) !== null && _a !== void 0 ? _a : ''}|${(_b = payload.username) !== null && _b !== void 0 ? _b : ''}`;
+            const cached = this.availabilityCache[cacheKey];
+            if (cached && Date.now() - cached.timestamp < 60000) {
+                return cached;
+            }
+            try {
+                const res = await Koala.checkAvailability(payload);
+                const data = (_d = (_c = res === null || res === void 0 ? void 0 : res.data) !== null && _c !== void 0 ? _c : res) !== null && _d !== void 0 ? _d : {};
+                const available = Boolean((_f = (_e = data === null || data === void 0 ? void 0 : data.available) !== null && _e !== void 0 ? _e : res === null || res === void 0 ? void 0 : res.available) !== null && _f !== void 0 ? _f : false);
+                const message = (data === null || data === void 0 ? void 0 : data.message) || (res === null || res === void 0 ? void 0 : res.msg) || '';
+                const entry = { available, message, timestamp: Date.now() };
+                this.availabilityCache[cacheKey] = entry;
+                return entry;
+            }
+            catch (e) {
+                console.error('[checkAvailability] failed:', e);
+                throw new Error((e === null || e === void 0 ? void 0 : e.message) || '檢查可用性時發生錯誤');
             }
         },
         /* ③ 新增使用者（前端快照；正式環境請改 POST） ---------------- */
@@ -185,6 +213,18 @@ export const useUsers = defineStore('users', {
                     throw new Error('手機號碼格式不正確');
                 }
                 const formattedPhone = formatPhoneToInternational(payload.phone);
+                // 先檢查 email 是否已被使用
+                try {
+                    const availability = await this.checkAvailability({ email: payload.email });
+                    if (!availability.available) {
+                        throw new Error(availability.message || '此信箱已被註冊');
+                    }
+                }
+                catch (availErr) {
+                    const msg = (availErr === null || availErr === void 0 ? void 0 : availErr.message) || '檢查信箱可用性失敗';
+                    this.errMsg = msg;
+                    throw new Error(msg);
+                }
                 // 加密身份證號（如果提供 - staff/tourist 可能沒有）
                 let encId = '';
                 if (payload.nationalId) {
@@ -264,7 +304,7 @@ export const useUsers = defineStore('users', {
         },
         /* ④ 編輯保存（串接後端 API，含身分證加密） -------------- */
         async updateUser(payload) {
-            var _a, _b;
+            var _a, _b, _c;
             try {
                 this.loading = true;
                 this.errMsg = '';
@@ -277,7 +317,10 @@ export const useUsers = defineStore('users', {
                 if (payload.phone) {
                     formattedPhone = formatPhoneToInternational(payload.phone);
                 }
-                const isStaffUser = payload.kind === 'staff' || payload.roleId === 'admin' || payload.roleId === 'staff';
+                // 以 store 中現有資料為準，取得 kind 與 originId
+                const src = this.users.find(u => u.id === payload.id);
+                const effectiveKind = ((_a = src === null || src === void 0 ? void 0 : src.kind) !== null && _a !== void 0 ? _a : payload.kind);
+                const isStaffUser = effectiveKind === 'staff' || payload.roleId === 'admin' || payload.roleId === 'staff';
                 const patch = {
                     email: payload.email,
                     full_name: payload.fullName,
@@ -325,14 +368,16 @@ export const useUsers = defineStore('users', {
                     }
                 }
                 console.log('[updateUser] Sending patch:', { ...patch, password: patch.password ? '***encrypted***' : undefined });
+                const targetId = (src === null || src === void 0 ? void 0 : src.originId) || payload.originId || payload.id;
                 if (isStaffUser)
-                    await Koala.updateStaff(payload.id, patch);
+                    await Koala.updateStaff(targetId, patch);
                 else
-                    await Koala.updateMember(payload.id, patch);
+                    await Koala.updateMember(targetId, patch);
                 const idx = this.users.findIndex(u => u.id === payload.id);
                 if (idx >= 0) {
                     // 更新本地狀態，但保留解密後的身份證號用於顯示
                     this.users[idx] = {
+                        ...this.users[idx], // 保留 kind/originId
                         ...payload,
                         phone: formattedPhone // 保存格式化後的手機號碼
                     };
@@ -342,10 +387,10 @@ export const useUsers = defineStore('users', {
                 console.error('[updateUser] failed:', e);
                 // 提供更友善的錯誤訊息
                 let errorMsg = '更新使用者失敗';
-                if ((_a = e === null || e === void 0 ? void 0 : e.message) === null || _a === void 0 ? void 0 : _a.includes('email')) {
+                if ((_b = e === null || e === void 0 ? void 0 : e.message) === null || _b === void 0 ? void 0 : _b.includes('email')) {
                     errorMsg = '此信箱已被使用';
                 }
-                else if ((_b = e === null || e === void 0 ? void 0 : e.message) === null || _b === void 0 ? void 0 : _b.includes('phone')) {
+                else if ((_c = e === null || e === void 0 ? void 0 : e.message) === null || _c === void 0 ? void 0 : _c.includes('phone')) {
                     errorMsg = '手機號碼格式不正確';
                 }
                 else if (e === null || e === void 0 ? void 0 : e.message) {
@@ -353,6 +398,36 @@ export const useUsers = defineStore('users', {
                 }
                 this.errMsg = errorMsg;
                 throw new Error(errorMsg);
+            }
+            finally {
+                this.loading = false;
+            }
+        },
+        /* ⑤ 刪除使用者（依角色調用對應 API） ------------------------------ */
+        async removeUser(userId) {
+            const idx = this.users.findIndex(u => u.id === userId);
+            if (idx < 0) {
+                throw new Error('找不到該使用者');
+            }
+            const target = this.users[idx];
+            const targetId = target.originId || target.id;
+            const isStaffUser = target.kind === 'staff' || target.roleId === 'admin' || target.roleId === 'staff';
+            try {
+                this.loading = true;
+                this.errMsg = '';
+                const res = isStaffUser
+                    ? await Koala.deleteStaff(targetId)
+                    : await Koala.deleteMember(targetId);
+                const code = res === null || res === void 0 ? void 0 : res.code;
+                if (code && code !== 2000 && code !== 2001 && code !== 4002) {
+                    console.warn('[removeUser] Unexpected response:', res);
+                }
+                this.users.splice(idx, 1);
+            }
+            catch (e) {
+                console.error('[removeUser] failed:', e);
+                this.errMsg = (e === null || e === void 0 ? void 0 : e.message) || '刪除使用者失敗';
+                throw new Error(this.errMsg);
             }
             finally {
                 this.loading = false;

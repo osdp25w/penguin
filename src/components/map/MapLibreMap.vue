@@ -61,6 +61,7 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 let map: maplibregl.Map | null = null
 let popup: maplibregl.Popup | null = null
+let activeTraceIds: string[] = []
 
 // 環境變數
 const defaultMapCenter = import.meta.env.VITE_MAP_CENTER?.split(',').map(Number) || [23.8, 121.6]
@@ -485,18 +486,31 @@ watch(() => props.displayMode, (newMode) => {
   }
 })
 
+watch(() => props.vehicleTraces, () => {
+  if (!map || props.displayMode !== 'history') return
+  addVehicleTracesLayer()
+}, { deep: true })
+
 // 監聽選中項目變化，自動移動地圖到該位置
 watch(() => props.selected, (selectedItem) => {
   if (!map || !selectedItem) return
-  
+
+  // 如果選中的是軌跡（從 focusTrace 函數傳來）
+  if ('type' in selectedItem && selectedItem.type === 'trace' && 'center' in selectedItem) {
+    map.flyTo({
+      center: [selectedItem.center.lng, selectedItem.center.lat],
+      zoom: selectedItem.center.zoom,
+      duration: 1000
+    })
+  }
   // 如果選中的是車輛，移動地圖到車輛位置
-  if ('lat' in selectedItem && 'lon' in selectedItem) {
+  else if ('lat' in selectedItem && 'lon' in selectedItem) {
     map.flyTo({
       center: [selectedItem.lon, selectedItem.lat],
       zoom: 16,
       duration: 1000
     })
-    
+
     // 如果是車輛模式，可以高亮該車輛（通過更新圖層樣式）
     if (props.displayMode === 'vehicles') {
       highlightVehicle(selectedItem.id)
@@ -511,6 +525,51 @@ watch(() => props.selected, (selectedItem) => {
     })
   }
 }, { deep: true })
+
+function removeTraceLayers(traceId: string): void {
+  if (!map) return
+
+  const traceLineId = `trace-line-${traceId}`
+  if (map.getLayer(traceLineId)) {
+    map.removeLayer(traceLineId)
+  }
+
+  const tracePointsId = `trace-points-${traceId}`
+  if (map.getLayer(tracePointsId)) {
+    map.removeLayer(tracePointsId)
+  }
+
+  const traceStartId = `trace-start-${traceId}`
+  if (map.getLayer(traceStartId)) {
+    map.removeLayer(traceStartId)
+  }
+
+  const traceEndId = `trace-end-${traceId}`
+  if (map.getLayer(traceEndId)) {
+    map.removeLayer(traceEndId)
+  }
+
+  const traceLabelId = `trace-label-${traceId}`
+  if (map.getLayer(traceLabelId)) {
+    map.removeLayer(traceLabelId)
+  }
+
+  const traceSourceId = `trace-${traceId}`
+  if (map.getSource(traceSourceId)) {
+    map.removeSource(traceSourceId)
+  }
+
+  const tracePointsSourceId = `trace-points-${traceId}`
+  if (map.getSource(tracePointsSourceId)) {
+    map.removeSource(tracePointsSourceId)
+  }
+}
+
+function clearTraceLayers(): void {
+  if (!map || activeTraceIds.length === 0) return
+  activeTraceIds.forEach(removeTraceLayers)
+  activeTraceIds = []
+}
 
 function clearAllLayers(): void {
   if (!map) return
@@ -535,53 +594,7 @@ function clearAllLayers(): void {
   if (map.getSource('vehicles-selected')) {
     map.removeSource('vehicles-selected')
   }
-  
-  // 清除車輛軌跡圖層
-  if (props.vehicleTraces) {
-    Object.keys(props.vehicleTraces).forEach(vehicleId => {
-      // 清除軌跡線圖層
-      const traceLineId = `trace-line-${vehicleId}`
-      if (map.getLayer(traceLineId)) {
-        map.removeLayer(traceLineId)
-      }
-      
-      // 清除軌跡點圖層
-      const tracePointsId = `trace-points-${vehicleId}`
-      if (map.getLayer(tracePointsId)) {
-        map.removeLayer(tracePointsId)
-      }
-      
-      // 清除起點圖層
-      const traceStartId = `trace-start-${vehicleId}`
-      if (map.getLayer(traceStartId)) {
-        map.removeLayer(traceStartId)
-      }
-      
-      // 清除終點圖層
-      const traceEndId = `trace-end-${vehicleId}`
-      if (map.getLayer(traceEndId)) {
-        map.removeLayer(traceEndId)
-      }
-      
-      // 清除標籤圖層
-      const traceLabelId = `trace-label-${vehicleId}`
-      if (map.getLayer(traceLabelId)) {
-        map.removeLayer(traceLabelId)
-      }
-      
-      // 清除軌跡數據源
-      const traceSourceId = `trace-${vehicleId}`
-      if (map.getSource(traceSourceId)) {
-        map.removeSource(traceSourceId)
-      }
-      
-      // 清除軌跡點數據源
-      const tracePointsSourceId = `trace-points-${vehicleId}`
-      if (map.getSource(tracePointsSourceId)) {
-        map.removeSource(tracePointsSourceId)
-      }
-    })
-  }
+  clearTraceLayers()
 }
 
 // 高亮選中的車輛
@@ -734,6 +747,7 @@ function showVehiclePopup(vehicle: any): void {
 // 添加車輛軌跡圖層
 function addVehicleTracesLayer(): void {
   if (!map || !props.vehicleTraces) return
+  clearTraceLayers()
   
   // 定義不同車輛的顏色
   const vehicleColors = [
@@ -871,6 +885,8 @@ function addVehicleTracesLayer(): void {
         'text-halo-width': 2
       }
     })
+
+    activeTraceIds.push(vehicleId)
   })
   
   bindTraceEvents()

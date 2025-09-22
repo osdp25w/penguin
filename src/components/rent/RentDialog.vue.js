@@ -4,12 +4,15 @@ import { useRentals } from '@/stores/rentals';
 import { CreateRentalSchema } from '@/types/rental';
 import { useAuth } from '@/stores/auth';
 import { Koala } from '@/services/koala';
+import { useToasts } from '@/stores/toasts';
 const props = defineProps();
 const emit = defineEmits();
 const rentalsStore = useRentals();
 const auth = useAuth();
+const toasts = useToasts();
 const isStaff = computed(() => { var _a, _b; return ((_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId) === 'admin' || ((_b = auth.user) === null || _b === void 0 ? void 0 : _b.roleId) === 'staff'; });
-const isProxy = ref(false); // staff/admin 預設可用自己的身份租借
+// staff 僅保留代租功能（不提供「為自己」）
+const isProxy = ref(true);
 const currentUserName = computed(() => { var _a; return ((_a = auth.user) === null || _a === void 0 ? void 0 : _a.name) || ''; });
 const currentUserPhone = computed(() => { var _a; return ((_a = auth.user) === null || _a === void 0 ? void 0 : _a.phone) || ''; });
 const currentUserIdLast4 = computed(() => { var _a; return (((_a = auth.user) === null || _a === void 0 ? void 0 : _a.idNumber) ? String(auth.user.idNumber).slice(-4) : ''); });
@@ -23,12 +26,12 @@ const memberQuery = ref('');
 const canSubmit = computed(() => {
     if (!props.vehicle)
         return false;
-    if (!isStaff.value)
-        return !!currentUserName.value;
-    return isProxy.value ? !!selectedMemberId.value : !!currentUserName.value;
+    if (isStaff.value)
+        return !!selectedMemberId.value;
+    return !!currentUserName.value;
 });
 async function handleSubmit() {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e, _f;
     if (!props.vehicle)
         return;
     loading.value = true;
@@ -38,13 +41,17 @@ async function handleSubmit() {
         let userName = currentUserName.value;
         let phone = currentUserPhone.value;
         let idLast4 = currentUserIdLast4.value;
-        if (isStaff.value && isProxy.value) {
+        if (isStaff.value) {
             const m = memberOptions.value.find(x => String(x.id) === selectedMemberId.value);
+            if (!m) {
+                errors.userName = '請選擇要代租的成員';
+                loading.value = false;
+                return;
+            }
             userName = (m === null || m === void 0 ? void 0 : m.full_name) || (m === null || m === void 0 ? void 0 : m.username) || '';
-            phone = (m === null || m === void 0 ? void 0 : m.phone) || (m === null || m === void 0 ? void 0 : m.email) || '';
-            const nat = m === null || m === void 0 ? void 0 : m.national_id;
-            if (nat)
-                idLast4 = nat.slice(-4);
+            phone = (m === null || m === void 0 ? void 0 : m.phone) || '';
+            // Staff 代租時不需要身分證末四碼
+            idLast4 = '';
         }
         // 處理可選欄位：確保符合 schema 規則或設為空字符串
         if (!phone) {
@@ -67,15 +74,28 @@ async function handleSubmit() {
         const rental = await rentalsStore.createRental({
             ...formData,
             member_phone: isPhone ? phone : undefined,
-            member_email: !isPhone ? (((_c = auth.user) === null || _c === void 0 ? void 0 : _c.email) || undefined) : undefined
+            member_email: !isPhone ? (isStaff.value ? (((_c = memberOptions.value.find(x => String(x.id) === selectedMemberId.value)) === null || _c === void 0 ? void 0 : _c.email) || undefined) : (((_d = auth.user) === null || _d === void 0 ? void 0 : _d.email) || undefined)) : undefined
         });
         await rentalsStore.unlockCurrent();
         rentalsStore.setInUse(props.vehicle.id);
+        toasts.success('租借成功，車輛已啟用');
         emit('success', rental);
         handleClose();
     }
     catch (error) {
         console.error('租借失敗:', error);
+        let message = (error === null || error === void 0 ? void 0 : error.message) || (error === null || error === void 0 ? void 0 : error.detail) || '租借失敗，請稍後再試';
+        if (message.startsWith('{')) {
+            try {
+                const parsed = JSON.parse(message);
+                message = (parsed === null || parsed === void 0 ? void 0 : parsed.msg) || (parsed === null || parsed === void 0 ? void 0 : parsed.message) || message;
+                const bikeError = (_f = (_e = parsed === null || parsed === void 0 ? void 0 : parsed.details) === null || _e === void 0 ? void 0 : _e.bike_id) === null || _f === void 0 ? void 0 : _f[0];
+                if (bikeError)
+                    message = bikeError;
+            }
+            catch (_g) { }
+        }
+        toasts.error(message);
     }
     finally {
         loading.value = false;
@@ -208,90 +228,40 @@ if (__VLS_ctx.show) {
             ...{ class: "block text-sm font-medium text-gray-700 mb-2" },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "flex items-center gap-3 mb-2" },
+            ...{ class: "space-y-2" },
         });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
-            ...{ onClick: (...[$event]) => {
-                    if (!(__VLS_ctx.show))
-                        return;
-                    if (!!(!__VLS_ctx.isStaff))
-                        return;
-                    __VLS_ctx.isProxy = false;
-                } },
-            type: "button",
-            ...{ class: "px-3 py-1.5 text-sm rounded-full border" },
-            ...{ class: (__VLS_ctx.isProxy ? 'border-gray-300 text-gray-600' : 'border-indigo-600 text-indigo-700 bg-indigo-50') },
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "relative md:max-w-[20rem] lg:max-w-[24rem]" },
         });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
-            ...{ onClick: (...[$event]) => {
-                    if (!(__VLS_ctx.show))
-                        return;
-                    if (!!(!__VLS_ctx.isStaff))
-                        return;
-                    __VLS_ctx.isProxy = true;
-                } },
-            type: "button",
-            ...{ class: "px-3 py-1.5 text-sm rounded-full border" },
-            ...{ class: (__VLS_ctx.isProxy ? 'border-indigo-600 text-indigo-700 bg-indigo-50' : 'border-gray-300 text-gray-600') },
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
+            ...{ onInput: (__VLS_ctx.filterMembers) },
+            value: (__VLS_ctx.memberQuery),
+            type: "text",
+            placeholder: "搜尋姓名/帳號/電話",
+            ...{ class: "w-full px-4 py-3 border border-gray-300 rounded-xl" },
         });
-        if (!__VLS_ctx.isProxy) {
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-                ...{ class: "p-3 border border-gray-200 rounded-xl bg-gray-50 text-gray-800 md:max-w-[20rem] lg:max-w-[24rem]" },
-            });
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-                ...{ class: "font-medium truncate" },
-                title: (__VLS_ctx.currentUserName),
-            });
-            (__VLS_ctx.short(__VLS_ctx.currentUserName, 18));
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-                ...{ class: "text-sm text-gray-600 truncate" },
-                title: (__VLS_ctx.currentUserPhone),
-            });
-            (__VLS_ctx.short(__VLS_ctx.currentUserPhone || '未提供電話', 22));
-            if (__VLS_ctx.currentUserIdLast4) {
-                __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-                    ...{ class: "text-xs text-gray-500" },
-                });
-                (__VLS_ctx.currentUserIdLast4);
-            }
-        }
-        else {
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-                ...{ class: "space-y-2" },
-            });
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-                ...{ class: "relative md:max-w-[20rem] lg:max-w-[24rem]" },
-            });
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
-                ...{ onInput: (__VLS_ctx.filterMembers) },
-                value: (__VLS_ctx.memberQuery),
-                type: "text",
-                placeholder: "搜尋姓名/帳號/電話",
-                ...{ class: "w-full px-4 py-3 border border-gray-300 rounded-xl" },
-            });
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-                ...{ class: "relative md:max-w-[20rem] lg:max-w-[24rem]" },
-            });
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.select, __VLS_intrinsicElements.select)({
-                value: (__VLS_ctx.selectedMemberId),
-                ...{ class: "w-full px-4 py-3 border border-gray-300 rounded-xl" },
-            });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "relative md:max-w-[20rem] lg:max-w-[24rem]" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.select, __VLS_intrinsicElements.select)({
+            value: (__VLS_ctx.selectedMemberId),
+            ...{ class: "w-full px-4 py-3 border border-gray-300 rounded-xl" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
+            value: "",
+        });
+        for (const [m] of __VLS_getVForSourceType((__VLS_ctx.filteredMemberOptions))) {
             __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
-                value: "",
+                key: (m.id),
+                value: (String(m.id)),
             });
-            for (const [m] of __VLS_getVForSourceType((__VLS_ctx.filteredMemberOptions))) {
-                __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
-                    key: (m.id),
-                    value: (String(m.id)),
-                });
-                (__VLS_ctx.memberLabel(m));
-            }
-            if (__VLS_ctx.errors.userName) {
-                __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
-                    ...{ class: "mt-1 text-xs text-red-600" },
-                });
-                (__VLS_ctx.errors.userName);
-            }
+            (__VLS_ctx.memberLabel(m));
+        }
+        if (__VLS_ctx.errors.userName) {
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+                ...{ class: "mt-1 text-xs text-red-600" },
+            });
+            (__VLS_ctx.errors.userName);
         }
     }
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
@@ -414,35 +384,6 @@ if (__VLS_ctx.show) {
 /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
 /** @type {__VLS_StyleScopedClasses['mb-2']} */ ;
-/** @type {__VLS_StyleScopedClasses['flex']} */ ;
-/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-/** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
-/** @type {__VLS_StyleScopedClasses['mb-2']} */ ;
-/** @type {__VLS_StyleScopedClasses['px-3']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-1.5']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-/** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
-/** @type {__VLS_StyleScopedClasses['border']} */ ;
-/** @type {__VLS_StyleScopedClasses['px-3']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-1.5']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-/** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
-/** @type {__VLS_StyleScopedClasses['border']} */ ;
-/** @type {__VLS_StyleScopedClasses['p-3']} */ ;
-/** @type {__VLS_StyleScopedClasses['border']} */ ;
-/** @type {__VLS_StyleScopedClasses['border-gray-200']} */ ;
-/** @type {__VLS_StyleScopedClasses['rounded-xl']} */ ;
-/** @type {__VLS_StyleScopedClasses['bg-gray-50']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-800']} */ ;
-/** @type {__VLS_StyleScopedClasses['md:max-w-[20rem]']} */ ;
-/** @type {__VLS_StyleScopedClasses['lg:max-w-[24rem]']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-/** @type {__VLS_StyleScopedClasses['truncate']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
-/** @type {__VLS_StyleScopedClasses['truncate']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
 /** @type {__VLS_StyleScopedClasses['space-y-2']} */ ;
 /** @type {__VLS_StyleScopedClasses['relative']} */ ;
 /** @type {__VLS_StyleScopedClasses['md:max-w-[20rem]']} */ ;
@@ -505,7 +446,6 @@ const __VLS_self = (await import('vue')).defineComponent({
     setup() {
         return {
             isStaff: isStaff,
-            isProxy: isProxy,
             currentUserName: currentUserName,
             currentUserPhone: currentUserPhone,
             currentUserIdLast4: currentUserIdLast4,
@@ -519,7 +459,6 @@ const __VLS_self = (await import('vue')).defineComponent({
             handleClose: handleClose,
             filterMembers: filterMembers,
             truncatedVehicleId: truncatedVehicleId,
-            short: short,
             memberLabel: memberLabel,
         };
     },

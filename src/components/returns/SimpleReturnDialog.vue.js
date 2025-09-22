@@ -1,10 +1,14 @@
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { useReturns } from '@/stores/returns';
 import { useRentals } from '@/stores/rentals';
+import { useAuth } from '@/stores/auth';
 const props = defineProps();
 const emit = defineEmits();
 const returnsStore = useReturns();
 const rentalsStore = useRentals();
+const auth = useAuth();
+const isMember = computed(() => { var _a; return ((_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId) === 'member'; });
+const returnLocation = ref('');
 const loading = ref(false);
 // 方法
 function handleClose() {
@@ -18,8 +22,11 @@ async function handleConfirmReturn() {
     loading.value = true;
     try {
         // 走 Koala 租借歸還流程：根據車輛查詢進行中租借並 PATCH action=return
-        await rentalsStore.returnByBikeId(props.vehicle.id);
-        // 本地補一筆簡化的歸還記錄供 UI 顯示
+        const ok = await rentalsStore.returnByBikeId(props.vehicle.id, { return_location: isMember.value ? returnLocation.value : undefined });
+        if (!ok)
+            throw new Error('Koala 歸還動作失敗');
+        // 建立本地歸還記錄供 UI 顯示（不呼叫 /api/v1/returns）
+        const now = new Date().toISOString();
         const returnData = {
             vehicleId: props.vehicle.id,
             siteId: props.vehicle.siteId || 'unknown',
@@ -28,7 +35,8 @@ async function handleConfirmReturn() {
             issues: undefined,
             photos: undefined
         };
-        const returnRecord = await returnsStore.confirmReturnVehicle(returnData);
+        // 直接使用本地記錄，不嘗試呼叫不存在的 API
+        const returnRecord = { id: `local-${now}`, ...returnData, createdAt: now };
         emit('success', returnRecord);
         emit('close');
     }
@@ -115,6 +123,20 @@ if (__VLS_ctx.show) {
             ...{ class: "text-gray-900" },
         });
         (__VLS_ctx.vehicle.id);
+    }
+    if (__VLS_ctx.isMember) {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "mb-6 text-left" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
+            ...{ class: "block text-sm font-medium text-gray-700 mb-2" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
+            value: (__VLS_ctx.returnLocation),
+            type: "text",
+            placeholder: "例如 台大圖書館",
+            ...{ class: "w-full px-4 py-2 border border-gray-300 rounded-xl" },
+        });
     }
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "flex space-x-3" },
@@ -219,6 +241,19 @@ if (__VLS_ctx.show) {
 /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
+/** @type {__VLS_StyleScopedClasses['mb-6']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-left']} */ ;
+/** @type {__VLS_StyleScopedClasses['block']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
+/** @type {__VLS_StyleScopedClasses['mb-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-full']} */ ;
+/** @type {__VLS_StyleScopedClasses['px-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['py-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-gray-300']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-xl']} */ ;
 /** @type {__VLS_StyleScopedClasses['flex']} */ ;
 /** @type {__VLS_StyleScopedClasses['space-x-3']} */ ;
 /** @type {__VLS_StyleScopedClasses['flex-1']} */ ;
@@ -257,6 +292,8 @@ var __VLS_dollars;
 const __VLS_self = (await import('vue')).defineComponent({
     setup() {
         return {
+            isMember: isMember,
+            returnLocation: returnLocation,
             loading: loading,
             handleClose: handleClose,
             handleConfirmReturn: handleConfirmReturn,

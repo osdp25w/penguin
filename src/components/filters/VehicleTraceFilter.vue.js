@@ -11,7 +11,10 @@ const filteredVehicles = computed(() => {
         return props.availableVehicles;
     }
     const query = searchQuery.value.toLowerCase();
-    return props.availableVehicles.filter(vehicle => vehicle.id.toLowerCase().includes(query));
+    return props.availableVehicles.filter(vehicle => {
+        const label = vehicle.label || vehicle.id;
+        return label.toLowerCase().includes(query);
+    });
 });
 // 防止循環更新的標誌
 let isUpdatingInternally = false;
@@ -136,7 +139,7 @@ for (const [vehicle] of __VLS_getVForSourceType((__VLS_ctx.filteredVehicles))) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
         ...{ class: "font-medium text-black" },
     });
-    (vehicle.id);
+    (vehicle.label || vehicle.id);
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
         ...{ class: "text-gray-500 text-xs" },
     });

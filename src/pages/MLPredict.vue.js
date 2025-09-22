@@ -1,12 +1,13 @@
 import { reactive, computed, onMounted, ref } from 'vue';
 import { useVehicles, useML } from '@/stores';
-import { predictCadenceFromModel, predictGearRateFromModel } from '@/ml/runners';
+import { predictCadenceFromModel, predictGearRateFromModel, predictBatteryRisk } from '@/ml/runners';
 import { getAllModelPaths, setModelPaths } from '@/ml/paths';
 export default await (async () => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
     /* 1. store */
     const vStore = useVehicles();
     const ml = useML();
+    const usingRealData = ref(false);
     /* 2. 路線設定 */
     const ORIGIN = { lat: 23.9971, lon: 121.6019 };
     const DEST = { lat: 24.0304, lon: 121.6249 };
@@ -29,6 +30,11 @@ export default await (async () => {
     // 車輛選擇（多選）
     const selectedIds = ref([]);
     const search = ref('');
+    // Sorting configuration for results table
+    const sortConfig = ref({
+        field: '',
+        order: 'asc'
+    });
     const allVehicles = computed(() => { var _a; return (((_a = vStore.vehicles) === null || _a === void 0 ? void 0 : _a.length) ? vStore.vehicles : vStore.items); });
     const safeVehicles = computed(() => (Array.isArray(allVehicles.value) ? allVehicles.value : []).filter((v) => v && v.id));
     // 測試資料（當 store 無資料時使用）
@@ -41,10 +47,81 @@ export default await (async () => {
         return viewVehicles.value.filter((v) => String(v.id).toLowerCase().includes(q) ||
             String(v.name || '').toLowerCase().includes(q));
     });
-    const selectedRows = computed(() => viewVehicles.value.filter((v) => v && v.id && selectedIds.value.includes(v.id)));
+    const selectedRowsUnsorted = computed(() => viewVehicles.value.filter((v) => v && v.id && selectedIds.value.includes(String(v.id))));
+    // Apply sorting to selected rows
+    const selectedRows = computed(() => {
+        let list = [...selectedRowsUnsorted.value];
+        if (sortConfig.value.field) {
+            list.sort((a, b) => {
+                var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+                let aVal = '';
+                let bVal = '';
+                switch (sortConfig.value.field) {
+                    case 'vehicle':
+                        aVal = a.name || a.id || '';
+                        bVal = b.name || b.id || '';
+                        break;
+                    case 'status':
+                        aVal = a.status || '';
+                        bVal = b.status || '';
+                        break;
+                    case 'health':
+                        const aBattery = (_a = ml.batteries) === null || _a === void 0 ? void 0 : _a.find((bat) => (bat === null || bat === void 0 ? void 0 : bat.id) === String(a === null || a === void 0 ? void 0 : a.id));
+                        const bBattery = (_b = ml.batteries) === null || _b === void 0 ? void 0 : _b.find((bat) => (bat === null || bat === void 0 ? void 0 : bat.id) === String(b === null || b === void 0 ? void 0 : b.id));
+                        aVal = (aBattery === null || aBattery === void 0 ? void 0 : aBattery.health) || 0;
+                        bVal = (bBattery === null || bBattery === void 0 ? void 0 : bBattery.health) || 0;
+                        break;
+                    case 'risk':
+                        const aBatteryRisk = (_c = ml.batteries) === null || _c === void 0 ? void 0 : _c.find((bat) => (bat === null || bat === void 0 ? void 0 : bat.id) === String(a === null || a === void 0 ? void 0 : a.id));
+                        const bBatteryRisk = (_d = ml.batteries) === null || _d === void 0 ? void 0 : _d.find((bat) => (bat === null || bat === void 0 ? void 0 : bat.id) === String(b === null || b === void 0 ? void 0 : b.id));
+                        aVal = (aBatteryRisk === null || aBatteryRisk === void 0 ? void 0 : aBatteryRisk.faultP) || 0;
+                        bVal = (bBatteryRisk === null || bBatteryRisk === void 0 ? void 0 : bBatteryRisk.faultP) || 0;
+                        break;
+                    case 'charge':
+                        aVal = ((_e = result[String(a.id)]) === null || _e === void 0 ? void 0 : _e.nextCharge) || '';
+                        bVal = ((_f = result[String(b.id)]) === null || _f === void 0 ? void 0 : _f.nextCharge) || '';
+                        break;
+                    case 'cadence':
+                        aVal = a.status === 'in-use' ? (((_g = result[String(a.id)]) === null || _g === void 0 ? void 0 : _g.cadence) || 0) : 0;
+                        bVal = b.status === 'in-use' ? (((_h = result[String(b.id)]) === null || _h === void 0 ? void 0 : _h.cadence) || 0) : 0;
+                        break;
+                    case 'gearRatio':
+                        aVal = a.status === 'in-use' ? (((_j = result[String(a.id)]) === null || _j === void 0 ? void 0 : _j.gearRatio) || '') : '';
+                        bVal = b.status === 'in-use' ? (((_k = result[String(b.id)]) === null || _k === void 0 ? void 0 : _k.gearRatio) || '') : '';
+                        break;
+                }
+                const compareResult = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+                return sortConfig.value.order === 'asc' ? compareResult : -compareResult;
+            });
+        }
+        return list;
+    });
+    // Sorting function
+    function handleSort(field) {
+        if (sortConfig.value.field === field) {
+            sortConfig.value.order = sortConfig.value.order === 'asc' ? 'desc' : 'asc';
+        }
+        else {
+            sortConfig.value.field = field;
+            sortConfig.value.order = 'asc';
+        }
+    }
     /* 5. 預測流程 ------------------------------------------------------- */
-    function randFactor(maxPct) {
-        return 1 + (Math.random() * 2 - 1) * maxPct;
+    // 決定論噪聲工具：以字串產生穩定 0..1 值
+    function hashStr(s) { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = Math.imul(h, 16777619) >>> 0;
+    } return h >>> 0; }
+    function noise01(key) { return (hashStr(key) % 1000) / 1000; }
+    function detFactor(key, maxPct) { return 1 + ((noise01(key) * 2 - 1) * maxPct); }
+    function noiseRange(key, min, max) { return min + noise01(key) * (max - min); }
+    function shortId(id) {
+        if (id == null)
+            return '—';
+        const s = String(id);
+        if (s.length <= 12)
+            return s;
+        return `${s.slice(0, 6)}…${s.slice(-4)}`;
     }
     async function runPredict() {
         var _a;
@@ -58,7 +135,9 @@ export default await (async () => {
                 ml.fetchStrategy({ distance: dist, preference01: pref01.value, terrain01: terrain.value, wind01: wind01.value }),
                 ml.fetchCarbon({ distance: dist })
             ]);
-            const estMin = +strategy.estTime;
+            const estMin = Number(strategy.estTime);
+            const estEnergyVal = Number(strategy.estEnergy);
+            const carbonSavedVal = Number(carbon.saved);
             const avgSpeed = estMin ? +(dist / (estMin / 60)).toFixed(2) : 0;
             const power = await ml.fetchPower({ speed: avgSpeed });
             // Try optional cadence/gear models per vehicle (use pasted telemetry if provided)
@@ -66,24 +145,34 @@ export default await (async () => {
             if (!rows.length) {
                 throw new Error('請先選擇有效車輛');
             }
-            const baseTel = telemetry.value || telemetryFromVehicle(rows[0]) || undefined;
-            const cad = await predictCadenceFromModel(baseTel);
-            const gear = await predictGearRateFromModel(baseTel);
+            // 先以第一台車嘗試模型以暖機，再逐台計算（避免每次都 cold-start）
+            const warmupTel = telemetry.value || telemetryFromVehicle(rows[0]) || undefined;
+            await predictCadenceFromModel(warmupTel);
+            await predictGearRateFromModel(warmupTel);
             // 清空舊結果
             for (const k of Object.keys(result))
                 delete result[k];
-            rows.forEach((v) => {
+            for (const v of rows) {
                 if (!v || !v.id)
                     return;
-                /* ========== 隨機微調以避免全部一致 ========== */
-                const time = +(strategy.estTime * randFactor(0.05)).toFixed(1);
-                const energy = +(strategy.estEnergy * randFactor(0.05)).toFixed(2);
-                const saved = +(carbon.saved * randFactor(0.1)).toFixed(2);
-                const kWh = +(power.kWh + (Math.random() * 0.3 - 0.15)).toFixed(2);
+                /* ========== 決定論微調，避免全部一致（同車同參數輸出恆定） ========== */
+                const vid = String(v.id);
+                const time = +(estMin * detFactor(vid + ':time', 0.05)).toFixed(1);
+                const energy = +(estEnergyVal * detFactor(vid + ':energy', 0.05)).toFixed(2);
+                const saved = +(carbonSavedVal * detFactor(vid + ':saved', 0.10)).toFixed(2);
+                // 以每台車的即時速度（若有）微調耗能（決定論）
+                const vSpeed = typeof v.vehicleSpeed === 'number' ? v.vehicleSpeed : (typeof v.speedKph === 'number' ? v.speedKph : avgSpeed);
+                const speedMul = avgSpeed ? Math.max(0.5, Math.min(1.5, (vSpeed / avgSpeed) ** 2)) : 1;
+                const kWhBase = power.kWh * speedMul;
+                const kWhNoise = noiseRange(vid + ':kwh', -0.15, 0.15);
+                const kWh = +(kWhBase + kWhNoise).toFixed(2);
                 /* 踏頻：若有模型，採用模型輸出，否則 70‒95 rpm 基準 ±5 */
-                let cadence = cad !== null && cad !== void 0 ? cad : ((avgSpeed < 15 ? 72 : avgSpeed < 22 ? 82 : 92) + Math.round((Math.random() * 10 - 5)));
+                const tel = telemetry.value || telemetryFromVehicle(v) || undefined;
+                const cadV = await predictCadenceFromModel(tel);
+                let cadence = cadV !== null && cadV !== void 0 ? cadV : ((vSpeed < 15 ? 72 : vSpeed < 22 ? 82 : 92) + Math.round((Math.random() * 10 - 5)));
                 /* 變速比：若有模型，採用模型輸出 (四捨五入至 0.1)，否則 1.8‒2.8 線性 + 0.1 隨機 */
-                const baseRatio = gear !== null && gear !== void 0 ? gear : (1.8 + (avgSpeed / 30) + (Math.random() * 0.2 - 0.1));
+                const gearV = await predictGearRateFromModel(tel);
+                const baseRatio = gearV !== null && gearV !== void 0 ? gearV : (1.8 + (vSpeed / 30) + (Math.random() * 0.2 - 0.1));
                 const gearRatio = `1:${(+baseRatio).toFixed(1)}`;
                 const key = String(v.id);
                 result[key] = {
@@ -96,9 +185,33 @@ export default await (async () => {
                     cadence,
                     gearRatio
                 };
-            });
-            // battery risk 僅針對已選車輛
-            await ml.fetchBatteryRisk(rows.map((v) => String(v.id)));
+            }
+            // battery risk：針對每台車序列推論（避免 ONNX session 衝突）
+            console.log('[ML] Starting battery risk prediction for', rows.length, 'vehicles');
+            const risks = [];
+            for (const v of rows) {
+                const tel = telemetry.value || telemetryFromVehicle(v) || undefined;
+                console.log('[ML] Predicting battery risk for vehicle:', v.id, 'with telemetry:', !!tel);
+                try {
+                    const out = await predictBatteryRisk([String(v.id)], tel);
+                    console.log('[ML] Battery risk result for', v.id, ':', out);
+                    risks.push(out && out.length > 0 ? out[0] : null);
+                }
+                catch (err) {
+                    console.error('[ML] Battery risk prediction error for', v.id, ':', err);
+                    risks.push(null);
+                }
+            }
+            // 寫回 store（包含所有結果，即使是 null）
+            const validRisks = risks.filter((risk) => risk && risk.id).map((risk) => ({
+                id: String(risk.id),
+                health: Number(risk.health) || 0,
+                faultP: Number(risk.faultP) || 0,
+                capacity: risk.capacity != null ? Number(risk.capacity) : null
+            }));
+            console.log('[ML] Final battery analysis results:', validRisks);
+            console.log('[ML] Selected IDs:', selectedIds.value);
+            ml.batteries = validRisks;
         }
         catch (e) {
             ml.errMsg = (_a = e.message) !== null && _a !== void 0 ? _a : '預測失敗';
@@ -108,36 +221,62 @@ export default await (async () => {
             ml.loading = false;
         }
     }
+    // 重新整理資料函數
+    const refreshData = async () => {
+        try {
+            // 優先從後端載入即時車輛資料
+            const { data, total } = await vStore.fetchVehiclesPaged({ limit: 48, offset: 0 });
+            if (Array.isArray(data) && data.length) {
+                ;
+                vStore.vehicles = data;
+                vStore.total = total;
+                vStore.page = 1;
+                vStore.pageSize = 48;
+                usingRealData.value = true;
+                console.log('[ML] 已載入真實車輛資料:', data.length, '台');
+            }
+            else {
+                throw new Error('無真實資料');
+            }
+        }
+        catch (err) {
+            console.warn('[ML] 載入真實資料失敗，使用示範資料:', err);
+            await vStore.fetchPage({ page: 1, size: 20 });
+            usingRealData.value = false;
+        }
+    };
     /* 6. 掛載：載入車輛並隨機座標 */
     onMounted(async () => {
         var _a;
         try {
-            await vStore.fetchPage({ page: 1, size: 20 });
+            await refreshData();
             // 若無資料，建立 8 筆示範車輛
             if (!safeVehicles.value.length) {
                 const count = 8;
                 const arr = [];
                 for (let i = 0; i < count; i++) {
+                    const id = `DEMO-${String(i + 1).padStart(3, '0')}`;
                     const t = (i + 1) / (count + 1);
-                    const lat = +(ORIGIN.lat + (DEST.lat - ORIGIN.lat) * t + (Math.random() - 0.5) * 0.001).toFixed(6);
-                    const lon = +(ORIGIN.lon + (DEST.lon - ORIGIN.lon) * t + (Math.random() - 0.5) * 0.001).toFixed(6);
-                    const soc = Math.round(60 + Math.random() * 35);
-                    arr.push({ id: `DEMO-${String(i + 1).padStart(3, '0')}`, name: `示範車輛-${i + 1}`, lat, lon, batteryPct: soc, batteryLevel: soc, status: soc > 20 ? '可租借' : '低電量', speedKph: Math.round(Math.random() * 22) });
+                    const lat = +(ORIGIN.lat + (DEST.lat - ORIGIN.lat) * t).toFixed(6);
+                    const lon = +(ORIGIN.lon + (DEST.lon - ORIGIN.lon) * t).toFixed(6);
+                    const soc = Math.round(noiseRange(id + ':soc', 40, 85));
+                    const spd = Math.round(noiseRange(id + ':speed', 0, 22));
+                    arr.push({ id, name: `示範車輛-${i + 1}`, lat, lon, batteryPct: soc, batteryLevel: soc, status: soc > 20 ? '可租借' : '低電量', speedKph: spd });
                 }
                 localDummies.value = arr;
             }
-            // 為目前資料加上座標（若未定）
+            // 為目前資料加上座標（若未定，使用決定論位置）
             const denom = (viewVehicles.value.length || 1) + 1;
             viewVehicles.value.forEach((v, i) => {
                 if (typeof v.lat !== 'number' || typeof v.lon !== 'number') {
                     const t = (i + 1) / denom;
-                    v.lat = +(ORIGIN.lat + (DEST.lat - ORIGIN.lat) * t + (Math.random() - 0.5) * 0.001).toFixed(6);
-                    v.lon = +(ORIGIN.lon + (DEST.lon - ORIGIN.lon) * t + (Math.random() - 0.5) * 0.001).toFixed(6);
+                    v.lat = +(ORIGIN.lat + (DEST.lat - ORIGIN.lat) * t).toFixed(6);
+                    v.lon = +(ORIGIN.lon + (DEST.lon - ORIGIN.lon) * t).toFixed(6);
                 }
             });
             // 預設勾選第一台車（若可用）
             if (viewVehicles.value.length)
-                selectedIds.value = [viewVehicles.value[0].id];
+                selectedIds.value = [String(viewVehicles.value[0].id)];
         }
         catch (e) {
             ml.errMsg = (_a = e.message) !== null && _a !== void 0 ? _a : '載入失敗';
@@ -146,14 +285,18 @@ export default await (async () => {
     const hasResult = computed(() => Object.keys(result).length > 0);
     // 將現有車輛快照轉為 Telemetry 物件（缺值用隨機）
     function telemetryFromVehicle(v) {
-        var _a, _b, _c;
-        const rand = (min, max) => min + Math.random() * (max - min);
-        const mv10 = Math.round(rand(490, 540)); // 49.0~54.0 V → 490~540 (0.1V)
-        const ct = Math.random() < 0.1 ? 2000 : Math.round(rand(28, 42));
-        const soc = Math.round((_b = (_a = v.batteryLevel) !== null && _a !== void 0 ? _a : v.batteryPct) !== null && _b !== void 0 ? _b : rand(20, 95));
-        const vs = Math.round((_c = v.speedKph) !== null && _c !== void 0 ? _c : rand(0, 22));
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+        const vid = String(v.id);
+        const rawSoc = (_c = (_b = (_a = v.batteryLevel) !== null && _a !== void 0 ? _a : v.batteryPct) !== null && _b !== void 0 ? _b : v.soc) !== null && _c !== void 0 ? _c : noiseRange(vid + ':soc', 35, 90);
+        const voltage = (_e = (_d = v.voltage) !== null && _d !== void 0 ? _d : v.packVoltage) !== null && _e !== void 0 ? _e : (typeof v.mv10 === 'number' ? v.mv10 / 10 : undefined);
+        const ctrlTemp = (_h = (_g = (_f = v.controllerTemp) !== null && _f !== void 0 ? _f : v.motorTemp) !== null && _g !== void 0 ? _g : v.temperature) !== null && _h !== void 0 ? _h : noiseRange(vid + ':ct', 28, 42);
+        const speed = (_k = (_j = v.vehicleSpeed) !== null && _j !== void 0 ? _j : v.speedKph) !== null && _k !== void 0 ? _k : noiseRange(vid + ':speed', 0, 22);
         const lat = typeof v.lat === 'number' ? Math.round(v.lat * 1e6) : 0;
         const lon = typeof v.lon === 'number' ? Math.round(v.lon * 1e6) : 0;
+        const mv10 = Math.round((voltage !== null && voltage !== void 0 ? voltage : noiseRange(vid + ':mv10', 50, 54)) * 10);
+        const soc = Math.round(rawSoc);
+        const vs = Math.round(speed);
+        const ct = Math.round(ctrlTemp);
         return {
             ID: String(v.id),
             MSG: {
@@ -181,7 +324,8 @@ export default await (async () => {
         { label: 'range.onnx', value: '/models/range.onnx' }
     ];
     const batteryOptions = [
-        { label: '內建 battery_risk.onnx', value: '/models/battery_risk.onnx' },
+        { label: '容量模型 (battery_capacity.onnx)', value: '/models/battery_capacity.onnx' },
+        { label: '風險模型 (battery_risk.onnx)', value: '/models/battery_risk.onnx' },
         { label: 'soh_rf.onnx', value: '/models/soh_rf.onnx' },
         { label: 'iforest.onnx', value: '/models/iforest.onnx' }
     ];
@@ -213,696 +357,448 @@ export default await (async () => {
     const __VLS_ctx = {};
     let __VLS_components;
     let __VLS_directives;
-    /** @type {__VLS_StyleScopedClasses['slider']} */ ;
-    /** @type {__VLS_StyleScopedClasses['slider']} */ ;
     // CSS variable injection 
     // CSS variable injection end 
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 p-6" },
+        ...{ class: "min-h-screen bg-gray-50 p-4" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "mx-auto max-w-7xl space-y-8" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.header, __VLS_intrinsicElements.header)({
-        ...{ class: "flex items-center justify-between rounded-2xl bg-white/80 backdrop-blur-sm p-6 shadow-lg border border-white/20" },
+        ...{ class: "mx-auto max-w-6xl space-y-6" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex items-center gap-4" },
+        ...{ class: "bg-white rounded-lg shadow p-6" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.svg, __VLS_intrinsicElements.svg)({
-        ...{ class: "h-6 w-6" },
-        fill: "none",
-        stroke: "currentColor",
-        viewBox: "0 0 24 24",
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.path)({
-        'stroke-linecap': "round",
-        'stroke-linejoin': "round",
-        'stroke-width': "2",
-        d: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
+        ...{ class: "flex items-center justify-between" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
     __VLS_asFunctionalElement(__VLS_intrinsicElements.h1, __VLS_intrinsicElements.h1)({
-        ...{ class: "text-3xl font-bold bg-gradient-to-r from-gray-900 via-gray-800 to-gray-700 bg-clip-text text-transparent" },
+        ...{ class: "text-2xl font-bold text-gray-900" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
-        ...{ class: "text-sm text-gray-600 mt-1" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
-        ...{ onClick: (__VLS_ctx.runPredict) },
-        ...{ class: "btn-primary" },
-        disabled: (__VLS_ctx.ml.loading || __VLS_ctx.selectedIds.length === 0),
-    });
-    if (__VLS_ctx.ml.loading) {
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-            ...{ class: "flex items-center gap-2" },
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.svg, __VLS_intrinsicElements.svg)({
-            ...{ class: "animate-spin h-4 w-4" },
-            fill: "none",
-            viewBox: "0 0 24 24",
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.circle, __VLS_intrinsicElements.circle)({
-            ...{ class: "opacity-25" },
-            cx: "12",
-            cy: "12",
-            r: "10",
-            stroke: "currentColor",
-            'stroke-width': "4",
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.path, __VLS_intrinsicElements.path)({
-            ...{ class: "opacity-75" },
-            fill: "currentColor",
-            d: "m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z",
-        });
-    }
-    else {
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-            ...{ class: "flex items-center gap-2" },
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.svg, __VLS_intrinsicElements.svg)({
-            ...{ class: "h-4 w-4" },
-            fill: "none",
-            stroke: "currentColor",
-            viewBox: "0 0 24 24",
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.path)({
-            'stroke-linecap': "round",
-            'stroke-linejoin': "round",
-            'stroke-width': "2",
-            d: "M13 10V3L4 14h7v7l9-11h-7z",
-        });
-        (__VLS_ctx.hasResult ? '重新計算' : '開始預測');
-    }
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "rounded-2xl bg-white/80 backdrop-blur-sm p-6 shadow-lg border border-white/20" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex items-center gap-3 mb-6" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 text-white" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.svg, __VLS_intrinsicElements.svg)({
-        ...{ class: "h-4 w-4" },
-        fill: "none",
-        stroke: "currentColor",
-        viewBox: "0 0 24 24",
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.path)({
-        'stroke-linecap': "round",
-        'stroke-linejoin': "round",
-        'stroke-width': "2",
-        d: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h1a1 1 0 011 1v5m-4 0h4",
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.h3, __VLS_intrinsicElements.h3)({
-        ...{ class: "text-xl font-semibold text-gray-900" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "ml-auto inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-800" },
-    });
-    (__VLS_ctx.selectedIds.length);
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "grid grid-cols-1 lg:grid-cols-3 gap-6" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "lg:col-span-2 space-y-4" },
+        ...{ class: "mt-1 text-sm text-gray-600" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "flex items-center gap-3" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "relative flex-1" },
+        ...{ class: "px-3 py-1.5 rounded-md text-xs font-medium" },
+        ...{ class: (__VLS_ctx.usingRealData ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-amber-100 text-amber-700 border border-amber-200') },
     });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.svg, __VLS_intrinsicElements.svg)({
-        ...{ class: "absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" },
-        fill: "none",
-        stroke: "currentColor",
-        viewBox: "0 0 24 24",
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+        ...{ class: (__VLS_ctx.usingRealData ? 'i-ph-database' : 'i-ph-test-tube') },
+        ...{ class: "w-4 h-4 inline-block mr-1" },
     });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.path)({
-        'stroke-linecap': "round",
-        'stroke-linejoin': "round",
-        'stroke-width': "2",
-        d: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z",
+    (__VLS_ctx.usingRealData ? '真實資料' : '示範資料');
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+        ...{ onClick: (__VLS_ctx.refreshData) },
+        ...{ class: "px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500" },
+        disabled: (__VLS_ctx.vStore.loading),
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+        ...{ class: "w-4 h-4" },
+        ...{ class: (__VLS_ctx.vStore.loading ? 'i-ph-spinner animate-spin' : 'i-ph-arrow-clockwise') },
+    });
+    (__VLS_ctx.vStore.loading ? '載入中...' : '重新整理');
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "bg-white rounded-lg shadow p-6" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "flex items-center justify-between mb-6" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.h2, __VLS_intrinsicElements.h2)({
+        ...{ class: "text-lg font-semibold text-gray-900" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+        ...{ class: "text-sm text-gray-600 mt-1" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "text-sm font-medium text-blue-600" },
+    });
+    (__VLS_ctx.selectedIds.length);
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "space-y-3 mb-4" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "relative max-w-md" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+        ...{ class: "i-ph-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
         type: "text",
         value: (__VLS_ctx.search),
-        placeholder: "搜尋車輛 ID/名稱...",
-        ...{ class: "input-field pl-10" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
-        ...{ onClick: (__VLS_ctx.selectAll) },
-        ...{ class: "btn-outline" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
-        ...{ onClick: (__VLS_ctx.clearAll) },
-        ...{ class: "btn-outline" },
+        placeholder: "搜尋車輛 ID 或名稱...",
+        ...{ class: "w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "rounded-lg border border-gray-200 bg-gray-50/50 max-h-64 overflow-auto" },
+        ...{ class: "flex items-center gap-3" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+        ...{ onClick: (...[$event]) => {
+                __VLS_ctx.selectedIds = __VLS_ctx.filteredOptions.map((v) => String(v && v.id)).filter(Boolean);
+            } },
+        ...{ class: "px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+        ...{ class: "i-ph-check-square w-4 h-4 inline-block mr-1" },
+    });
+    (__VLS_ctx.filteredOptions.length);
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+        ...{ onClick: (...[$event]) => {
+                __VLS_ctx.selectedIds = [];
+            } },
+        ...{ class: "px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+        ...{ class: "i-ph-x-square w-4 h-4 inline-block mr-1" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "ml-auto text-sm text-gray-500" },
+    });
+    (__VLS_ctx.viewVehicles.length);
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 max-h-96 overflow-y-auto" },
     });
     for (const [v, idx] of __VLS_getVForSourceType((__VLS_ctx.filteredOptions))) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
             key: ((v && v.id) || idx),
-            ...{ class: "flex items-center gap-3 px-4 py-3 hover:bg-white/80 border-b border-gray-100 last:border-0 transition-colors" },
+            ...{ class: "border border-gray-200 rounded-lg p-3 hover:border-blue-300 transition-colors" },
+            ...{ class: (__VLS_ctx.selectedIds.includes(String(v === null || v === void 0 ? void 0 : v.id)) ? 'bg-blue-50 border-blue-300' : 'bg-white') },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
-            ...{ class: "flex items-center gap-3 cursor-pointer flex-1" },
+            ...{ class: "flex items-center gap-3 cursor-pointer" },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
             type: "checkbox",
-            value: ((v && v.id) || ''),
+            value: (String((v && v.id) || '')),
             ...{ class: "h-4 w-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500" },
         });
         (__VLS_ctx.selectedIds);
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "flex items-center gap-2 min-w-0 flex-1" },
+            ...{ class: "flex-1 min-w-0" },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-gray-100 to-gray-200 text-gray-600 text-xs font-semibold" },
-        });
-        (String((v === null || v === void 0 ? void 0 : v.name) || 'E')[0].toUpperCase());
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "min-w-0" },
+            ...{ class: "flex items-center gap-2 mb-1" },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "truncate text-sm font-medium text-gray-900" },
+            ...{ class: "w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center text-xs font-semibold text-gray-600" },
+        });
+        (String((v === null || v === void 0 ? void 0 : v.name) || (v === null || v === void 0 ? void 0 : v.id) || 'E')[0].toUpperCase());
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "font-medium text-sm text-gray-900 truncate" },
         });
         ((v && v.name) || 'E-Bike');
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "truncate text-xs font-mono text-gray-500" },
+            ...{ class: "text-xs text-gray-500 font-mono" },
         });
-        ((v && v.id) || '—');
+        (__VLS_ctx.shortId(v && v.id));
         if ((v === null || v === void 0 ? void 0 : v.batteryLevel) || (v === null || v === void 0 ? void 0 : v.batteryPct)) {
             __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-                ...{ class: "text-xs text-gray-500" },
+                ...{ class: "text-xs text-gray-600 mt-1" },
             });
             (Math.round((v === null || v === void 0 ? void 0 : v.batteryLevel) || (v === null || v === void 0 ? void 0 : v.batteryPct) || 0));
         }
-    }
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "rounded-2xl bg-white/80 backdrop-blur-sm p-6 shadow-lg border border-white/20" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex items-center gap-3 mb-6" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 text-white" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.svg, __VLS_intrinsicElements.svg)({
-        ...{ class: "h-4 w-4" },
-        fill: "none",
-        stroke: "currentColor",
-        viewBox: "0 0 24 24",
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.path)({
-        'stroke-linecap': "round",
-        'stroke-linejoin': "round",
-        'stroke-width': "2",
-        d: "M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z",
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.h3, __VLS_intrinsicElements.h3)({
-        ...{ class: "text-xl font-semibold text-gray-900" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "grid grid-cols-1 lg:grid-cols-3 gap-6" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "space-y-2" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
-        ...{ class: "block text-sm font-medium text-gray-700" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.select, __VLS_intrinsicElements.select)({
-        value: (__VLS_ctx.ui.powerPath),
-        ...{ class: "input-field" },
-    });
-    for (const [opt] of __VLS_getVForSourceType((__VLS_ctx.powerOptions))) {
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
-            key: (opt.value),
-            value: (opt.value),
-        });
-        (opt.label);
-    }
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "space-y-2" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
-        ...{ class: "block text-sm font-medium text-gray-700" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.select, __VLS_intrinsicElements.select)({
-        value: (__VLS_ctx.ui.batteryPath),
-        ...{ class: "input-field" },
-    });
-    for (const [opt] of __VLS_getVForSourceType((__VLS_ctx.batteryOptions))) {
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
-            key: (opt.value),
-            value: (opt.value),
-        });
-        (opt.label);
-    }
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex items-end gap-3" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
-        ...{ onClick: (__VLS_ctx.applyModelPaths) },
-        ...{ class: "btn-secondary" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
-        ...{ onClick: (__VLS_ctx.testLoad) },
-        ...{ class: "btn-outline" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "mt-4 flex items-center gap-2" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "text-sm text-gray-600" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium" },
-        ...{ class: (__VLS_ctx.ui.status === 'ONNX 已載入' ? 'bg-emerald-100 text-emerald-800' :
-                __VLS_ctx.ui.status.includes('載入失敗') ? 'bg-red-100 text-red-800' :
-                    'bg-yellow-100 text-yellow-800') },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "h-1.5 w-1.5 rounded-full" },
-        ...{ class: (__VLS_ctx.ui.status === 'ONNX 已載入' ? 'bg-emerald-500' :
-                __VLS_ctx.ui.status.includes('載入失敗') ? 'bg-red-500' :
-                    'bg-yellow-500') },
-    });
-    (__VLS_ctx.ui.status);
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "space-y-3" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
-        ...{ class: "block text-sm font-medium text-gray-700" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "rounded-lg border border-gray-200 bg-gray-50/50 p-4 min-h-[8rem] max-h-64 overflow-auto space-y-2" },
-    });
-    for (const [id] of __VLS_getVForSourceType((__VLS_ctx.selectedIds))) {
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            key: (id),
-            ...{ class: "flex items-center justify-between rounded-md bg-white px-3 py-2 text-sm shadow-sm" },
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-            ...{ class: "truncate font-mono text-gray-700" },
-        });
-        (id);
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
-            ...{ onClick: (...[$event]) => {
-                    __VLS_ctx.selectedIds = __VLS_ctx.selectedIds.filter(i => i !== id);
-                } },
-            ...{ class: "ml-2 text-gray-400 hover:text-red-500 transition-colors" },
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.svg, __VLS_intrinsicElements.svg)({
-            ...{ class: "h-4 w-4" },
-            fill: "none",
-            stroke: "currentColor",
-            viewBox: "0 0 24 24",
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.path)({
-            'stroke-linecap': "round",
-            'stroke-linejoin': "round",
-            'stroke-width': "2",
-            d: "M6 18L18 6M6 6l12 12",
-        });
-    }
-    if (__VLS_ctx.selectedIds.length === 0) {
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "text-center text-gray-400 py-4" },
-        });
-    }
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "rounded-2xl bg-white/80 backdrop-blur-sm p-6 shadow-lg border border-white/20" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex items-center gap-3 mb-6" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 text-white" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.svg, __VLS_intrinsicElements.svg)({
-        ...{ class: "h-4 w-4" },
-        fill: "none",
-        stroke: "currentColor",
-        viewBox: "0 0 24 24",
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.path)({
-        'stroke-linecap': "round",
-        'stroke-linejoin': "round",
-        'stroke-width': "2",
-        d: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.h3, __VLS_intrinsicElements.h3)({
-        ...{ class: "text-xl font-semibold text-gray-900" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "ml-auto text-xs text-gray-500" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "grid grid-cols-1 lg:grid-cols-2 gap-6" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "space-y-3" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
-        ...{ class: "block text-sm font-medium text-gray-700" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.textarea)({
-        ...{ onChange: (e => __VLS_ctx.onPasteTelemetry(e.target.value)) },
-        ...{ class: "textarea-field h-40 font-mono text-xs" },
-        placeholder: '{"ID":"867...","MSG":{...}}',
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
-        ...{ class: "text-xs text-gray-600 flex items-center gap-1" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.svg, __VLS_intrinsicElements.svg)({
-        ...{ class: "h-3 w-3" },
-        fill: "none",
-        stroke: "currentColor",
-        viewBox: "0 0 24 24",
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.path)({
-        'stroke-linecap': "round",
-        'stroke-linejoin': "round",
-        'stroke-width': "2",
-        d: "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "space-y-4" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "rounded-lg border border-gray-200 bg-gray-50/50 p-4" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex items-center gap-2 mb-3" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "text-sm font-medium text-gray-700" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium" },
-        ...{ class: (__VLS_ctx.telemetry.value ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600') },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "h-1.5 w-1.5 rounded-full" },
-        ...{ class: (__VLS_ctx.telemetry.value ? 'bg-emerald-500' : 'bg-gray-400') },
-    });
-    (__VLS_ctx.telemetry.value ? '已載入' : '未提供');
-    if (__VLS_ctx.telemetry.value) {
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "space-y-2" },
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "flex items-center justify-between" },
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-            ...{ class: "text-xs text-gray-600" },
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-            ...{ class: "text-xs font-mono text-gray-900" },
-        });
-        (__VLS_ctx.telemetry.value.ID);
-        if (__VLS_ctx.telemetry.value.MSG) {
+        if (v === null || v === void 0 ? void 0 : v.vehicleSpeed) {
             __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
                 ...{ class: "text-xs text-gray-600" },
             });
-            (Object.keys(__VLS_ctx.telemetry.value.MSG).length);
+            (v.vehicleSpeed);
         }
     }
-    else {
+    if (__VLS_ctx.selectedIds.length === 0) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "text-xs text-gray-500 text-center py-2" },
+            ...{ class: "text-center py-8 text-gray-500" },
         });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: "i-ph-bicycle w-12 h-12 mx-auto text-gray-300 mb-2" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({});
     }
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "rounded-2xl bg-white/80 backdrop-blur-sm p-6 shadow-lg border border-white/20" },
+        ...{ class: "mt-6 flex justify-center" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+        ...{ onClick: (__VLS_ctx.runPredict) },
+        disabled: (__VLS_ctx.ml.loading || __VLS_ctx.selectedIds.length === 0),
+        ...{ class: "px-8 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2" },
+    });
+    if (__VLS_ctx.ml.loading) {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: "i-ph-spinner w-5 h-5 animate-spin" },
+        });
+    }
+    else {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: "i-ph-play w-5 h-5" },
+        });
+    }
+    (__VLS_ctx.ml.loading ? '計算中...' : (__VLS_ctx.hasResult ? '重新計算' : '開始預測'));
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "bg-white rounded-lg shadow overflow-hidden" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex items-center gap-3 mb-6" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-red-600 text-white" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.svg, __VLS_intrinsicElements.svg)({
-        ...{ class: "h-4 w-4" },
-        fill: "none",
-        stroke: "currentColor",
-        viewBox: "0 0 24 24",
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.path)({
-        'stroke-linecap': "round",
-        'stroke-linejoin': "round",
-        'stroke-width': "2",
-        d: "M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4",
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.h3, __VLS_intrinsicElements.h3)({
-        ...{ class: "text-xl font-semibold text-gray-900" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "space-y-3" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
-        ...{ class: "block text-sm font-medium text-gray-700" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "relative" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
-        type: "number",
-        min: "1",
-        step: "0.1",
-        ...{ class: "input-field pr-12" },
-    });
-    (__VLS_ctx.distKm);
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "space-y-3" },
+        ...{ class: "px-6 py-4 border-b border-gray-200" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "flex items-center justify-between" },
     });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
-        ...{ class: "text-sm font-medium text-gray-700" },
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.h2, __VLS_intrinsicElements.h2)({
+        ...{ class: "text-lg font-semibold text-gray-900" },
     });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "text-xs text-gray-500" },
-    });
-    ((__VLS_ctx.pref01 * 100).toFixed(0));
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
-        type: "range",
-        min: "0",
-        max: "1",
-        step: "0.05",
-        ...{ class: "slider" },
-    });
-    (__VLS_ctx.pref01);
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex justify-between text-xs text-gray-500" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "space-y-3" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex items-center justify-between" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
-        ...{ class: "text-sm font-medium text-gray-700" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "text-xs text-gray-500" },
-    });
-    ((__VLS_ctx.terrain * 100).toFixed(0));
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
-        type: "range",
-        min: "0",
-        max: "1",
-        step: "0.05",
-        ...{ class: "slider" },
-    });
-    (__VLS_ctx.terrain);
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex justify-between text-xs text-gray-500" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "space-y-3" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex items-center justify-between" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
-        ...{ class: "text-sm font-medium text-gray-700" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "text-xs text-gray-500" },
-    });
-    ((__VLS_ctx.wind01 * 100).toFixed(0));
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
-        type: "range",
-        min: "0",
-        max: "1",
-        step: "0.05",
-        ...{ class: "slider" },
-    });
-    (__VLS_ctx.wind01);
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex justify-between text-xs text-gray-500" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "rounded-2xl bg-white/80 backdrop-blur-sm shadow-lg border border-white/20 overflow-hidden" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex items-center gap-3 p-6 border-b border-gray-200/50" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 text-white" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.svg, __VLS_intrinsicElements.svg)({
-        ...{ class: "h-4 w-4" },
-        fill: "none",
-        stroke: "currentColor",
-        viewBox: "0 0 24 24",
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.path)({
-        'stroke-linecap': "round",
-        'stroke-linejoin': "round",
-        'stroke-width': "2",
-        d: "M9 17v-2m3 2v-4m3 4v-6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.h3, __VLS_intrinsicElements.h3)({
-        ...{ class: "text-xl font-semibold text-gray-900" },
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+        ...{ class: "text-sm text-gray-600 mt-1" },
     });
     if (__VLS_ctx.hasResult) {
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-            ...{ class: "ml-auto text-xs text-gray-500" },
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "text-sm text-gray-600" },
         });
         (__VLS_ctx.selectedRows.length);
     }
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "overflow-auto max-h-96" },
+        ...{ class: "overflow-x-auto" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.table, __VLS_intrinsicElements.table)({
-        ...{ class: "min-w-full text-sm" },
+        ...{ class: "min-w-full" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.thead, __VLS_intrinsicElements.thead)({
-        ...{ class: "bg-gray-50/80 text-gray-700 sticky top-0" },
+        ...{ class: "bg-gray-50" },
     });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.tr, __VLS_intrinsicElements.tr)({});
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-left font-medium" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-right font-medium" },
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.tr, __VLS_intrinsicElements.tr)({
+        ...{ class: "text-left text-xs font-semibold uppercase tracking-wider text-gray-600" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-right font-medium" },
+        ...{ onClick: (...[$event]) => {
+                __VLS_ctx.handleSort('vehicle');
+            } },
+        ...{ class: "px-6 py-3 cursor-pointer hover:bg-gray-100 transition-colors" },
     });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "flex items-center gap-1" },
+    });
+    if (__VLS_ctx.sortConfig.field === 'vehicle') {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: (__VLS_ctx.sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down') },
+            ...{ class: "w-3 h-3" },
+        });
+    }
+    else {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: "i-ph-caret-up-down w-3 h-3 opacity-30" },
+        });
+    }
     __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-right font-medium" },
+        ...{ onClick: (...[$event]) => {
+                __VLS_ctx.handleSort('status');
+            } },
+        ...{ class: "px-6 py-3 cursor-pointer hover:bg-gray-100 transition-colors" },
     });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "text-xs text-gray-500 block font-normal" },
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "flex items-center gap-1" },
     });
+    if (__VLS_ctx.sortConfig.field === 'status') {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: (__VLS_ctx.sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down') },
+            ...{ class: "w-3 h-3" },
+        });
+    }
+    else {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: "i-ph-caret-up-down w-3 h-3 opacity-30" },
+        });
+    }
     __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-right font-medium" },
+        ...{ onClick: (...[$event]) => {
+                __VLS_ctx.handleSort('health');
+            } },
+        ...{ class: "px-6 py-3 cursor-pointer hover:bg-gray-100 transition-colors" },
     });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "text-xs text-gray-500 block font-normal" },
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "flex items-center gap-1" },
     });
+    if (__VLS_ctx.sortConfig.field === 'health') {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: (__VLS_ctx.sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down') },
+            ...{ class: "w-3 h-3" },
+        });
+    }
+    else {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: "i-ph-caret-up-down w-3 h-3 opacity-30" },
+        });
+    }
     __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-right font-medium" },
+        ...{ onClick: (...[$event]) => {
+                __VLS_ctx.handleSort('risk');
+            } },
+        ...{ class: "px-6 py-3 cursor-pointer hover:bg-gray-100 transition-colors" },
     });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "text-xs text-gray-500 block font-normal" },
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "flex items-center gap-1" },
     });
+    if (__VLS_ctx.sortConfig.field === 'risk') {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: (__VLS_ctx.sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down') },
+            ...{ class: "w-3 h-3" },
+        });
+    }
+    else {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: "i-ph-caret-up-down w-3 h-3 opacity-30" },
+        });
+    }
     __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-right font-medium" },
+        ...{ onClick: (...[$event]) => {
+                __VLS_ctx.handleSort('charge');
+            } },
+        ...{ class: "px-6 py-3 cursor-pointer hover:bg-gray-100 transition-colors" },
     });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "text-xs text-gray-500 block font-normal" },
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "flex items-center gap-1" },
     });
+    if (__VLS_ctx.sortConfig.field === 'charge') {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: (__VLS_ctx.sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down') },
+            ...{ class: "w-3 h-3" },
+        });
+    }
+    else {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: "i-ph-caret-up-down w-3 h-3 opacity-30" },
+        });
+    }
     __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-center font-medium" },
+        ...{ onClick: (...[$event]) => {
+                __VLS_ctx.handleSort('cadence');
+            } },
+        ...{ class: "px-6 py-3 cursor-pointer hover:bg-gray-100 transition-colors" },
     });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "flex items-center gap-1" },
+    });
+    if (__VLS_ctx.sortConfig.field === 'cadence') {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: (__VLS_ctx.sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down') },
+            ...{ class: "w-3 h-3" },
+        });
+    }
+    else {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: "i-ph-caret-up-down w-3 h-3 opacity-30" },
+        });
+    }
     __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-right font-medium" },
+        ...{ onClick: (...[$event]) => {
+                __VLS_ctx.handleSort('gearRatio');
+            } },
+        ...{ class: "px-6 py-3 cursor-pointer hover:bg-gray-100 transition-colors" },
     });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "text-xs text-gray-500 block font-normal" },
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "flex items-center gap-1" },
     });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-right font-medium" },
-    });
+    if (__VLS_ctx.sortConfig.field === 'gearRatio') {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: (__VLS_ctx.sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down') },
+            ...{ class: "w-3 h-3" },
+        });
+    }
+    else {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: "i-ph-caret-up-down w-3 h-3 opacity-30" },
+        });
+    }
     __VLS_asFunctionalElement(__VLS_intrinsicElements.tbody, __VLS_intrinsicElements.tbody)({
-        ...{ class: "bg-white/50" },
+        ...{ class: "bg-white divide-y divide-gray-200" },
     });
     for (const [v, idx] of __VLS_getVForSourceType((__VLS_ctx.selectedRows))) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.tr, __VLS_intrinsicElements.tr)({
             key: ((v && v.id) || idx),
-            ...{ class: "border-t border-gray-100 hover:bg-white/80 transition-colors" },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-            ...{ class: "px-4 py-3" },
+            ...{ class: "px-6 py-4 whitespace-nowrap" },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "flex items-center gap-2" },
+            ...{ class: "flex items-center" },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "flex h-6 w-6 items-center justify-center rounded bg-gray-100 text-xs font-medium text-gray-600" },
+            ...{ class: "w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-sm font-medium text-gray-600" },
         });
         (String((v === null || v === void 0 ? void 0 : v.name) || (v === null || v === void 0 ? void 0 : v.id) || 'E')[0].toUpperCase());
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-            ...{ class: "truncate max-w-[10ch] font-mono text-gray-900" },
-            title: ((v && v.id) || ''),
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "ml-3" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "text-sm font-medium text-gray-900" },
+        });
+        ((v && v.name) || 'E-Bike');
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "text-sm text-gray-500 font-mono" },
         });
         ((v && v.id) || '—');
         __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-            ...{ class: "px-4 py-3 text-right text-gray-700" },
+            ...{ class: "px-6 py-4 whitespace-nowrap" },
         });
-        ((v && typeof v.lat === 'number') ? v.lat.toFixed(6) : '—');
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+            ...{ class: "inline-flex px-2 py-1 text-xs font-semibold rounded-full" },
+            ...{ class: ((v === null || v === void 0 ? void 0 : v.status) === 'in-use' ? 'bg-blue-100 text-blue-800' :
+                    (v === null || v === void 0 ? void 0 : v.status) === 'available' ? 'bg-green-100 text-green-800' :
+                        (v === null || v === void 0 ? void 0 : v.status) === 'maintenance' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-gray-100 text-gray-800') },
+        });
+        ((v === null || v === void 0 ? void 0 : v.status) === 'in-use' ? '使用中' :
+            (v === null || v === void 0 ? void 0 : v.status) === 'available' ? '可用' :
+                (v === null || v === void 0 ? void 0 : v.status) === 'maintenance' ? '維護中' : (v === null || v === void 0 ? void 0 : v.status) || '未知');
         __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-            ...{ class: "px-4 py-3 text-right text-gray-700" },
+            ...{ class: "px-6 py-4 whitespace-nowrap" },
         });
-        ((v && typeof v.lon === 'number') ? v.lon.toFixed(6) : '—');
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-            ...{ class: "px-4 py-3 text-right font-medium text-gray-900" },
-        });
-        ((_b = (v && ((_a = __VLS_ctx.result[String(v.id)]) === null || _a === void 0 ? void 0 : _a.estTime))) !== null && _b !== void 0 ? _b : (__VLS_ctx.ml.loading ? '…' : '—'));
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-            ...{ class: "px-4 py-3 text-right font-medium text-green-700" },
-        });
-        ((_d = (v && ((_c = __VLS_ctx.result[String(v.id)]) === null || _c === void 0 ? void 0 : _c.estEnergy))) !== null && _d !== void 0 ? _d : (__VLS_ctx.ml.loading ? '…' : '—'));
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-            ...{ class: "px-4 py-3 text-right font-medium text-emerald-700" },
-        });
-        ((_f = (v && ((_e = __VLS_ctx.result[String(v.id)]) === null || _e === void 0 ? void 0 : _e.saved))) !== null && _f !== void 0 ? _f : (__VLS_ctx.ml.loading ? '…' : '—'));
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-            ...{ class: "px-4 py-3 text-right font-medium text-orange-700" },
-        });
-        ((_h = (v && ((_g = __VLS_ctx.result[String(v.id)]) === null || _g === void 0 ? void 0 : _g.kWh))) !== null && _h !== void 0 ? _h : (__VLS_ctx.ml.loading ? '…' : '—'));
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-            ...{ class: "px-4 py-3 text-center" },
-        });
-        if (v && ((_j = __VLS_ctx.result[String(v.id)]) === null || _j === void 0 ? void 0 : _j.nextCharge)) {
+        if ((_a = __VLS_ctx.ml.batteries) === null || _a === void 0 ? void 0 : _a.find(b => (b === null || b === void 0 ? void 0 : b.id) === String(v === null || v === void 0 ? void 0 : v.id))) {
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ class: "flex items-center" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ class: "w-16 bg-gray-200 rounded-full h-2 mr-2" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ class: "h-2 rounded-full transition-all" },
+                ...{ class: (Number((_b = __VLS_ctx.ml.batteries.find(b => (b === null || b === void 0 ? void 0 : b.id) === String(v === null || v === void 0 ? void 0 : v.id))) === null || _b === void 0 ? void 0 : _b.health) >= 80 ? 'bg-green-500' :
+                        Number((_c = __VLS_ctx.ml.batteries.find(b => (b === null || b === void 0 ? void 0 : b.id) === String(v === null || v === void 0 ? void 0 : v.id))) === null || _c === void 0 ? void 0 : _c.health) >= 60 ? 'bg-yellow-500' : 'bg-red-500') },
+                ...{ style: ({ width: `${Math.max(0, Math.min(100, Number((_d = __VLS_ctx.ml.batteries.find(b => (b === null || b === void 0 ? void 0 : b.id) === String(v === null || v === void 0 ? void 0 : v.id))) === null || _d === void 0 ? void 0 : _d.health) || 0))}%` }) },
+            });
             __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-                ...{ class: "inline-flex items-center rounded-full px-2 py-1 text-xs font-medium" },
+                ...{ class: "text-sm font-medium text-gray-900" },
+            });
+            (Number(((_e = __VLS_ctx.ml.batteries.find(b => (b === null || b === void 0 ? void 0 : b.id) === String(v === null || v === void 0 ? void 0 : v.id))) === null || _e === void 0 ? void 0 : _e.health) || 0).toFixed(1));
+        }
+        else {
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+                ...{ class: "text-sm text-gray-500" },
+            });
+        }
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
+            ...{ class: "px-6 py-4 whitespace-nowrap" },
+        });
+        if ((_f = __VLS_ctx.ml.batteries) === null || _f === void 0 ? void 0 : _f.find(b => (b === null || b === void 0 ? void 0 : b.id) === String(v === null || v === void 0 ? void 0 : v.id))) {
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+                ...{ class: "inline-flex px-2 py-1 text-xs font-semibold rounded-full" },
+                ...{ class: (Number(((_g = __VLS_ctx.ml.batteries.find(b => (b === null || b === void 0 ? void 0 : b.id) === String(v === null || v === void 0 ? void 0 : v.id))) === null || _g === void 0 ? void 0 : _g.faultP) || 0) < 0.1 ? 'bg-green-100 text-green-800' :
+                        Number(((_h = __VLS_ctx.ml.batteries.find(b => (b === null || b === void 0 ? void 0 : b.id) === String(v === null || v === void 0 ? void 0 : v.id))) === null || _h === void 0 ? void 0 : _h.faultP) || 0) < 0.3 ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800') },
+            });
+            ((Number(((_j = __VLS_ctx.ml.batteries.find(b => (b === null || b === void 0 ? void 0 : b.id) === String(v === null || v === void 0 ? void 0 : v.id))) === null || _j === void 0 ? void 0 : _j.faultP) || 0) * 100).toFixed(1));
+        }
+        else {
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+                ...{ class: "text-sm text-gray-500" },
+            });
+        }
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
+            ...{ class: "px-6 py-4 whitespace-nowrap" },
+        });
+        if (v && ((_k = __VLS_ctx.result[String(v.id)]) === null || _k === void 0 ? void 0 : _k.nextCharge)) {
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+                ...{ class: "inline-flex px-2 py-1 text-xs font-semibold rounded-full" },
                 ...{ class: (__VLS_ctx.result[String(v.id)].nextCharge === '立即充電' ? 'bg-red-100 text-red-800' :
                         __VLS_ctx.result[String(v.id)].nextCharge === '建議充電' ? 'bg-yellow-100 text-yellow-800' :
                             'bg-green-100 text-green-800') },
@@ -910,17 +806,38 @@ export default await (async () => {
             (__VLS_ctx.result[String(v.id)].nextCharge);
         }
         else {
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
-            (__VLS_ctx.ml.loading ? '…' : '—');
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+                ...{ class: "text-sm text-gray-500" },
+            });
+            (__VLS_ctx.ml.loading ? '...' : '—');
         }
         __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-            ...{ class: "px-4 py-3 text-right font-medium text-blue-700" },
+            ...{ class: "px-6 py-4 whitespace-nowrap text-sm text-blue-600 font-medium" },
         });
-        ((_l = (v && ((_k = __VLS_ctx.result[String(v.id)]) === null || _k === void 0 ? void 0 : _k.cadence))) !== null && _l !== void 0 ? _l : (__VLS_ctx.ml.loading ? '…' : '—'));
+        if ((v === null || v === void 0 ? void 0 : v.status) === 'in-use') {
+            (v && ((_l = __VLS_ctx.result[String(v.id)]) === null || _l === void 0 ? void 0 : _l.cadence) != null ? Number(__VLS_ctx.result[String(v.id)].cadence).toFixed(2) : (__VLS_ctx.ml.loading ? '...' : '—'));
+            if (v && ((_m = __VLS_ctx.result[String(v.id)]) === null || _m === void 0 ? void 0 : _m.cadence) != null) {
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                    ...{ class: "text-xs text-gray-500" },
+                });
+            }
+        }
+        else {
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+                ...{ class: "text-sm text-gray-400" },
+            });
+        }
         __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-            ...{ class: "px-4 py-3 text-right font-medium text-purple-700" },
+            ...{ class: "px-6 py-4 whitespace-nowrap text-sm text-purple-600 font-medium" },
         });
-        ((_o = (v && ((_m = __VLS_ctx.result[String(v.id)]) === null || _m === void 0 ? void 0 : _m.gearRatio))) !== null && _o !== void 0 ? _o : (__VLS_ctx.ml.loading ? '…' : '—'));
+        if ((v === null || v === void 0 ? void 0 : v.status) === 'in-use') {
+            ((_p = (v && ((_o = __VLS_ctx.result[String(v.id)]) === null || _o === void 0 ? void 0 : _o.gearRatio))) !== null && _p !== void 0 ? _p : (__VLS_ctx.ml.loading ? '...' : '—'));
+        }
+        else {
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+                ...{ class: "text-sm text-gray-400" },
+            });
+        }
     }
     if (!__VLS_ctx.hasResult) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
@@ -930,23 +847,8 @@ export default await (async () => {
             __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
                 ...{ class: "flex flex-col items-center gap-3 text-gray-600" },
             });
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.svg, __VLS_intrinsicElements.svg)({
-                ...{ class: "animate-spin h-8 w-8 text-indigo-600" },
-                fill: "none",
-                viewBox: "0 0 24 24",
-            });
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.circle, __VLS_intrinsicElements.circle)({
-                ...{ class: "opacity-25" },
-                cx: "12",
-                cy: "12",
-                r: "10",
-                stroke: "currentColor",
-                'stroke-width': "4",
-            });
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.path, __VLS_intrinsicElements.path)({
-                ...{ class: "opacity-75" },
-                fill: "currentColor",
-                d: "m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z",
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+                ...{ class: "i-ph-spinner w-8 h-8 animate-spin text-blue-600" },
             });
             __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
         }
@@ -954,17 +856,8 @@ export default await (async () => {
             __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
                 ...{ class: "text-gray-500" },
             });
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.svg, __VLS_intrinsicElements.svg)({
-                ...{ class: "mx-auto h-12 w-12 mb-3 text-gray-300" },
-                fill: "none",
-                stroke: "currentColor",
-                viewBox: "0 0 24 24",
-            });
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.path)({
-                'stroke-linecap': "round",
-                'stroke-linejoin': "round",
-                'stroke-width': "1",
-                d: "M9 17v-2m3 2v-4m3 4v-6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+                ...{ class: "i-ph-chart-line w-12 h-12 mx-auto mb-3 text-gray-300" },
             });
             __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({});
             __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
@@ -974,25 +867,13 @@ export default await (async () => {
     }
     if (__VLS_ctx.ml.errMsg) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "rounded-2xl bg-red-50/80 backdrop-blur-sm p-4 shadow-lg border border-red-200/50" },
+            ...{ class: "bg-red-50 border border-red-200 rounded-lg p-4" },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
             ...{ class: "flex items-center gap-3" },
         });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "flex h-8 w-8 items-center justify-center rounded-lg bg-red-500 text-white" },
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.svg, __VLS_intrinsicElements.svg)({
-            ...{ class: "h-4 w-4" },
-            fill: "none",
-            stroke: "currentColor",
-            viewBox: "0 0 24 24",
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.path)({
-            'stroke-linecap': "round",
-            'stroke-linejoin': "round",
-            'stroke-width': "2",
-            d: "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z",
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: "i-ph-warning-circle w-6 h-6 text-red-500" },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
         __VLS_asFunctionalElement(__VLS_intrinsicElements.h3, __VLS_intrinsicElements.h3)({
@@ -1003,777 +884,436 @@ export default await (async () => {
         });
         (__VLS_ctx.ml.errMsg);
     }
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "rounded-2xl bg-white/80 backdrop-blur-sm p-6 shadow-lg border border-white/20" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex items-center gap-3 mb-6" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-red-500 to-rose-600 text-white" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.svg, __VLS_intrinsicElements.svg)({
-        ...{ class: "h-4 w-4" },
-        fill: "none",
-        stroke: "currentColor",
-        viewBox: "0 0 24 24",
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.path)({
-        'stroke-linecap': "round",
-        'stroke-linejoin': "round",
-        'stroke-width': "2",
-        d: "M13 10V3L4 14h7v7l9-11h-7z",
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.h3, __VLS_intrinsicElements.h3)({
-        ...{ class: "text-xl font-semibold text-gray-900" },
-    });
-    if ((_p = __VLS_ctx.ml.batteries) === null || _p === void 0 ? void 0 : _p.length) {
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-            ...{ class: "ml-auto text-xs text-gray-500" },
-        });
-        (__VLS_ctx.ml.batteries.filter(b => b && b.id && __VLS_ctx.selectedIds.includes(String(b.id))).length);
-    }
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "overflow-auto max-h-64" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.table, __VLS_intrinsicElements.table)({
-        ...{ class: "min-w-full text-sm" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.thead, __VLS_intrinsicElements.thead)({
-        ...{ class: "bg-gray-50/80 text-gray-700 sticky top-0" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.tr, __VLS_intrinsicElements.tr)({});
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-left font-medium" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-right font-medium" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "text-xs text-gray-500 block font-normal" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-right font-medium" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "text-xs text-gray-500 block font-normal" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-right font-medium" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: "text-xs text-gray-500 block font-normal" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-center font-medium" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-        ...{ class: "px-4 py-3 text-center font-medium" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.tbody, __VLS_intrinsicElements.tbody)({
-        ...{ class: "bg-white/50" },
-    });
-    if (__VLS_ctx.b && __VLS_ctx.b.id && __VLS_ctx.selectedIds.includes(String(__VLS_ctx.b.id))) {
-        for (const [b, idx] of __VLS_getVForSourceType((__VLS_ctx.ml.batteries))) {
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.tr, __VLS_intrinsicElements.tr)({
-                key: ((b && b.id) || idx),
-                ...{ class: "border-t border-gray-100 hover:bg-white/80 transition-colors" },
-            });
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-                ...{ class: "px-4 py-3" },
-            });
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-                ...{ class: "flex items-center gap-2" },
-            });
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-                ...{ class: "flex h-6 w-6 items-center justify-center rounded bg-gray-100 text-xs font-medium text-gray-600" },
-            });
-            (String(b.id || 'B')[0].toUpperCase());
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-                ...{ class: "truncate max-w-[10ch] font-mono text-gray-900" },
-                title: ((b && b.id) || ''),
-            });
-            ((b && b.id) || '—');
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-                ...{ class: "px-4 py-3 text-right" },
-            });
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-                ...{ class: "flex items-center justify-end gap-2" },
-            });
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-                ...{ class: "w-16 bg-gray-200 rounded-full h-2" },
-            });
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-                ...{ class: "h-2 rounded-full transition-all" },
-                ...{ class: (b.health >= 80 ? 'bg-green-500' : b.health >= 60 ? 'bg-yellow-500' : 'bg-red-500') },
-                ...{ style: ({ width: `${Math.max(0, Math.min(100, b.health))}%` }) },
-            });
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-                ...{ class: "font-medium text-gray-900 min-w-[3rem]" },
-            });
-            (b.health);
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-                ...{ class: "px-4 py-3 text-right font-medium text-gray-900" },
-            });
-            ((b.faultP * 100).toFixed(1));
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-                ...{ class: "px-4 py-3 text-right font-medium text-gray-900" },
-            });
-            (((_r = (_q = __VLS_ctx.result[b.id]) === null || _q === void 0 ? void 0 : _q.kWh) !== null && _r !== void 0 ? _r : '—'));
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-                ...{ class: "px-4 py-3 text-center text-gray-900" },
-            });
-            (((_t = (_s = __VLS_ctx.result[b.id]) === null || _s === void 0 ? void 0 : _s.nextCharge) !== null && _t !== void 0 ? _t : '—'));
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
-                ...{ class: "px-4 py-3 text-center" },
-            });
-            __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-                ...{ class: "inline-flex items-center rounded-full px-2 py-1 text-xs font-medium" },
-                ...{ class: (b.faultP < 0.1 ? 'bg-green-100 text-green-800' :
-                        b.faultP < 0.3 ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800') },
-            });
-            (b.faultP < 0.1 ? '正常' : b.faultP < 0.3 ? '注意' : '高風險');
-        }
-    }
-    if (!((_u = __VLS_ctx.ml.batteries) === null || _u === void 0 ? void 0 : _u.length) || !__VLS_ctx.ml.batteries.some(b => b && b.id && __VLS_ctx.selectedIds.includes(String(b.id)))) {
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "py-8 text-center text-gray-500" },
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.svg, __VLS_intrinsicElements.svg)({
-            ...{ class: "mx-auto h-12 w-12 mb-3 text-gray-300" },
-            fill: "none",
-            stroke: "currentColor",
-            viewBox: "0 0 24 24",
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.path)({
-            'stroke-linecap': "round",
-            'stroke-linejoin': "round",
-            'stroke-width': "1",
-            d: "M13 10V3L4 14h7v7l9-11h-7z",
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({});
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
-            ...{ class: "text-sm text-gray-400 mt-1" },
-        });
-    }
     /** @type {__VLS_StyleScopedClasses['min-h-screen']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-gradient-to-br']} */ ;
-    /** @type {__VLS_StyleScopedClasses['from-slate-50']} */ ;
-    /** @type {__VLS_StyleScopedClasses['via-white']} */ ;
-    /** @type {__VLS_StyleScopedClasses['to-blue-50/30']} */ ;
-    /** @type {__VLS_StyleScopedClasses['p-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['bg-gray-50']} */ ;
+    /** @type {__VLS_StyleScopedClasses['p-4']} */ ;
     /** @type {__VLS_StyleScopedClasses['mx-auto']} */ ;
-    /** @type {__VLS_StyleScopedClasses['max-w-7xl']} */ ;
-    /** @type {__VLS_StyleScopedClasses['space-y-8']} */ ;
+    /** @type {__VLS_StyleScopedClasses['max-w-6xl']} */ ;
+    /** @type {__VLS_StyleScopedClasses['space-y-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['bg-white']} */ ;
+    /** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
+    /** @type {__VLS_StyleScopedClasses['shadow']} */ ;
+    /** @type {__VLS_StyleScopedClasses['p-6']} */ ;
     /** @type {__VLS_StyleScopedClasses['flex']} */ ;
     /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
     /** @type {__VLS_StyleScopedClasses['justify-between']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-2xl']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-white/80']} */ ;
-    /** @type {__VLS_StyleScopedClasses['backdrop-blur-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['p-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['shadow-lg']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border-white/20']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-12']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-12']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['justify-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-xl']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-gradient-to-br']} */ ;
-    /** @type {__VLS_StyleScopedClasses['from-indigo-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['to-purple-600']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-white']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-3xl']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-2xl']} */ ;
     /** @type {__VLS_StyleScopedClasses['font-bold']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-gradient-to-r']} */ ;
-    /** @type {__VLS_StyleScopedClasses['from-gray-900']} */ ;
-    /** @type {__VLS_StyleScopedClasses['via-gray-800']} */ ;
-    /** @type {__VLS_StyleScopedClasses['to-gray-700']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-clip-text']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-transparent']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
+    /** @type {__VLS_StyleScopedClasses['mt-1']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
+    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
+    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+    /** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-1.5']} */ ;
+    /** @type {__VLS_StyleScopedClasses['rounded-md']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['inline-block']} */ ;
+    /** @type {__VLS_StyleScopedClasses['mr-1']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-2']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
+    /** @type {__VLS_StyleScopedClasses['bg-white']} */ ;
+    /** @type {__VLS_StyleScopedClasses['border']} */ ;
+    /** @type {__VLS_StyleScopedClasses['border-gray-300']} */ ;
+    /** @type {__VLS_StyleScopedClasses['rounded-md']} */ ;
+    /** @type {__VLS_StyleScopedClasses['hover:bg-gray-50']} */ ;
+    /** @type {__VLS_StyleScopedClasses['focus:outline-none']} */ ;
+    /** @type {__VLS_StyleScopedClasses['focus:ring-2']} */ ;
+    /** @type {__VLS_StyleScopedClasses['focus:ring-blue-500']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['bg-white']} */ ;
+    /** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
+    /** @type {__VLS_StyleScopedClasses['shadow']} */ ;
+    /** @type {__VLS_StyleScopedClasses['p-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
+    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+    /** @type {__VLS_StyleScopedClasses['justify-between']} */ ;
+    /** @type {__VLS_StyleScopedClasses['mb-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-lg']} */ ;
+    /** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
     /** @type {__VLS_StyleScopedClasses['mt-1']} */ ;
-    /** @type {__VLS_StyleScopedClasses['btn-primary']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['animate-spin']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['opacity-25']} */ ;
-    /** @type {__VLS_StyleScopedClasses['opacity-75']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-2xl']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-white/80']} */ ;
-    /** @type {__VLS_StyleScopedClasses['backdrop-blur-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['p-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['shadow-lg']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border-white/20']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['mb-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-8']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-8']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['justify-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-gradient-to-br']} */ ;
-    /** @type {__VLS_StyleScopedClasses['from-blue-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['to-indigo-600']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-white']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xl']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
-    /** @type {__VLS_StyleScopedClasses['ml-auto']} */ ;
-    /** @type {__VLS_StyleScopedClasses['inline-flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-blue-100']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-1']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
     /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-blue-800']} */ ;
-    /** @type {__VLS_StyleScopedClasses['grid']} */ ;
-    /** @type {__VLS_StyleScopedClasses['grid-cols-1']} */ ;
-    /** @type {__VLS_StyleScopedClasses['lg:grid-cols-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['lg:col-span-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['space-y-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-blue-600']} */ ;
+    /** @type {__VLS_StyleScopedClasses['space-y-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['mb-4']} */ ;
     /** @type {__VLS_StyleScopedClasses['relative']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex-1']} */ ;
+    /** @type {__VLS_StyleScopedClasses['max-w-md']} */ ;
+    /** @type {__VLS_StyleScopedClasses['i-ph-magnifying-glass']} */ ;
     /** @type {__VLS_StyleScopedClasses['absolute']} */ ;
     /** @type {__VLS_StyleScopedClasses['left-3']} */ ;
     /** @type {__VLS_StyleScopedClasses['top-1/2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['transform']} */ ;
     /** @type {__VLS_StyleScopedClasses['-translate-y-1/2']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-gray-400']} */ ;
-    /** @type {__VLS_StyleScopedClasses['input-field']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-full']} */ ;
     /** @type {__VLS_StyleScopedClasses['pl-10']} */ ;
-    /** @type {__VLS_StyleScopedClasses['btn-outline']} */ ;
-    /** @type {__VLS_StyleScopedClasses['btn-outline']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
+    /** @type {__VLS_StyleScopedClasses['pr-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-2']} */ ;
     /** @type {__VLS_StyleScopedClasses['border']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border-gray-200']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-gray-50/50']} */ ;
-    /** @type {__VLS_StyleScopedClasses['max-h-64']} */ ;
-    /** @type {__VLS_StyleScopedClasses['overflow-auto']} */ ;
+    /** @type {__VLS_StyleScopedClasses['border-gray-300']} */ ;
+    /** @type {__VLS_StyleScopedClasses['rounded-md']} */ ;
+    /** @type {__VLS_StyleScopedClasses['focus:ring-2']} */ ;
+    /** @type {__VLS_StyleScopedClasses['focus:ring-blue-500']} */ ;
+    /** @type {__VLS_StyleScopedClasses['focus:border-blue-500']} */ ;
     /** @type {__VLS_StyleScopedClasses['flex']} */ ;
     /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
     /** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
     /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['hover:bg-white/80']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border-b']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border-gray-100']} */ ;
-    /** @type {__VLS_StyleScopedClasses['last:border-0']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-2']} */ ;
+    /** @type {__VLS_StyleScopedClasses['bg-blue-600']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-white']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
+    /** @type {__VLS_StyleScopedClasses['rounded-md']} */ ;
+    /** @type {__VLS_StyleScopedClasses['hover:bg-blue-700']} */ ;
+    /** @type {__VLS_StyleScopedClasses['focus:outline-none']} */ ;
+    /** @type {__VLS_StyleScopedClasses['focus:ring-2']} */ ;
+    /** @type {__VLS_StyleScopedClasses['focus:ring-blue-500']} */ ;
+    /** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
+    /** @type {__VLS_StyleScopedClasses['i-ph-check-square']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['inline-block']} */ ;
+    /** @type {__VLS_StyleScopedClasses['mr-1']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-2']} */ ;
+    /** @type {__VLS_StyleScopedClasses['bg-gray-600']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-white']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
+    /** @type {__VLS_StyleScopedClasses['rounded-md']} */ ;
+    /** @type {__VLS_StyleScopedClasses['hover:bg-gray-700']} */ ;
+    /** @type {__VLS_StyleScopedClasses['focus:outline-none']} */ ;
+    /** @type {__VLS_StyleScopedClasses['focus:ring-2']} */ ;
+    /** @type {__VLS_StyleScopedClasses['focus:ring-gray-500']} */ ;
+    /** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
+    /** @type {__VLS_StyleScopedClasses['i-ph-x-square']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['inline-block']} */ ;
+    /** @type {__VLS_StyleScopedClasses['mr-1']} */ ;
+    /** @type {__VLS_StyleScopedClasses['ml-auto']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
+    /** @type {__VLS_StyleScopedClasses['grid']} */ ;
+    /** @type {__VLS_StyleScopedClasses['grid-cols-1']} */ ;
+    /** @type {__VLS_StyleScopedClasses['sm:grid-cols-2']} */ ;
+    /** @type {__VLS_StyleScopedClasses['lg:grid-cols-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['xl:grid-cols-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['max-h-96']} */ ;
+    /** @type {__VLS_StyleScopedClasses['overflow-y-auto']} */ ;
+    /** @type {__VLS_StyleScopedClasses['border']} */ ;
+    /** @type {__VLS_StyleScopedClasses['border-gray-200']} */ ;
+    /** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
+    /** @type {__VLS_StyleScopedClasses['p-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['hover:border-blue-300']} */ ;
     /** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
     /** @type {__VLS_StyleScopedClasses['flex']} */ ;
     /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
     /** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
     /** @type {__VLS_StyleScopedClasses['cursor-pointer']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex-1']} */ ;
     /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
     /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-blue-600']} */ ;
     /** @type {__VLS_StyleScopedClasses['rounded']} */ ;
     /** @type {__VLS_StyleScopedClasses['focus:ring-2']} */ ;
     /** @type {__VLS_StyleScopedClasses['focus:ring-blue-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['min-w-0']} */ ;
     /** @type {__VLS_StyleScopedClasses['flex-1']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-8']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-8']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['justify-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-gradient-to-br']} */ ;
-    /** @type {__VLS_StyleScopedClasses['from-gray-100']} */ ;
-    /** @type {__VLS_StyleScopedClasses['to-gray-200']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
     /** @type {__VLS_StyleScopedClasses['min-w-0']} */ ;
-    /** @type {__VLS_StyleScopedClasses['truncate']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
-    /** @type {__VLS_StyleScopedClasses['truncate']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-mono']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-2xl']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-white/80']} */ ;
-    /** @type {__VLS_StyleScopedClasses['backdrop-blur-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['p-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['shadow-lg']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border-white/20']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['mb-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-8']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-8']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['justify-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-gradient-to-br']} */ ;
-    /** @type {__VLS_StyleScopedClasses['from-emerald-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['to-teal-600']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-white']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xl']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
-    /** @type {__VLS_StyleScopedClasses['grid']} */ ;
-    /** @type {__VLS_StyleScopedClasses['grid-cols-1']} */ ;
-    /** @type {__VLS_StyleScopedClasses['lg:grid-cols-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['space-y-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['block']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-    /** @type {__VLS_StyleScopedClasses['input-field']} */ ;
-    /** @type {__VLS_StyleScopedClasses['space-y-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['block']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-    /** @type {__VLS_StyleScopedClasses['input-field']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-end']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['btn-secondary']} */ ;
-    /** @type {__VLS_StyleScopedClasses['btn-outline']} */ ;
-    /** @type {__VLS_StyleScopedClasses['mt-4']} */ ;
     /** @type {__VLS_StyleScopedClasses['flex']} */ ;
     /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
     /** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
-    /** @type {__VLS_StyleScopedClasses['inline-flex']} */ ;
+    /** @type {__VLS_StyleScopedClasses['mb-1']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['bg-gray-200']} */ ;
+    /** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
+    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
     /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-1.5']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-1']} */ ;
+    /** @type {__VLS_StyleScopedClasses['justify-center']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+    /** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
     /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-1.5']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-1.5']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
-    /** @type {__VLS_StyleScopedClasses['space-y-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['block']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
+    /** @type {__VLS_StyleScopedClasses['truncate']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
+    /** @type {__VLS_StyleScopedClasses['font-mono']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
+    /** @type {__VLS_StyleScopedClasses['mt-1']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-center']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-8']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
+    /** @type {__VLS_StyleScopedClasses['i-ph-bicycle']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-12']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-12']} */ ;
+    /** @type {__VLS_StyleScopedClasses['mx-auto']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-300']} */ ;
+    /** @type {__VLS_StyleScopedClasses['mb-2']} */ ;
+    /** @type {__VLS_StyleScopedClasses['mt-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
+    /** @type {__VLS_StyleScopedClasses['justify-center']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-8']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['bg-blue-600']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-white']} */ ;
     /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
     /** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border']} */ ;
+    /** @type {__VLS_StyleScopedClasses['hover:bg-blue-700']} */ ;
+    /** @type {__VLS_StyleScopedClasses['focus:outline-none']} */ ;
+    /** @type {__VLS_StyleScopedClasses['focus:ring-2']} */ ;
+    /** @type {__VLS_StyleScopedClasses['focus:ring-blue-500']} */ ;
+    /** @type {__VLS_StyleScopedClasses['disabled:bg-gray-400']} */ ;
+    /** @type {__VLS_StyleScopedClasses['disabled:cursor-not-allowed']} */ ;
+    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
+    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+    /** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
+    /** @type {__VLS_StyleScopedClasses['i-ph-spinner']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-5']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-5']} */ ;
+    /** @type {__VLS_StyleScopedClasses['animate-spin']} */ ;
+    /** @type {__VLS_StyleScopedClasses['i-ph-play']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-5']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-5']} */ ;
+    /** @type {__VLS_StyleScopedClasses['bg-white']} */ ;
+    /** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
+    /** @type {__VLS_StyleScopedClasses['shadow']} */ ;
+    /** @type {__VLS_StyleScopedClasses['overflow-hidden']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['border-b']} */ ;
     /** @type {__VLS_StyleScopedClasses['border-gray-200']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-gray-50/50']} */ ;
-    /** @type {__VLS_StyleScopedClasses['p-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['min-h-[8rem]']} */ ;
-    /** @type {__VLS_StyleScopedClasses['max-h-64']} */ ;
-    /** @type {__VLS_StyleScopedClasses['overflow-auto']} */ ;
-    /** @type {__VLS_StyleScopedClasses['space-y-2']} */ ;
     /** @type {__VLS_StyleScopedClasses['flex']} */ ;
     /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
     /** @type {__VLS_StyleScopedClasses['justify-between']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-md']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-white']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['shadow-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['truncate']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-mono']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-    /** @type {__VLS_StyleScopedClasses['ml-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-400']} */ ;
-    /** @type {__VLS_StyleScopedClasses['hover:text-red-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-400']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-2xl']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-white/80']} */ ;
-    /** @type {__VLS_StyleScopedClasses['backdrop-blur-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['p-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['shadow-lg']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border-white/20']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['mb-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-8']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-8']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['justify-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-gradient-to-br']} */ ;
-    /** @type {__VLS_StyleScopedClasses['from-purple-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['to-pink-600']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-white']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xl']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-lg']} */ ;
     /** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
-    /** @type {__VLS_StyleScopedClasses['ml-auto']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['grid']} */ ;
-    /** @type {__VLS_StyleScopedClasses['grid-cols-1']} */ ;
-    /** @type {__VLS_StyleScopedClasses['lg:grid-cols-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['space-y-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['block']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-    /** @type {__VLS_StyleScopedClasses['textarea-field']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-40']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-mono']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
+    /** @type {__VLS_StyleScopedClasses['mt-1']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
+    /** @type {__VLS_StyleScopedClasses['overflow-x-auto']} */ ;
+    /** @type {__VLS_StyleScopedClasses['min-w-full']} */ ;
+    /** @type {__VLS_StyleScopedClasses['bg-gray-50']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-left']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+    /** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
+    /** @type {__VLS_StyleScopedClasses['uppercase']} */ ;
+    /** @type {__VLS_StyleScopedClasses['tracking-wider']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['cursor-pointer']} */ ;
+    /** @type {__VLS_StyleScopedClasses['hover:bg-gray-100']} */ ;
+    /** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
     /** @type {__VLS_StyleScopedClasses['flex']} */ ;
     /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
     /** @type {__VLS_StyleScopedClasses['gap-1']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-3']} */ ;
     /** @type {__VLS_StyleScopedClasses['w-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['space-y-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border-gray-200']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-gray-50/50']} */ ;
-    /** @type {__VLS_StyleScopedClasses['p-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['mb-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-    /** @type {__VLS_StyleScopedClasses['inline-flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-1.5']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-1']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-1.5']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-1.5']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
-    /** @type {__VLS_StyleScopedClasses['space-y-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['justify-between']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-mono']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-2xl']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-white/80']} */ ;
-    /** @type {__VLS_StyleScopedClasses['backdrop-blur-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['p-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['shadow-lg']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border-white/20']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['mb-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-8']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-8']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['justify-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-gradient-to-br']} */ ;
-    /** @type {__VLS_StyleScopedClasses['from-orange-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['to-red-600']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-white']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xl']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
-    /** @type {__VLS_StyleScopedClasses['grid']} */ ;
-    /** @type {__VLS_StyleScopedClasses['grid-cols-1']} */ ;
-    /** @type {__VLS_StyleScopedClasses['md:grid-cols-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['lg:grid-cols-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['space-y-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['block']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-    /** @type {__VLS_StyleScopedClasses['relative']} */ ;
-    /** @type {__VLS_StyleScopedClasses['input-field']} */ ;
-    /** @type {__VLS_StyleScopedClasses['pr-12']} */ ;
-    /** @type {__VLS_StyleScopedClasses['absolute']} */ ;
-    /** @type {__VLS_StyleScopedClasses['right-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['top-1/2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['-translate-y-1/2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['space-y-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['justify-between']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['slider']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['justify-between']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['space-y-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['justify-between']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['slider']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['justify-between']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['space-y-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['justify-between']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['slider']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['justify-between']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-2xl']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-white/80']} */ ;
-    /** @type {__VLS_StyleScopedClasses['backdrop-blur-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['shadow-lg']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border-white/20']} */ ;
-    /** @type {__VLS_StyleScopedClasses['overflow-hidden']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['p-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border-b']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border-gray-200/50']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-8']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-8']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['justify-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-gradient-to-br']} */ ;
-    /** @type {__VLS_StyleScopedClasses['from-cyan-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['to-blue-600']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-white']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xl']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
-    /** @type {__VLS_StyleScopedClasses['ml-auto']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['overflow-auto']} */ ;
-    /** @type {__VLS_StyleScopedClasses['max-h-96']} */ ;
-    /** @type {__VLS_StyleScopedClasses['min-w-full']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-gray-50/80']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-    /** @type {__VLS_StyleScopedClasses['sticky']} */ ;
-    /** @type {__VLS_StyleScopedClasses['top-0']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['i-ph-caret-up-down']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['opacity-30']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-6']} */ ;
     /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-left']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['block']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-normal']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['block']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-normal']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['block']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-normal']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['block']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-normal']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['block']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-normal']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-white/50']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border-t']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border-gray-100']} */ ;
-    /** @type {__VLS_StyleScopedClasses['hover:bg-white/80']} */ ;
+    /** @type {__VLS_StyleScopedClasses['cursor-pointer']} */ ;
+    /** @type {__VLS_StyleScopedClasses['hover:bg-gray-100']} */ ;
     /** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
     /** @type {__VLS_StyleScopedClasses['flex']} */ ;
     /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
+    /** @type {__VLS_StyleScopedClasses['gap-1']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['i-ph-caret-up-down']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['opacity-30']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['cursor-pointer']} */ ;
+    /** @type {__VLS_StyleScopedClasses['hover:bg-gray-100']} */ ;
+    /** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
     /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+    /** @type {__VLS_StyleScopedClasses['gap-1']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['i-ph-caret-up-down']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['opacity-30']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['cursor-pointer']} */ ;
+    /** @type {__VLS_StyleScopedClasses['hover:bg-gray-100']} */ ;
+    /** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
+    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
+    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+    /** @type {__VLS_StyleScopedClasses['gap-1']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['i-ph-caret-up-down']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['opacity-30']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['cursor-pointer']} */ ;
+    /** @type {__VLS_StyleScopedClasses['hover:bg-gray-100']} */ ;
+    /** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
+    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
+    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+    /** @type {__VLS_StyleScopedClasses['gap-1']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['i-ph-caret-up-down']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['opacity-30']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['cursor-pointer']} */ ;
+    /** @type {__VLS_StyleScopedClasses['hover:bg-gray-100']} */ ;
+    /** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
+    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
+    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+    /** @type {__VLS_StyleScopedClasses['gap-1']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['i-ph-caret-up-down']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['opacity-30']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['cursor-pointer']} */ ;
+    /** @type {__VLS_StyleScopedClasses['hover:bg-gray-100']} */ ;
+    /** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
+    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
+    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+    /** @type {__VLS_StyleScopedClasses['gap-1']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['i-ph-caret-up-down']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['opacity-30']} */ ;
+    /** @type {__VLS_StyleScopedClasses['bg-white']} */ ;
+    /** @type {__VLS_StyleScopedClasses['divide-y']} */ ;
+    /** @type {__VLS_StyleScopedClasses['divide-gray-200']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['whitespace-nowrap']} */ ;
+    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
+    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-8']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-8']} */ ;
+    /** @type {__VLS_StyleScopedClasses['bg-gray-200']} */ ;
+    /** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
+    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
     /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
     /** @type {__VLS_StyleScopedClasses['justify-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-gray-100']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
     /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
-    /** @type {__VLS_StyleScopedClasses['truncate']} */ ;
-    /** @type {__VLS_StyleScopedClasses['max-w-[10ch]']} */ ;
+    /** @type {__VLS_StyleScopedClasses['ml-3']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
     /** @type {__VLS_StyleScopedClasses['font-mono']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-green-700']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-emerald-700']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-orange-700']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-center']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['whitespace-nowrap']} */ ;
     /** @type {__VLS_StyleScopedClasses['inline-flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
     /** @type {__VLS_StyleScopedClasses['px-2']} */ ;
     /** @type {__VLS_StyleScopedClasses['py-1']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+    /** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
+    /** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['whitespace-nowrap']} */ ;
+    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
+    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-16']} */ ;
+    /** @type {__VLS_StyleScopedClasses['bg-gray-200']} */ ;
+    /** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-2']} */ ;
+    /** @type {__VLS_StyleScopedClasses['mr-2']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-2']} */ ;
+    /** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
+    /** @type {__VLS_StyleScopedClasses['transition-all']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
     /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['whitespace-nowrap']} */ ;
+    /** @type {__VLS_StyleScopedClasses['inline-flex']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-2']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-1']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+    /** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
+    /** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['whitespace-nowrap']} */ ;
+    /** @type {__VLS_StyleScopedClasses['inline-flex']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-2']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-1']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+    /** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
+    /** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['whitespace-nowrap']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-blue-600']} */ ;
     /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-blue-700']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-400']} */ ;
+    /** @type {__VLS_StyleScopedClasses['px-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['py-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['whitespace-nowrap']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-purple-600']} */ ;
     /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-purple-700']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-gray-400']} */ ;
     /** @type {__VLS_StyleScopedClasses['py-12']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-center']} */ ;
     /** @type {__VLS_StyleScopedClasses['flex']} */ ;
@@ -1781,217 +1321,57 @@ export default await (async () => {
     /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
     /** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
-    /** @type {__VLS_StyleScopedClasses['animate-spin']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-8']} */ ;
+    /** @type {__VLS_StyleScopedClasses['i-ph-spinner']} */ ;
     /** @type {__VLS_StyleScopedClasses['w-8']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-indigo-600']} */ ;
-    /** @type {__VLS_StyleScopedClasses['opacity-25']} */ ;
-    /** @type {__VLS_StyleScopedClasses['opacity-75']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-8']} */ ;
+    /** @type {__VLS_StyleScopedClasses['animate-spin']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-blue-600']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['mx-auto']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-12']} */ ;
+    /** @type {__VLS_StyleScopedClasses['i-ph-chart-line']} */ ;
     /** @type {__VLS_StyleScopedClasses['w-12']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-12']} */ ;
+    /** @type {__VLS_StyleScopedClasses['mx-auto']} */ ;
     /** @type {__VLS_StyleScopedClasses['mb-3']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-gray-300']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-gray-400']} */ ;
     /** @type {__VLS_StyleScopedClasses['mt-1']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-2xl']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-red-50/80']} */ ;
-    /** @type {__VLS_StyleScopedClasses['backdrop-blur-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['p-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['shadow-lg']} */ ;
+    /** @type {__VLS_StyleScopedClasses['bg-red-50']} */ ;
     /** @type {__VLS_StyleScopedClasses['border']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border-red-200/50']} */ ;
+    /** @type {__VLS_StyleScopedClasses['border-red-200']} */ ;
+    /** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
+    /** @type {__VLS_StyleScopedClasses['p-4']} */ ;
     /** @type {__VLS_StyleScopedClasses['flex']} */ ;
     /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
     /** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-8']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-8']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['justify-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-red-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-white']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
+    /** @type {__VLS_StyleScopedClasses['i-ph-warning-circle']} */ ;
+    /** @type {__VLS_StyleScopedClasses['w-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['h-6']} */ ;
+    /** @type {__VLS_StyleScopedClasses['text-red-500']} */ ;
     /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-red-900']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
     /** @type {__VLS_StyleScopedClasses['text-red-700']} */ ;
     /** @type {__VLS_StyleScopedClasses['mt-1']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-2xl']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-white/80']} */ ;
-    /** @type {__VLS_StyleScopedClasses['backdrop-blur-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['p-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['shadow-lg']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border-white/20']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['mb-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-8']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-8']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['justify-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-gradient-to-br']} */ ;
-    /** @type {__VLS_StyleScopedClasses['from-red-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['to-rose-600']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-white']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xl']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
-    /** @type {__VLS_StyleScopedClasses['ml-auto']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['overflow-auto']} */ ;
-    /** @type {__VLS_StyleScopedClasses['max-h-64']} */ ;
-    /** @type {__VLS_StyleScopedClasses['min-w-full']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-gray-50/80']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-    /** @type {__VLS_StyleScopedClasses['sticky']} */ ;
-    /** @type {__VLS_StyleScopedClasses['top-0']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-left']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['block']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-normal']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['block']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-normal']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['block']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-normal']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-white/50']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border-t']} */ ;
-    /** @type {__VLS_StyleScopedClasses['border-gray-100']} */ ;
-    /** @type {__VLS_StyleScopedClasses['hover:bg-white/80']} */ ;
-    /** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-6']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['justify-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-gray-100']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
-    /** @type {__VLS_StyleScopedClasses['truncate']} */ ;
-    /** @type {__VLS_StyleScopedClasses['max-w-[10ch]']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-mono']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['justify-end']} */ ;
-    /** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-16']} */ ;
-    /** @type {__VLS_StyleScopedClasses['bg-gray-200']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
-    /** @type {__VLS_StyleScopedClasses['transition-all']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
-    /** @type {__VLS_StyleScopedClasses['min-w-[3rem]']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['inline-flex']} */ ;
-    /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
-    /** @type {__VLS_StyleScopedClasses['px-2']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-1']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-    /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-    /** @type {__VLS_StyleScopedClasses['py-8']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-center']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
-    /** @type {__VLS_StyleScopedClasses['mx-auto']} */ ;
-    /** @type {__VLS_StyleScopedClasses['h-12']} */ ;
-    /** @type {__VLS_StyleScopedClasses['w-12']} */ ;
-    /** @type {__VLS_StyleScopedClasses['mb-3']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-300']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-    /** @type {__VLS_StyleScopedClasses['text-gray-400']} */ ;
-    /** @type {__VLS_StyleScopedClasses['mt-1']} */ ;
     var __VLS_dollars;
     const __VLS_self = (await import('vue')).defineComponent({
         setup() {
             return {
+                vStore: vStore,
                 ml: ml,
-                distKm: distKm,
-                pref01: pref01,
-                terrain: terrain,
-                wind01: wind01,
+                usingRealData: usingRealData,
                 result: result,
-                telemetry: telemetry,
                 selectedIds: selectedIds,
                 search: search,
+                sortConfig: sortConfig,
+                viewVehicles: viewVehicles,
                 filteredOptions: filteredOptions,
                 selectedRows: selectedRows,
+                handleSort: handleSort,
+                shortId: shortId,
                 runPredict: runPredict,
+                refreshData: refreshData,
                 hasResult: hasResult,
-                ui: ui,
-                powerOptions: powerOptions,
-                batteryOptions: batteryOptions,
-                applyModelPaths: applyModelPaths,
-                testLoad: testLoad,
             };
         },
         methods: {
@@ -2003,12 +1383,6 @@ export default await (async () => {
                 catch (_a) {
                     this.telemetry.value = null;
                 }
-            },
-            selectAll() {
-                this.selectedIds = this.filteredOptions.map((v) => v.id);
-            },
-            clearAll() {
-                this.selectedIds = [];
             }
         }
     });
@@ -2025,12 +1399,6 @@ export default await (async () => {
                 catch (_a) {
                     this.telemetry.value = null;
                 }
-            },
-            selectAll() {
-                this.selectedIds = this.filteredOptions.map((v) => v.id);
-            },
-            clearAll() {
-                this.selectedIds = [];
             }
         }
     });

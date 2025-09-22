@@ -1,7 +1,7 @@
 // src/stores/auth.ts
 import { defineStore } from 'pinia'
 import { Koala } from '@/services/koala'
-import { clearAuthStorage, loadUserProfile, saveUserProfile } from '@/lib/api'
+import { clearAuthStorage, loadUserProfile, saveUserProfile, refreshToken as apiRefreshToken, refreshTokenWithProfile } from '@/lib/api'
 
 /* -------------------------------------------------------------- */
 /*  型別定義                                                       */
@@ -23,6 +23,27 @@ const LEGACY_TOKEN_KEY = 'penguin.jwt' // 相容舊版本
 
 // Token 檢查快取，避免頻繁驗證
 let tokenCheckCache: { token: string; validUntil: number } | null = null
+
+function mapKoalaProfileToRole(profile: any): User['roleId'] {
+  if (!profile) return 'visitor'
+
+  const type = String(profile.type ?? '').toLowerCase()
+  const profileType = String(profile.profile_type ?? '').toLowerCase()
+  const username = String(profile.username ?? '')
+
+  if (type === 'admin' || username.includes('admin')) return 'admin'
+  if (type === 'staff' || profileType === 'staff') return 'staff'
+  if (
+    profileType.includes('member') ||
+    type === 'real' ||
+    type === 'member'
+  ) {
+    return 'member'
+  }
+
+  // 其他類型（tourist/visitor/null）一律當作 visitor
+  return 'visitor'
+}
 
 /* -------------------------------------------------------------- */
 /*  Pinia Store：Auth                                             */
@@ -47,13 +68,7 @@ export const useAuth = defineStore('auth', {
         email: p.email
       })
 
-      const roleId = p.type === 'admin' || p.username?.includes('admin')
-        ? 'admin'
-        : p.profile_type === 'staff'
-        ? 'staff'
-        : p.type === 'real'
-        ? 'member'
-        : 'visitor'
+      const roleId = mapKoalaProfileToRole(p)
 
       console.log('[Auth] Mapped role:', roleId)
 
@@ -98,33 +113,16 @@ export const useAuth = defineStore('auth', {
           throw new Error('No refresh token available')
         }
 
-        const response = await fetch('/api/account/auth/refresh/', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            refresh_token: this.refreshToken
-          })
-        })
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        // 優先使用帶 base URL 的 helper，兼容直接後端格式
+        const res = await refreshTokenWithProfile().catch(() => ({ success: false }))
+        if (!res.success) {
+          const ok = await apiRefreshToken()
+          if (!ok) throw new Error('Token refresh failed')
         }
 
-        const data = await response.json()
-
-        if (data.code !== 2000) {
-          throw new Error(data.message || 'Token refresh failed')
-        }
-
-        // 更新 tokens
-        this.accessToken = data.data.tokens.access_token
-        this.refreshToken = data.data.tokens.refresh_token
-
-        // 更新本地儲存
-        localStorage.setItem(ACCESS_TOKEN_KEY, this.accessToken)
-        localStorage.setItem(REFRESH_TOKEN_KEY, this.refreshToken)
+        // 從本地儲存讀回最新 tokens（helper 已存入 storage）
+        this.accessToken = localStorage.getItem(ACCESS_TOKEN_KEY) || ''
+        this.refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY) || this.refreshToken
         // 清除舊 token
         localStorage.removeItem(LEGACY_TOKEN_KEY)
 
@@ -132,8 +130,7 @@ export const useAuth = defineStore('auth', {
         tokenCheckCache = null
 
         console.log('[Auth] Token refresh successful')
-
-        return data.data.tokens
+        return { access_token: this.accessToken, refresh_token: this.refreshToken }
       } catch (error: any) {
         console.error('[Auth] Token refresh failed:', error)
         // Token refresh 失敗時清除所有 token 並退出登入
@@ -243,16 +240,13 @@ export const useAuth = defineStore('auth', {
           }
         }
 
+        const mappedRole = mapKoalaProfileToRole(profile)
+
         const mapped: User | null = profile ? {
           id: String(profile.id ?? profile.user_id ?? ''),
           name: profile.full_name || profile.username || profile.name || '',
           email: profile.email || email,
-            // 判斷邏輯：profile_type === 'staff' 表示是 staff 系統，需要進一步查詢實際角色
-          roleId: (() => {
-            const role = profile.type === 'admin' || profile.username?.includes('admin') ? 'admin' : profile.profile_type === 'staff' ? 'staff' : profile.type === 'real' ? 'member' : 'visitor'
-            console.log('[Auth] Role mapping:', { profile, mappedRole: role })
-            return role
-          })() as any,
+          roleId: mappedRole,
           avatarUrl: profile.avatar_url || undefined,
           phone: profile.phone,
           idNumber: idNumber || undefined
@@ -277,6 +271,10 @@ export const useAuth = defineStore('auth', {
         if (mapped) {
           sessionStorage.setItem(ROLE_KEY, mapped.roleId)
           try { localStorage.setItem(ROLE_KEY, mapped.roleId) } catch {}
+          console.log('[Auth] Role mapping - login:', {
+            profile,
+            mappedRole
+          })
         }
 
         // 登入成功後，嘗試載入完整的用戶資料
@@ -287,8 +285,11 @@ export const useAuth = defineStore('auth', {
             console.warn('Failed to fetch full user profile after login:', err)
           }
         }
+        // Toast: login success
+        try { (await import('@/stores/toasts')).useToasts().success('登入成功') } catch {}
       } catch (e: any) {
         this.err = e.message ?? '登入失敗'
+        try { (await import('@/stores/toasts')).useToasts().error(this.err || '登入失敗') } catch {}
         throw e
       }
     },
@@ -305,6 +306,7 @@ export const useAuth = defineStore('auth', {
       localStorage.removeItem(LEGACY_TOKEN_KEY)
       sessionStorage.removeItem(ROLE_KEY)
       try { localStorage.removeItem(ROLE_KEY) } catch {}
+      try { (await import('@/stores/toasts')).useToasts().info('已登出') } catch {}
     },
 
     /* ---------- 載入完整用戶資料 ------------------------------ */
@@ -356,13 +358,27 @@ export const useAuth = defineStore('auth', {
           }
 
           // 更新用戶資料
+          const newRole = mapKoalaProfileToRole(actualData)
           const oldUser = { ...this.user }
           this.user = {
             ...this.user,
             name: actualData?.full_name || actualData?.username || this.user.name,
             email: actualData?.email || this.user.email,
             phone: actualData?.phone || this.user.phone,
-            idNumber: idNumber || this.user.idNumber
+            idNumber: idNumber || this.user.idNumber,
+            roleId: newRole || this.user.roleId
+          }
+
+          if (newRole && newRole !== oldUser.roleId) {
+            try {
+              sessionStorage.setItem(ROLE_KEY, newRole)
+              localStorage.setItem(ROLE_KEY, newRole)
+            } catch {}
+            console.log('[fetchFullUserProfile] Role updated from profile:', {
+              oldRole: oldUser.roleId,
+              newRole,
+              profile: actualData
+            })
           }
 
           console.log('[fetchFullUserProfile] Before update:', oldUser)
@@ -397,11 +413,13 @@ export const useAuth = defineStore('auth', {
           }
         }
 
+        const mappedRole = mapKoalaProfileToRole(p)
+
         const mapped: User = {
           id: String(p.id ?? p.user_id ?? ''),
           name: p.full_name || p.username || p.name || '',
           email: p.email || '',
-          roleId: (p.type === 'admin' || p.username?.includes('admin') ? 'admin' : p.profile_type === 'staff' ? 'staff' : p.type === 'real' ? 'member' : 'visitor') as any,
+          roleId: mappedRole,
           avatarUrl: p.avatar_url || undefined,
           phone: p.phone,
           idNumber: idNumber || undefined
@@ -412,7 +430,14 @@ export const useAuth = defineStore('auth', {
         saveUserProfile(p)
         console.log('[Auth] Profile updated in localStorage after fetchMe')
 
-        try { sessionStorage.setItem(ROLE_KEY, mapped.roleId) } catch {}
+        try {
+          sessionStorage.setItem(ROLE_KEY, mapped.roleId)
+          localStorage.setItem(ROLE_KEY, mapped.roleId)
+        } catch {}
+        console.log('[Auth] Role mapping - fetchMe:', {
+          profile: p,
+          mappedRole
+        })
         return mapped
       }
     },

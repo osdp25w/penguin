@@ -128,18 +128,42 @@
       <div class="overflow-x-auto">
         <table class="w-full">
           <thead class="bg-gray-50">
-            <tr>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                名稱
+            <tr class="text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+              <th class="px-4 py-3 cursor-pointer hover:bg-gray-100 transition-colors" @click="handleSort('name')">
+                <div class="flex items-center gap-1">
+                  名稱
+                  <i v-if="sortConfig.field === 'name'"
+                     :class="sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down'"
+                     class="w-3 h-3"></i>
+                  <i v-else class="i-ph-caret-up-down w-3 h-3 opacity-30"></i>
+                </div>
               </th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                ID
+              <th class="px-4 py-3 cursor-pointer hover:bg-gray-100 transition-colors" @click="handleSort('id')">
+                <div class="flex items-center gap-1">
+                  ID
+                  <i v-if="sortConfig.field === 'id'"
+                     :class="sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down'"
+                     class="w-3 h-3"></i>
+                  <i v-else class="i-ph-caret-up-down w-3 h-3 opacity-30"></i>
+                </div>
               </th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                SoC
+              <th class="px-4 py-3 cursor-pointer hover:bg-gray-100 transition-colors" @click="handleSort('batteryLevel')">
+                <div class="flex items-center gap-1">
+                  SoC
+                  <i v-if="sortConfig.field === 'batteryLevel'"
+                     :class="sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down'"
+                     class="w-3 h-3"></i>
+                  <i v-else class="i-ph-caret-up-down w-3 h-3 opacity-30"></i>
+                </div>
               </th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                狀態
+              <th class="px-4 py-3 cursor-pointer hover:bg-gray-100 transition-colors" @click="handleSort('status')">
+                <div class="flex items-center gap-1">
+                  狀態
+                  <i v-if="sortConfig.field === 'status'"
+                     :class="sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down'"
+                     class="w-3 h-3"></i>
+                  <i v-else class="i-ph-caret-up-down w-3 h-3 opacity-30"></i>
+                </div>
               </th>
             </tr>
           </thead>
@@ -221,6 +245,8 @@
       v-if="selectedVehicle"
       :vehicle="selectedVehicle"
       @close="selectedVehicle = null"
+      @updated="handleVehicleUpdated"
+      @deleted="handleVehicleDeleted"
     />
 
     <!-- Create Vehicle Modal -->
@@ -247,6 +273,7 @@ import CreateVehicleModal from '@/components/modals/CreateVehicleModal.vue'
 import VehicleBadges from '@/components/VehicleBadges.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
 import { useBikeErrors } from '@/stores/bikeErrors'
+import type { Vehicle } from '@/types/vehicle'
 
 // Stores
 const vehiclesStore = useVehicles()
@@ -269,6 +296,12 @@ const filters = ref({
   lowBattery: false
 })
 
+// Sorting configuration
+const sortConfig = ref({
+  field: '' as string,
+  order: 'asc' as 'asc' | 'desc'
+})
+
 // 分頁功能
 const paging = usePaging({
   fetcher: async ({ limit, offset }) => {
@@ -287,8 +320,70 @@ const vehicles = computed(() => paging.data.value)
 // 兼容不同 store 寫法：優先 list，退回 sites
 const siteOptions = computed(() => (sitesStore as any).list ?? (sitesStore as any).sites ?? [])
 
-// 分頁模式下不需要前端過濾，直接使用分頁資料
-const filteredVehicles = computed(() => vehicles.value)
+// 分頁模式下，仍在前端套用一層狀態/關鍵字/低電量過濾，確保 UI 與期望一致
+const filteredVehicles = computed(() => {
+  let list = vehicles.value.slice()
+  // 站點（若後端未正確套用，前端再次過濾）
+  if (filters.value.siteId) {
+    list = list.filter(v => String(v.siteId || '') === String(filters.value.siteId))
+  }
+  // 狀態過濾
+  if (filters.value.status) {
+    const s = String(filters.value.status)
+    list = list.filter(v => v.status === s || getStatusText(v.status) === getStatusText(s))
+  }
+  // 低電量
+  if (filters.value.lowBattery) {
+    list = list.filter(v => (v.batteryLevel ?? v.batteryPct ?? 100) < 20)
+  }
+  // 關鍵字
+  if (filters.value.keyword && filters.value.keyword.trim()) {
+    const q = filters.value.keyword.trim().toLowerCase()
+    list = list.filter(v => String(v.id).toLowerCase().includes(q) || String(v.name || v.model || '').toLowerCase().includes(q))
+  }
+
+  // Apply sorting
+  if (sortConfig.value.field) {
+    list.sort((a, b) => {
+      let aVal: any = ''
+      let bVal: any = ''
+
+      switch (sortConfig.value.field) {
+        case 'name':
+          aVal = a.name || a.model || 'E-Bike'
+          bVal = b.name || b.model || 'E-Bike'
+          break
+        case 'id':
+          aVal = a.id
+          bVal = b.id
+          break
+        case 'batteryLevel':
+          aVal = a.batteryLevel || a.batteryPct || 0
+          bVal = b.batteryLevel || b.batteryPct || 0
+          break
+        case 'status':
+          aVal = getStatusText(a.status)
+          bVal = getStatusText(b.status)
+          break
+      }
+
+      const compareResult = aVal < bVal ? -1 : aVal > bVal ? 1 : 0
+      return sortConfig.value.order === 'asc' ? compareResult : -compareResult
+    })
+  }
+
+  return list
+})
+
+// Sorting function
+function handleSort(field: string) {
+  if (sortConfig.value.field === field) {
+    sortConfig.value.order = sortConfig.value.order === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortConfig.value.field = field
+    sortConfig.value.order = 'asc'
+  }
+}
 
 const stats = computed(() => {
   const total = paging.total.value
@@ -388,11 +483,17 @@ const getComponentStatusText = (status: string) => {
 }
 
 const selectVehicle = (vehicle: any) => {
-  selectedVehicle.value = vehicle
+  selectedVehicle.value = { ...vehicle }
 }
 
-const showVehicleDetails = (vehicle: any) => {
-  selectedVehicle.value = vehicle
+const handleVehicleUpdated = (vehicle: Vehicle) => {
+  selectedVehicle.value = { ...vehicle }
+  paging.refresh()
+}
+
+const handleVehicleDeleted = async () => {
+  selectedVehicle.value = null
+  await paging.refresh()
 }
 
 const formatDate = (dateString: string) => {
@@ -472,6 +573,12 @@ watch(
 )
 
 // Lifecycle
+// 監聽過濾器變化，自動重新載入資料
+watch(filters, async () => {
+  // 重置到第一頁並重新載入
+  await paging.reset()
+}, { deep: true })
+
 onMounted(async () => {
   // 從 URL 還原篩選條件
   const q = route.query

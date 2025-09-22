@@ -5,40 +5,30 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>運動資料管理平台 </title>
-    <!-- Chunk load fallback: if hashed asset fails (404), force a cache-busting reload -->
+    <!-- Handle chunk load failures gracefully -->
     <script>
       (function () {
-        var KEY = 'asset-bust';
-        window.addEventListener('error', function (e) {
-          var t = e && e.target;
-          if (t && t.tagName === 'SCRIPT' && t.src && /\/assets\/.+\.js/.test(t.src)) {
-            try {
-              var u = new URL(window.location.href);
-              if (!u.searchParams.has(KEY)) {
-                u.searchParams.set(KEY, Date.now().toString());
-                window.location.replace(u.toString());
-              }
-            } catch (_) {
-              window.location.reload();
-            }
-          }
-        }, true);
-
-        // Handle dynamic import chunk load failures (ChunkLoadError)
+        // Only handle dynamic import failures, not initial script loads
         window.addEventListener('unhandledrejection', function (e) {
           try {
             var msg = String(e && (e.reason && (e.reason.message || e.reason.name)) || '')
-            if (/ChunkLoadError|Loading chunk|import\(\)/i.test(msg)) {
-              var u = new URL(window.location.href)
-              if (!u.searchParams.has(KEY)) {
-                u.searchParams.set(KEY, Date.now().toString())
-                window.location.replace(u.toString())
-              } else {
-                window.location.reload()
+            // Only reload for chunk load errors, not other errors
+            if (/ChunkLoadError|Loading chunk \d+ failed/i.test(msg)) {
+              // Check if we already tried once this session
+              var tried = sessionStorage.getItem('chunk-reload-tried');
+              if (!tried) {
+                sessionStorage.setItem('chunk-reload-tried', '1');
+                // Simple reload without adding parameters
+                window.location.reload(true);
               }
             }
           } catch (_) {}
-        })
+        });
+
+        // Clear flag on successful load
+        window.addEventListener('load', function() {
+          sessionStorage.removeItem('chunk-reload-tried');
+        });
       })();
     </script>
   </head>
@@ -47,6 +37,8 @@
     <!-- Runtime config (public + secret) loaded before app -->
     <script src="/config/config.public.js?v=%CONFIG_VERSION%"></script>
     <script src="/config/config.secret.js?v=%CONFIG_VERSION%"></script>
+    <!-- CryptoJS (AES + HMAC-SHA256) for client-side Fernet without WebCrypto -->
+    <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/crypto-js.min.js"></script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

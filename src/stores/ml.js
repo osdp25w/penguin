@@ -69,17 +69,58 @@ export const useML = defineStore('ml', {
             }
         },
         /* ────────────── 故障機率 (GET) ────────────── */
-        async fetchBatteryRisk(ids = []) {
-            var _a;
+        async fetchBatteryRisk(ids = [], stats) {
+            var _a, _b;
             try {
                 this.loading = true;
-                const out = await predictBatteryRisk(ids);
+                let batteryStats = stats;
+                if (!(batteryStats === null || batteryStats === void 0 ? void 0 : batteryStats.length)) {
+                    try {
+                        const res = await fetch('/api/v1/batteries');
+                        if (res.ok) {
+                            batteryStats = await res.json();
+                        }
+                    }
+                    catch (err) {
+                        console.warn('[ML] Failed to fetch batteries for risk model:', err);
+                    }
+                }
+                let featureInputs;
+                if (batteryStats === null || batteryStats === void 0 ? void 0 : batteryStats.length) {
+                    featureInputs = batteryStats
+                        .map((item) => {
+                        var _a, _b;
+                        const id = String((_b = (_a = item.id) !== null && _a !== void 0 ? _a : item.vehicleId) !== null && _b !== void 0 ? _b : '').trim();
+                        if (!id)
+                            return null;
+                        const stat = {
+                            id,
+                            soc: typeof item.soc === 'number' ? item.soc : undefined,
+                            temperature: typeof item.temp === 'number' ? item.temp : undefined,
+                        };
+                        const anyItem = item;
+                        if (typeof anyItem.voltage === 'number')
+                            stat.voltage = anyItem.voltage;
+                        else if (typeof anyItem.mv10 === 'number')
+                            stat.mv10 = anyItem.mv10;
+                        else if (typeof anyItem.mv === 'number')
+                            stat.voltage = anyItem.mv;
+                        if (typeof anyItem.ctrlTemp === 'number')
+                            stat.ctrlTemp = anyItem.ctrlTemp;
+                        return stat;
+                    })
+                        .filter((v) => !!v);
+                }
+                const targetIds = ids.length
+                    ? ids
+                    : (_a = featureInputs === null || featureInputs === void 0 ? void 0 : featureInputs.map((item) => item.id).filter(Boolean)) !== null && _a !== void 0 ? _a : [];
+                const out = await predictBatteryRisk(targetIds, featureInputs && featureInputs.length ? featureInputs : undefined);
                 this.batteries = out;
                 this.errMsg = '';
                 return out;
             }
             catch (e) {
-                this.errMsg = (_a = e.message) !== null && _a !== void 0 ? _a : 'battery risk failed';
+                this.errMsg = (_b = e.message) !== null && _b !== void 0 ? _b : 'battery risk failed';
                 throw e;
             }
             finally {

@@ -7,9 +7,9 @@ import { useBatteries, useML } from '@/stores'
 const batStore = useBatteries()
 const mlStore  = useML()
 
-onMounted(() => {
-  batStore.fetchAll()
-  mlStore.fetchBatteryRisk()
+onMounted(async () => {
+  await batStore.fetchAll()
+  await mlStore.fetchBatteryRisk([], batStore.items)
 })
 
 /**
@@ -63,8 +63,8 @@ const chartOption = computed(() => ({
       <h2 class="text-2xl font-bold">電池健康 / 故障機率</h2>
       <button
         class="btn i-ph-arrow-clockwise text-sm"
-        :disabled="batStore.loading || mlStore.loading"
-        @click="() => { batStore.fetchAll(); mlStore.fetchBatteryRisk() }"
+        :disabled="batStore.isLoading || mlStore.loading"
+        @click="async () => { await batStore.fetchAll(); await mlStore.fetchBatteryRisk([], batStore.items) }"
       >
         重新整理
       </button>
@@ -132,7 +132,7 @@ const chartOption = computed(() => ({
     />
 
     <!-- ─── 狀態訊息 ─────────────────────────────────────── -->
-    <p v-if="batStore.loading || mlStore.loading" class="text-gray-600">
+    <p v-if="batStore.isLoading || mlStore.loading" class="text-gray-600">
       Loading…
     </p>
     <p v-if="batStore.errMsg || mlStore.errMsg" class="text-rose-400">

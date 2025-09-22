@@ -910,6 +910,47 @@
 							"response": []
 						}
 					]
+				},
+				{
+					"name": "Location",
+					"item": [
+						{
+							"name": "list all locations",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{member_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_ACCESS_TOKEN"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/location/locations/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"location",
+										"locations",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X GET http://localhost:8000/api/location/locations/ \\\n    -H \"Authorization: Bearer YOUR_ACCESS_TOKEN\""
+							},
+							"response": []
+						}
+					]
 				}
 			],
 			"event": [
@@ -1968,7 +2009,7 @@
 									}
 								],
 								"url": {
-									"raw": "{{base_url}}/api/bike/realtime-status/?limit=5&offset=3",
+									"raw": "{{base_url}}/api/bike/realtime-status/?bike_id_q=SIMULATOR-HUALIEN005",
 									"host": [
 										"{{base_url}}"
 									],
@@ -1980,12 +2021,8 @@
 									],
 									"query": [
 										{
-											"key": "limit",
-											"value": "5"
-										},
-										{
-											"key": "offset",
-											"value": "3"
+											"key": "bike_id_q",
+											"value": "SIMULATOR-HUALIEN005"
 										}
 									]
 								},
@@ -3157,6 +3194,359 @@
 									]
 								},
 								"description": "Generated from cURL:   curl -X PATCH \\\n    'http://localhost:8000/api/bike/error-log-status/{error_log_status_id}/' \\\n    -H 'Authorization: Token YOUR_TOKEN_HERE' \\\n    -H 'Content-Type: application/json' \\\n    -d '{\n      \"is_read\": true\n    }'"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Location",
+					"item": [
+						{
+							"name": "list all locations",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_ACCESS_TOKEN"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/location/locations/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"location",
+										"locations",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X GET http://localhost:8000/api/location/locations/ \\\n    -H \"Authorization: Bearer YOUR_ACCESS_TOKEN\""
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "HourlyGeometryCoordinateStatistics",
+					"item": [
+						{
+							"name": "list all geometry coordinates",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/statistic/history/hourly-geometry-coordinate/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"statistic",
+										"history",
+										"hourly-geometry-coordinate",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -H \"Authorization: Bearer YOUR_TOKEN\" \\\n       \"http://localhost:8000/api/statistic/history/hourly-geometry-coordinate/\""
+							},
+							"response": []
+						},
+						{
+							"name": "filter by collected_time",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/statistic/history/hourly-geometry-coordinate/?collected_time__date=2024-01-15",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"statistic",
+										"history",
+										"hourly-geometry-coordinate",
+										""
+									],
+									"query": [
+										{
+											"key": "collected_time__date",
+											"value": "2024-01-15"
+										}
+									]
+								},
+								"description": "Generated from cURL: curl -H \"Authorization: Bearer YOUR_TOKEN\" \\\n       \"http://localhost:8000/api/statistic/history/hourly-geometry-coordinate/?collected_time__date=2024-01-15\""
+							},
+							"response": []
+						},
+						{
+							"name": "filter by collected_time range",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/statistic/history/hourly-geometry-coordinate/?collected_time__gte=2024-01-15T10:00:00&collected_time__lte=2024-01-15T15:00:00",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"statistic",
+										"history",
+										"hourly-geometry-coordinate",
+										""
+									],
+									"query": [
+										{
+											"key": "collected_time__gte",
+											"value": "2024-01-15T10:00:00"
+										},
+										{
+											"key": "collected_time__lte",
+											"value": "2024-01-15T15:00:00"
+										}
+									]
+								},
+								"description": "Generated from cURL: curl -H \"Authorization: Bearer YOUR_TOKEN\" \\\n       \"http://localhost:8000/api/statistic/history/hourly-geometry-coordinate/?collected_time__gte=2024-01-15T10:00:00&\n  collected_time__lte=2024-01-15T15:00:00\""
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "DailyGeometryCoordinateStatistics",
+					"item": [
+						{
+							"name": "list all geometry coordinates",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/statistic/history/daily-geometry-coordinate/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"statistic",
+										"history",
+										"daily-geometry-coordinate",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -H \"Authorization: Bearer YOUR_TOKEN\" \\\n       \"http://localhost:8000/api/statistic/history/daily-geometry-coordinate/\""
+							},
+							"response": []
+						},
+						{
+							"name": "filter by collected_time range",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/statistic/history/daily-geometry-coordinate/?collected_time__gte=2024-01-01&collected_time__lte=2024-01-31",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"statistic",
+										"history",
+										"daily-geometry-coordinate",
+										""
+									],
+									"query": [
+										{
+											"key": "collected_time__gte",
+											"value": "2024-01-01"
+										},
+										{
+											"key": "collected_time__lte",
+											"value": "2024-01-31"
+										}
+									]
+								},
+								"description": "Generated from cURL: curl -H \"Authorization: Bearer YOUR_TOKEN\" \\\n       \"http://localhost:8000/api/statistic/history/daily-geometry-coordinate/?collected_time__gte=2024-01-01&collected_\n  time__lte=2024-01-31\""
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "RouteMatchResult",
+					"item": [
+						{
+							"name": "list all routes",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN_HERE"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/statistic/routes/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"statistic",
+										"routes",
+										""
+									]
+								},
+								"description": "Generated from cURL: curl -X GET \"http://localhost:8000/api/statistics/routes/\" \\\n    -H \"Authorization: Bearer YOUR_TOKEN_HERE\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "filter by rantal end_time",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_TOKEN_HERE"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/statistic/routes/?end_time__gte=2025-09-21T15:30:00Z",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"statistic",
+										"routes",
+										""
+									],
+									"query": [
+										{
+											"key": "end_time__gte",
+											"value": "2025-09-21T15:30:00Z"
+										}
+									]
+								},
+								"description": "Generated from cURL: curl -X GET \"http://localhost:8000/api/statistics/routes/\" \\\n    -H \"Authorization: Bearer YOUR_TOKEN_HERE\" \\\n    -H \"Content-Type: application/json\""
 							},
 							"response": []
 						}

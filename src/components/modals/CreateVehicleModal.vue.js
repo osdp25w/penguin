@@ -11,11 +11,8 @@ const imeiQuery = ref('');
 const form = reactive({
     id: '',
     name: '',
-    batteryLevel: null,
     status: 'available',
     siteId: '',
-    lat: null,
-    lon: null,
     categoryId: '',
     seriesId: '',
     model: '',
@@ -44,18 +41,10 @@ onMounted(async () => {
 });
 function validate() {
     errors.id = undefined;
-    errors.batteryLevel = undefined;
     let ok = true;
     if (!form.id) {
         errors.id = '請輸入車輛 ID';
         ok = false;
-    }
-    if (form.batteryLevel != null) {
-        const v = Number(form.batteryLevel);
-        if (Number.isNaN(v) || v < 0 || v > 100) {
-            errors.batteryLevel = 'SoC 必須在 0 - 100 之間';
-            ok = false;
-        }
     }
     return ok;
 }
@@ -64,16 +53,15 @@ async function handleSubmit() {
         return;
     submitting.value = true;
     try {
-        const battery = form.batteryLevel == null ? undefined : Number(form.batteryLevel);
         const vehicle = {
             id: form.id,
             name: form.name || undefined,
-            batteryLevel: battery,
-            batteryPct: battery,
+            batteryLevel: undefined,
+            batteryPct: undefined,
             status: form.status,
             siteId: form.siteId || undefined,
-            lat: form.lat == null ? undefined : Number(form.lat),
-            lon: form.lon == null ? undefined : Number(form.lon),
+            lat: undefined,
+            lon: undefined,
             mqttStatus: 'online',
             lastSeen: new Date().toISOString(),
             createdAt: new Date().toISOString(),
@@ -180,26 +168,8 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
     placeholder: "顯示名稱或 BI",
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-    ...{ class: "grid grid-cols-1 sm:grid-cols-3 gap-4" },
+    ...{ class: "grid grid-cols-1 sm:grid-cols-2 gap-4" },
 });
-__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
-    ...{ class: "block text-sm font-medium text-gray-700 mb-1" },
-});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
-    type: "number",
-    min: "0",
-    max: "100",
-    ...{ class: "input-base w-full" },
-    placeholder: "0-100",
-});
-(__VLS_ctx.form.batteryLevel);
-if (__VLS_ctx.errors.batteryLevel) {
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
-        ...{ class: "text-xs text-red-600 mt-1" },
-    });
-    (__VLS_ctx.errors.batteryLevel);
-}
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
 __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
     ...{ class: "block text-sm font-medium text-gray-700 mb-1" },
@@ -319,31 +289,6 @@ for (const [d] of __VLS_getVForSourceType((__VLS_ctx.filteredAvailableDevices)))
     (d.name || d.model || 'device');
 }
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-    ...{ class: "grid grid-cols-1 sm:grid-cols-2 gap-4" },
-});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
-    ...{ class: "block text-sm font-medium text-gray-700 mb-1" },
-});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
-    type: "number",
-    step: "0.000001",
-    ...{ class: "input-base w-full" },
-    placeholder: "25.061410",
-});
-(__VLS_ctx.form.lat);
-__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
-    ...{ class: "block text-sm font-medium text-gray-700 mb-1" },
-});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
-    type: "number",
-    step: "0.000001",
-    ...{ class: "input-base w-full" },
-    placeholder: "121.602744",
-});
-(__VLS_ctx.form.lon);
-__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "px-6 py-4 bg-gray-50 flex items-center justify-end gap-2 border-t border-gray-200" },
 });
 const __VLS_8 = {}.Button;
@@ -457,18 +402,8 @@ var __VLS_19;
 /** @type {__VLS_StyleScopedClasses['w-full']} */ ;
 /** @type {__VLS_StyleScopedClasses['grid']} */ ;
 /** @type {__VLS_StyleScopedClasses['grid-cols-1']} */ ;
-/** @type {__VLS_StyleScopedClasses['sm:grid-cols-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['sm:grid-cols-2']} */ ;
 /** @type {__VLS_StyleScopedClasses['gap-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['block']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-/** @type {__VLS_StyleScopedClasses['mb-1']} */ ;
-/** @type {__VLS_StyleScopedClasses['input-base']} */ ;
-/** @type {__VLS_StyleScopedClasses['w-full']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-red-600']} */ ;
-/** @type {__VLS_StyleScopedClasses['mt-1']} */ ;
 /** @type {__VLS_StyleScopedClasses['block']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
 /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
@@ -524,24 +459,6 @@ var __VLS_19;
 /** @type {__VLS_StyleScopedClasses['w-40']} */ ;
 /** @type {__VLS_StyleScopedClasses['input-base']} */ ;
 /** @type {__VLS_StyleScopedClasses['flex-1']} */ ;
-/** @type {__VLS_StyleScopedClasses['grid']} */ ;
-/** @type {__VLS_StyleScopedClasses['grid-cols-1']} */ ;
-/** @type {__VLS_StyleScopedClasses['sm:grid-cols-2']} */ ;
-/** @type {__VLS_StyleScopedClasses['gap-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['block']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-/** @type {__VLS_StyleScopedClasses['mb-1']} */ ;
-/** @type {__VLS_StyleScopedClasses['input-base']} */ ;
-/** @type {__VLS_StyleScopedClasses['w-full']} */ ;
-/** @type {__VLS_StyleScopedClasses['block']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-/** @type {__VLS_StyleScopedClasses['mb-1']} */ ;
-/** @type {__VLS_StyleScopedClasses['input-base']} */ ;
-/** @type {__VLS_StyleScopedClasses['w-full']} */ ;
 /** @type {__VLS_StyleScopedClasses['px-6']} */ ;
 /** @type {__VLS_StyleScopedClasses['py-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['bg-gray-50']} */ ;

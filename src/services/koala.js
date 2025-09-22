@@ -15,6 +15,7 @@ export const Koala = {
         if (loginKey && password && !looksLikeFernet(password)) {
             // Helper: ensure we never fall back to sending plaintext
             const mustBeToken = async () => {
+                var _a;
                 // DEV + forced ts/iv: deterministic replay (optional for local testing)
                 if (import.meta.env.DEV && forceTs && forceIv) {
                     const r = await fetch('/local/fernet/replay', {
@@ -31,29 +32,22 @@ export const Koala = {
                         throw new Error('REPLAY_NO_TOKEN');
                     return j.token;
                 }
-                // Use server-side encryption only (Node crypto implementation) for full parity
+                // Use browser-side encryption with CryptoJS
+                const { fernetEncrypt } = await import('@/lib/fernet_client');
+                const loginKey = ((_a = window.CONFIG) === null || _a === void 0 ? void 0 : _a.KOALA_LOGIN_KEY) || import.meta.env.VITE_KOALA_LOGIN_KEY;
+                if (!loginKey) {
+                    console.error('[Fernet] No login key available for encryption');
+                    throw new Error('ENCRYPTION_FAILED: Missing encryption key');
+                }
                 try {
-                    const r = await fetch('/api/fernet/encrypt', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ text: password })
-                    });
-                    if (r.ok) {
-                        const j = await r.json();
-                        if ((j === null || j === void 0 ? void 0 : j.token) && j.token !== password) {
-                            console.log('[Fernet] Encrypted via server endpoint: /api/fernet/encrypt');
-                            return j.token;
-                        }
-                    }
-                    else {
-                        console.warn('Server encrypt not ok:', r.status);
-                    }
+                    const encrypted = fernetEncrypt(password, loginKey);
+                    console.log('[Fernet] Password encrypted using browser-side encryption');
+                    return encrypted;
                 }
                 catch (err) {
-                    console.warn('Server encrypt endpoint failed:', err);
+                    console.error('[Fernet] Browser-side encryption failed:', err);
+                    throw new Error('ENCRYPTION_FAILED: Browser encryption failed');
                 }
-                // No fallback — enforce server-side encryption
-                throw new Error('ENCRYPTION_FAILED: Server encryption unavailable');
             };
             try {
                 const token = await mustBeToken();

@@ -16,12 +16,16 @@ async function submit() {
     try {
         await auth.login(email.value, password.value);
         const redirect = route.query.redirect || '/';
-        // 會員（member）登入後一律進入場域地圖
+        // 會員（member）登入後僅允許存取特定頁面，優先導向原始需求
         const role = ((_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId) || sessionStorage.getItem('penguin.role') || localStorage.getItem('penguin.role');
-        if (role === 'member')
-            router.replace('/sites');
-        else
+        if (role === 'member') {
+            const allowed = ['/my-rentals', '/sites'];
+            const target = allowed.find(path => redirect.startsWith(path)) || '/sites';
+            router.replace(target);
+        }
+        else {
             router.replace(redirect);
+        }
     }
     finally {
         loading.value = false;

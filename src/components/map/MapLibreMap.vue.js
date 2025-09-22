@@ -11,6 +11,7 @@ const loading = ref(true);
 const error = ref(null);
 let map = null;
 let popup = null;
+let activeTraceIds = [];
 // 環境變數
 const defaultMapCenter = ((_a = import.meta.env.VITE_MAP_CENTER) === null || _a === void 0 ? void 0 : _a.split(',').map(Number)) || [23.8, 121.6];
 const defaultMapZoom = Number(import.meta.env.VITE_MAP_ZOOM) || 10;
@@ -410,6 +411,11 @@ watch(() => props.displayMode, (newMode) => {
         bindSiteEvents();
     }
 });
+watch(() => props.vehicleTraces, () => {
+    if (!map || props.displayMode !== 'history')
+        return;
+    addVehicleTracesLayer();
+}, { deep: true });
 // 監聽選中項目變化，自動移動地圖到該位置
 watch(() => props.selected, (selectedItem) => {
     if (!map || !selectedItem)
@@ -435,6 +441,44 @@ watch(() => props.selected, (selectedItem) => {
         });
     }
 }, { deep: true });
+function removeTraceLayers(traceId) {
+    if (!map)
+        return;
+    const traceLineId = `trace-line-${traceId}`;
+    if (map.getLayer(traceLineId)) {
+        map.removeLayer(traceLineId);
+    }
+    const tracePointsId = `trace-points-${traceId}`;
+    if (map.getLayer(tracePointsId)) {
+        map.removeLayer(tracePointsId);
+    }
+    const traceStartId = `trace-start-${traceId}`;
+    if (map.getLayer(traceStartId)) {
+        map.removeLayer(traceStartId);
+    }
+    const traceEndId = `trace-end-${traceId}`;
+    if (map.getLayer(traceEndId)) {
+        map.removeLayer(traceEndId);
+    }
+    const traceLabelId = `trace-label-${traceId}`;
+    if (map.getLayer(traceLabelId)) {
+        map.removeLayer(traceLabelId);
+    }
+    const traceSourceId = `trace-${traceId}`;
+    if (map.getSource(traceSourceId)) {
+        map.removeSource(traceSourceId);
+    }
+    const tracePointsSourceId = `trace-points-${traceId}`;
+    if (map.getSource(tracePointsSourceId)) {
+        map.removeSource(tracePointsSourceId);
+    }
+}
+function clearTraceLayers() {
+    if (!map || activeTraceIds.length === 0)
+        return;
+    activeTraceIds.forEach(removeTraceLayers);
+    activeTraceIds = [];
+}
 function clearAllLayers() {
     if (!map)
         return;
@@ -457,46 +501,7 @@ function clearAllLayers() {
     if (map.getSource('vehicles-selected')) {
         map.removeSource('vehicles-selected');
     }
-    // 清除車輛軌跡圖層
-    if (props.vehicleTraces) {
-        Object.keys(props.vehicleTraces).forEach(vehicleId => {
-            // 清除軌跡線圖層
-            const traceLineId = `trace-line-${vehicleId}`;
-            if (map.getLayer(traceLineId)) {
-                map.removeLayer(traceLineId);
-            }
-            // 清除軌跡點圖層
-            const tracePointsId = `trace-points-${vehicleId}`;
-            if (map.getLayer(tracePointsId)) {
-                map.removeLayer(tracePointsId);
-            }
-            // 清除起點圖層
-            const traceStartId = `trace-start-${vehicleId}`;
-            if (map.getLayer(traceStartId)) {
-                map.removeLayer(traceStartId);
-            }
-            // 清除終點圖層
-            const traceEndId = `trace-end-${vehicleId}`;
-            if (map.getLayer(traceEndId)) {
-                map.removeLayer(traceEndId);
-            }
-            // 清除標籤圖層
-            const traceLabelId = `trace-label-${vehicleId}`;
-            if (map.getLayer(traceLabelId)) {
-                map.removeLayer(traceLabelId);
-            }
-            // 清除軌跡數據源
-            const traceSourceId = `trace-${vehicleId}`;
-            if (map.getSource(traceSourceId)) {
-                map.removeSource(traceSourceId);
-            }
-            // 清除軌跡點數據源
-            const tracePointsSourceId = `trace-points-${vehicleId}`;
-            if (map.getSource(tracePointsSourceId)) {
-                map.removeSource(tracePointsSourceId);
-            }
-        });
-    }
+    clearTraceLayers();
 }
 // 高亮選中的車輛
 function highlightVehicle(vehicleId) {
@@ -643,6 +648,7 @@ function showVehiclePopup(vehicle) {
 function addVehicleTracesLayer() {
     if (!map || !props.vehicleTraces)
         return;
+    clearTraceLayers();
     // 定義不同車輛的顏色
     const vehicleColors = [
         '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
@@ -768,6 +774,7 @@ function addVehicleTracesLayer() {
                 'text-halo-width': 2
             }
         });
+        activeTraceIds.push(vehicleId);
     });
     bindTraceEvents();
 }

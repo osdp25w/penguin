@@ -1,139 +1,36 @@
 // src/lib/encryption.ts
 // 處理敏感資料和密碼的加解密功能
-// 完全使用伺服器端加解密，不使用 WebCrypto
+// 改為完全使用瀏覽器端加解密（CryptoJS），不使用 WebCrypto、不呼叫 /api/fernet
+import { fernetEncrypt as clientFernetEncrypt, fernetDecrypt as clientFernetDecrypt } from '@/lib/fernet_client'
 
 /**
  * 加密國民身份證號 (使用 VITE_KOALA_SENSITIVE_KEY)
  */
 export async function encryptNationalId(nationalId: string): Promise<string> {
-  const sensitiveKey = import.meta?.env?.VITE_KOALA_SENSITIVE_KEY
-  
-  // 在生產環境中，不需要前端的 sensitiveKey（伺服器端會使用自己的 key）
-  if (import.meta.env.DEV && !sensitiveKey) {
-    throw new Error('VITE_KOALA_SENSITIVE_KEY not configured in development')
-  }
-  
-  try {
-    // 使用 penguin fernet 服務進行敏感資訊加密
-    const endpoint = import.meta.env.DEV ? '/local/fernet' : '/api/fernet/encrypt'
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text: nationalId,
-        type: 'sensitive', // 指定為敏感資訊類型，使用 SENSITIVE_KEY
-        key: import.meta.env.DEV ? sensitiveKey : undefined // 開發環境使用前端 key
-      })
-    })
-    
-    if (!response.ok) {
-      throw new Error(`Server encryption failed: ${response.status}`)
-    }
-    
-    const data = await response.json()
-    if (!data.token) {
-      throw new Error('Server returned no token')
-    }
-    
-    return data.token
-  } catch (error) {
-    console.error('Failed to encrypt national ID:', error)
-    throw new Error('無法加密身份證號 - 伺服器加密端點不可用')
-  }
+  const sensitiveKey = import.meta?.env?.VITE_KOALA_SENSITIVE_KEY || (globalThis as any)?.CONFIG?.KOALA_SENSITIVE_KEY
+  if (!sensitiveKey) throw new Error('Missing VITE_KOALA_SENSITIVE_KEY for client-side encryption')
+  return clientFernetEncrypt(nationalId, sensitiveKey)
 }
 
 /**
  * 解密國民身份證號 (使用 VITE_KOALA_SENSITIVE_KEY)
  */
 export async function decryptNationalId(encryptedNationalId: string): Promise<string> {
-  const sensitiveKey = import.meta?.env?.VITE_KOALA_SENSITIVE_KEY
-  
-  // 在生產環境中，不需要前端的 sensitiveKey（伺服器端會使用自己的 key）
-  if (import.meta.env.DEV && !sensitiveKey) {
-    throw new Error('VITE_KOALA_SENSITIVE_KEY not configured in development')
-  }
-  
-  try {
-    // 使用 penguin fernet 服務進行敏感資訊解密
-    const endpoint = import.meta.env.DEV ? '/local/fernet/decrypt' : '/api/fernet/decrypt'
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tokens: [encryptedNationalId],
-        type: 'sensitive', // 指定為敏感資訊類型，使用 SENSITIVE_KEY
-        key: import.meta.env.DEV ? sensitiveKey : undefined // 開發環境使用前端 key
-      })
-    })
-    
-    if (response.ok) {
-      const data = await response.json()
-      if (data.values && data.values[0]) {
-        return data.values[0]
-      }
-    }
-    
-    // 如果解密失敗，拋出錯誤
-    throw new Error('Server decryption failed')
-  } catch (error) {
-    console.error('Failed to decrypt national ID:', error)
-    // 如果解密失敗，返回原文 (可能本來就不是加密的)
-    return encryptedNationalId
-  }
+  const sensitiveKey = import.meta?.env?.VITE_KOALA_SENSITIVE_KEY || (globalThis as any)?.CONFIG?.KOALA_SENSITIVE_KEY
+  if (!sensitiveKey) return encryptedNationalId
+  try { return clientFernetDecrypt(encryptedNationalId, sensitiveKey) } catch { return encryptedNationalId }
 }
 
 /**
  * 加密密碼 (登入使用 VITE_KOALA_LOGIN_KEY，註冊/更新使用 VITE_KOALA_SENSITIVE_KEY)
  */
 export async function encryptPassword(password: string, useForRegistration: boolean = false): Promise<string> {
-  // 根據用途選擇不同的 key
   const rt: any = (globalThis as any)?.CONFIG || {}
-  let key: string | undefined
-  
-  if (useForRegistration) {
-    // 註冊和更新使用 GENERIC_SECRET_SIGNING_KEY (對應 VITE_KOALA_SENSITIVE_KEY)
-    key = rt.KOALA_SENSITIVE_KEY || import.meta?.env?.VITE_KOALA_SENSITIVE_KEY
-  } else {
-    // 登入使用 LOGIN_SECRET_SIGNING_KEY (對應 VITE_KOALA_LOGIN_KEY)
-    key = rt.KOALA_LOGIN_KEY || import.meta?.env?.VITE_KOALA_LOGIN_KEY
-  }
-  
-  // 在生產環境中，不需要前端的 key（伺服器端會使用自己的 key）
-  if (import.meta.env.DEV && !key) {
-    const keyType = useForRegistration ? 'VITE_KOALA_SENSITIVE_KEY' : 'VITE_KOALA_LOGIN_KEY'
-    throw new Error(`${keyType} not configured in development`)
-  }
-  
-  try {
-    // 使用 penguin fernet 服務進行密碼加密
-    const endpoint = import.meta.env.DEV ? '/local/fernet' : '/api/fernet/encrypt'
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text: password,
-        type: useForRegistration ? 'sensitive' : 'password', // 根據用途選擇加密類型
-        key: import.meta.env.DEV ? key : undefined // 開發環境使用前端 key
-      })
-    })
-    
-    if (!response.ok) {
-      throw new Error(`Server encryption failed: ${response.status}`)
-    }
-    
-    const data = await response.json()
-    if (!data.token) {
-      throw new Error('Server returned no token')
-    }
-    
-    return data.token
-  } catch (error) {
-    console.error('Failed to encrypt password:', error)
-    throw new Error('無法加密密碼 - 伺服器加密端點不可用')
-  }
+  const key = useForRegistration
+    ? (rt.KOALA_SENSITIVE_KEY || import.meta?.env?.VITE_KOALA_SENSITIVE_KEY)
+    : (rt.KOALA_LOGIN_KEY || import.meta?.env?.VITE_KOALA_LOGIN_KEY)
+  if (!key) throw new Error('Missing Fernet key for client-side encryption')
+  return clientFernetEncrypt(password, key)
 }
 
 /**

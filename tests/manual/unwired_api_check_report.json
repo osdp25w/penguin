@@ -1,0 +1,71 @@
+{
+  "base_url": "https://koala.osdp25w.xyz",
+  "total": 7,
+  "passed": 6,
+  "failed": 1,
+  "results": [
+    {
+      "name": "check_availability_unique_email",
+      "method": "GET",
+      "path": "/api/account/register/check-availability/",
+      "http_status": 200,
+      "passed": true,
+      "note": "Expected availability query to return 200",
+      "response_sample": "{\"code\": 2000, \"msg\": \"success\", \"data\": {\"available\": true}}"
+    },
+    {
+      "name": "delete_member_invalid_id",
+      "method": "DELETE",
+      "path": "/api/account/members/9999999/",
+      "http_status": 200,
+      "passed": true,
+      "note": "Attempt delete with non-existent member ID (should fail safely)",
+      "response_sample": "{\"code\": 4002, \"msg\": \"resource not found\", \"details\": null}"
+    },
+    {
+      "name": "delete_staff_invalid_id",
+      "method": "DELETE",
+      "path": "/api/account/staff/9999999/",
+      "http_status": 200,
+      "passed": true,
+      "note": "Attempt delete with non-existent staff ID (should fail safely)",
+      "response_sample": "{\"code\": 4002, \"msg\": \"resource not found\", \"details\": null}"
+    },
+    {
+      "name": "bike_info_detail",
+      "method": "GET",
+      "path": "/api/bike/bikes/UP001/",
+      "http_status": 200,
+      "passed": true,
+      "note": "Fetch detailed bike info for sample bike ID UP001",
+      "response_sample": "{\"code\": 2000, \"msg\": \"success\", \"data\": {\"bike_id\": \"UP001\", \"bike_name\": \"Urban Pro 001\", \"bike_model\": \"UP-2024-001\", \"series_id\": 1, \"category_id\": 1, \"telemetry_device_imei\": \"867295075673001\", \"created_at\": \"2025-09-13T02:04:05.853581+08:00\", \"updated_at\": \"2025-09-13T02:04:05.853599+08:00\"}}"
+    },
+    {
+      "name": "member_rental_history",
+      "method": "GET",
+      "path": "/api/rental/member/rentals/",
+      "http_status": 200,
+      "passed": true,
+      "note": "List member rental history",
+      "response_sample": "{\"code\": 2000, \"msg\": \"success\", \"data\": [{\"id\": 16, \"bike\": {\"bike_id\": \"UP002\", \"bike_name\": \"Urban Pro 002\", \"bike_model\": \"UP-2024-002\"}, \"member\": {\"id\": 1, \"full_name\": \"Pony Member Real1\", \"phone\": \"+886912345679\"}, \"start_time\": \"2025-09-17T21:30:34.412879+08:00\", \"end_time\": \"2025-09-17T21:"
+    },
+    {
+      "name": "member_rental_detail_id7",
+      "method": "GET",
+      "path": "/api/rental/member/rentals/7/",
+      "http_status": 200,
+      "passed": true,
+      "note": "Fetch specific rental record; 200 if record belongs to member, else 404",
+      "response_sample": "{\"code\": 2000, \"msg\": \"success\", \"data\": {\"id\": 7, \"bike\": {\"bike_id\": \"UP003\", \"bike_name\": \"Urban Pro 003\", \"bike_model\": \"UP-2024-003\"}, \"member\": {\"id\": 1, \"full_name\": \"Pony Member Real1\", \"phone\": \"+886912345679\"}, \"start_time\": \"2025-09-17T03:49:11.007660+08:00\", \"end_time\": \"2025-09-17T03:49"
+    },
+    {
+      "name": "error_log_detail_220",
+      "method": "GET",
+      "path": "/api/bike/error-log-status/220/",
+      "http_status": 405,
+      "passed": false,
+      "note": "Probe single error log endpoint (was previously unavailable)",
+      "response_sample": "{\"code\": 4001, \"msg\": \"method not allowed\", \"details\": \"不被允許的方法 \\\"GET\\\"。\"}"
+    }
+  ]
+}

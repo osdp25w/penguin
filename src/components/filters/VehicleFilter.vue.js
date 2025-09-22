@@ -113,23 +113,30 @@ watch(() => props.modelValue, (newValue) => {
 });
 // 監聽快速過濾變化，自動更新選中的車輛
 watch(quickFilter, () => {
-    isUpdatingInternally = true;
     // 根據當前過濾條件更新選中車輛
     selectedVehicles.value = filteredVehicles.value.map(v => v.id);
-    nextTick(() => {
-        isUpdatingInternally = false;
-    });
+    // 立即發射更新事件
+    emit('update:modelValue', selectedVehicles.value);
 });
 // 初始化時選中所有車輛
 watch(() => props.availableVehicles, (newVehicles) => {
     if (newVehicles.length > 0 && selectedVehicles.value.length === 0) {
-        isUpdatingInternally = true;
         selectedVehicles.value = newVehicles.map(v => v.id);
-        nextTick(() => {
-            isUpdatingInternally = false;
-        });
+        // 立即發射更新事件
+        emit('update:modelValue', selectedVehicles.value);
     }
 }, { immediate: true });
+function selectAll() {
+    // 依目前顯示（含快速過濾與關鍵字）全選
+    selectedVehicles.value = filteredDisplayVehicles.value.map(v => v.id);
+    // 立即發射更新事件
+    emit('update:modelValue', selectedVehicles.value);
+}
+function clearAll() {
+    selectedVehicles.value = [];
+    // 立即發射更新事件
+    emit('update:modelValue', selectedVehicles.value);
+}
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
 let __VLS_components;
@@ -166,6 +173,17 @@ for (const [filter] of __VLS_getVForSourceType((__VLS_ctx.quickFilters))) {
     });
     (filter.label);
 }
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "ml-auto flex items-center gap-2" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+    ...{ onClick: (__VLS_ctx.selectAll) },
+    ...{ class: "text-xs text-blue-600 hover:underline" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+    ...{ onClick: (__VLS_ctx.clearAll) },
+    ...{ class: "text-xs text-gray-600 hover:underline" },
+});
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "relative" },
 });
@@ -248,6 +266,16 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.d
 /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
 /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
 /** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
+/** @type {__VLS_StyleScopedClasses['ml-auto']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-blue-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['hover:underline']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['hover:underline']} */ ;
 /** @type {__VLS_StyleScopedClasses['relative']} */ ;
 /** @type {__VLS_StyleScopedClasses['w-full']} */ ;
 /** @type {__VLS_StyleScopedClasses['px-3']} */ ;
@@ -314,6 +342,8 @@ const __VLS_self = (await import('vue')).defineComponent({
             getStatusText: getStatusText,
             getStatusClass: getStatusClass,
             getStatusColor: getStatusColor,
+            selectAll: selectAll,
+            clearAll: clearAll,
         };
     },
     __typeEmits: {},

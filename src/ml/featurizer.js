@@ -30,8 +30,10 @@ export function toPowerInput(speed, tempC = 25, wind = 0, assist = 1) {
 }
 export function toBatteryInput(t) {
     const b = basicFeatures(t);
-    // features: [soc, voltage, ctrlTemp, cadence, torque]
-    return [b.soc, b.voltage, b.ctrlTemp, b.cadence, b.torque];
+    const socFraction = Math.max(0, Math.min(1.2, (b.soc || 0) / 100));
+    const voltage = b.voltage || 48;
+    const temp = b.ctrlTemp || 35;
+    return [Number(socFraction.toFixed(4)), Number(voltage.toFixed(2)), Number(temp.toFixed(2))];
 }
 // XGB models from bikerproject expect 8 features
 export function toCadenceGearFeaturesFromTelemetry(t) {

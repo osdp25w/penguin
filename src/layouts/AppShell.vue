@@ -36,8 +36,14 @@
             </nav>
           </div>
           
-          <!-- Right side - User Menu -->
-          <div class="flex items-center">
+          <!-- Right side - Connection Status & User Menu -->
+          <div class="flex items-center gap-3">
+            <!-- WebSocket Connection Status -->
+            <div v-if="wsConnected !== null" class="flex items-center gap-2 px-3 py-1.5 rounded-md border" :class="wsStatusClass">
+              <div class="w-2 h-2 rounded-full animate-pulse" :class="wsIndicatorClass"></div>
+              <span class="text-xs font-medium">{{ wsStatusText }}</span>
+            </div>
+
             <!-- User Menu -->
             <div class="relative" ref="userMenuRef">
               <Button
@@ -154,15 +160,19 @@
       @close="showProfileModal = false"
       @success="handleProfileSuccess" 
     />
+    <!-- Toasts -->
+    <ToastHost />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Button } from '@/design/components'
 import { useAuth } from '@/stores/auth'
 import EditProfileModal from '@/components/profile/EditProfileModal.vue'
+import ToastHost from '@/components/ToastHost.vue'
+import { ensureKoalaWsConnected, setConnectionStatusCallback } from '@/services/koala_ws'
 
 const route = useRoute()
 const router = useRouter()
@@ -171,6 +181,25 @@ const sidebarOpen = ref(false)
 const userMenuOpen = ref(false)
 const userMenuRef = ref<HTMLElement>()
 const showProfileModal = ref(false)
+
+// WebSocket 連線狀態
+const wsConnected = ref<boolean | null>(null)
+const wsStatusText = computed(() => {
+  if (wsConnected.value === null) return '未連線'
+  return wsConnected.value ? '已連線' : '斷線'
+})
+
+const wsStatusClass = computed(() => {
+  if (wsConnected.value === null) return 'border-gray-200 bg-gray-50 text-gray-600'
+  return wsConnected.value
+    ? 'border-green-200 bg-green-50 text-green-700'
+    : 'border-amber-200 bg-amber-50 text-amber-700'
+})
+
+const wsIndicatorClass = computed(() => {
+  if (wsConnected.value === null) return 'bg-gray-400'
+  return wsConnected.value ? 'bg-green-500' : 'bg-amber-500'
+})
 
 // 當前使用者資訊
 const currentUser = computed(() => auth.user || {
@@ -187,44 +216,57 @@ const currentPageTitle = computed(() => {
   return route.meta.title as string || '總覽'
 })
 
-const allNavigation = [
+const baseNavigation = [
   { name: '總覽', href: '/', icon: 'i-ph-house' },
   { name: '場域地圖', href: '/sites', icon: 'i-ph-map-pin' },
-  { name: '車輛清單', href: '/vehicles', icon: 'i-ph-bicycle' },
-  { name: '警報中心', href: '/alerts', icon: 'i-ph-warning-circle' },
-  { name: 'ML 預測', href: '/ml', icon: 'i-ph-chart-line-up' },
-  { name: '遙測設備', href: '/admin/telemetry', icon: 'i-ph-wifi-high' },
-  { name: '場域管理', href: '/admin/sites', icon: 'i-ph-map-pin-line' },
-  { name: '帳號管理', href: '/admin/users', icon: 'i-ph-users' },
+  { name: '警報中心', href: '/alerts', icon: 'i-ph-warning-circle' }
 ]
 
-// 依角色過濾：member 只能看到「場域地圖」，admin/staff 可見管理功能
+const memberNavigation = [
+  { name: '場域地圖', href: '/sites', icon: 'i-ph-map-pin' },
+  { name: '我的租借', href: '/my-rentals', icon: 'i-ph-clock-counter-clockwise' }
+]
+
+const privilegedNavigation = [
+  { name: '總覽', href: '/', icon: 'i-ph-house' },
+  { name: '場域地圖', href: '/sites', icon: 'i-ph-map-pin' },
+  { name: '租借管理', href: '/admin/rentals', icon: 'i-ph-clipboard-text' },
+  { name: '車輛清單', href: '/vehicles', icon: 'i-ph-bicycle' },
+  { name: '遙測設備', href: '/admin/telemetry', icon: 'i-ph-wifi-high' },
+  // { name: '場域管理', href: '/admin/sites', icon: 'i-ph-map-pin-line' }, // 暫時隱藏
+  { name: '帳號管理', href: '/admin/users', icon: 'i-ph-users' },
+  { name: '警報中心', href: '/alerts', icon: 'i-ph-warning-circle' },
+  { name: 'ML 預測', href: '/ml', icon: 'i-ph-chart-line-up' }
+]
+
+// 依角色過濾：member 僅限部分選單，admin/staff 顯示完整管理功能
 const navigation = computed(() => {
   const role = auth.user?.roleId || sessionStorage.getItem('penguin.role') || localStorage.getItem('penguin.role')
 
-  console.log('[AppShell] Navigation filtering:', {
+  console.log('[AppShell] Navigation filtering - DETAILED DEBUG:', {
     role,
     userRole: auth.user?.roleId,
     sessionRole: sessionStorage.getItem('penguin.role'),
-    localRole: localStorage.getItem('penguin.role')
+    localRole: localStorage.getItem('penguin.role'),
+    authUser: auth.user,
+    isLogin: auth.isLogin
   })
 
-  if (role === 'member') {
-    return allNavigation.filter(i => i.href === '/sites')
+  // member, visitor, tourist 都只能看到場域地圖和我的租借
+  if (role === 'member' || role === 'visitor' || role === 'tourist') {
+    console.log('[AppShell] Using member navigation for role:', role)
+    return memberNavigation
   }
 
   const isPrivileged = role === 'admin' || role === 'staff'
-  const adminPaths = ['/admin/users', '/admin/sites', '/admin/telemetry']
-  const filtered = allNavigation.filter(i => (adminPaths.includes(i.href) ? isPrivileged : true))
-
+  const nav = isPrivileged ? privilegedNavigation : baseNavigation
   console.log('[AppShell] Navigation filtered result:', {
+    role,
     isPrivileged,
-    allItemsCount: allNavigation.length,
-    filteredItemsCount: filtered.length,
-    filtered: filtered.map(i => ({ name: i.name, href: i.href }))
+    selectedNav: isPrivileged ? 'privileged' : 'base',
+    items: nav.map(i => ({ name: i.name, href: i.href }))
   })
-
-  return filtered
+  return nav
 })
 
 const userMenuItems = [
@@ -237,6 +279,21 @@ const isActiveRoute = (href: string) => {
     return route.path === '/'
   }
   return route.path.startsWith(href)
+}
+
+// 當 member/tourist 訪問禁止頁面時重導向到場域地圖
+const checkAccessAndRedirect = () => {
+  const role = auth.user?.roleId
+  if (role === 'member' || role === 'visitor' || role === 'tourist') {
+    const currentPath = route.path
+    const allowedPaths = ['/sites', '/my-rentals', '/login', '/register']
+    const isAllowed = allowedPaths.some(path => currentPath.startsWith(path))
+
+    if (!isAllowed) {
+      console.log('[AppShell] Redirecting unauthorized member/tourist from:', currentPath)
+      router.push('/sites')
+    }
+  }
 }
 
 
@@ -270,6 +327,40 @@ const handleClickOutside = (event: Event) => {
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
+
+  // 檢查權限並重導向
+  checkAccessAndRedirect()
+
+  // Set up WebSocket connection status callback
+  setConnectionStatusCallback((connected: boolean) => {
+    wsConnected.value = connected
+  })
+})
+
+watch(() => auth.user?.roleId || sessionStorage.getItem('penguin.role') || localStorage.getItem('penguin.role'), (role, prev) => {
+  if (role && role !== prev) {
+    console.log('[AppShell] Role changed, evaluating WS connection:', { role, prev })
+    if (role === 'admin' || role === 'staff' || role === 'member') {
+      ensureKoalaWsConnected().catch((error) => {
+        console.error('[AppShell] WebSocket connection failed for role:', role, error)
+      })
+    } else {
+      wsConnected.value = null
+    }
+  }
+}, { immediate: true })
+
+watch(() => auth.isLogin, (loggedIn) => {
+  if (loggedIn) {
+    const role = auth.user?.roleId || sessionStorage.getItem('penguin.role') || localStorage.getItem('penguin.role')
+    if (role === 'admin' || role === 'staff' || role === 'member') {
+      ensureKoalaWsConnected().catch((error) => {
+        console.error('[AppShell] WebSocket connection failed (login watch):', error)
+      })
+    }
+  } else {
+    wsConnected.value = null
+  }
 })
 
 onUnmounted(() => {
@@ -281,3 +372,6 @@ onUnmounted(() => {
 //   sidebarOpen.value = false
 // })
 </script>
+
+<style scoped>
+</style>

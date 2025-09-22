@@ -1,0 +1,1 @@
+{"features": ["soc", "voltage", "temperature"], "target": "capacity", "rated_capacity": 2.0, "capacity_range": [1.15381833159625, 2.035337591005598], "trained_samples": 636}

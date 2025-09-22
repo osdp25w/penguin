@@ -19,7 +19,20 @@ const telemetry = useTelemetry();
 const route = useRoute();
 const router = useRouter();
 const filters = ref({ status: '', model: '', imei: '' });
-const statusOptions = computed(() => telemetry.statusOptions);
+// Sorting configuration
+const sortConfig = ref({
+    field: '',
+    order: 'asc'
+});
+// 確保始終有完整的狀態選項列表
+const statusOptions = computed(() => {
+    const options = telemetry.statusOptions;
+    // 如果 store 中的選項為空或不完整，使用預設值
+    if (!options || options.length < 5) {
+        return ['available', 'in-use', 'maintenance', 'disabled', 'deployed'];
+    }
+    return options;
+});
 const paging = usePaging({
     fetcher: async ({ limit, offset }) => {
         return await telemetry.fetchDevicesPaged({
@@ -33,15 +46,82 @@ const paging = usePaging({
     syncToUrl: true,
     queryPrefix: 'telemetry'
 });
-const rows = computed(() => paging.data.value);
+const rows = computed(() => {
+    let list = [...paging.data.value];
+    // Apply sorting
+    if (sortConfig.value.field) {
+        list.sort((a, b) => {
+            let aVal = '';
+            let bVal = '';
+            switch (sortConfig.value.field) {
+                case 'imei':
+                    aVal = a.IMEI;
+                    bVal = b.IMEI;
+                    break;
+                case 'name':
+                    aVal = a.name || '';
+                    bVal = b.name || '';
+                    break;
+                case 'model':
+                    aVal = a.model || '';
+                    bVal = b.model || '';
+                    break;
+                case 'status':
+                    aVal = statusLabel(a.status);
+                    bVal = statusLabel(b.status);
+                    break;
+            }
+            const compareResult = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+            return sortConfig.value.order === 'asc' ? compareResult : -compareResult;
+        });
+    }
+    return list;
+});
+// Sorting function
+function handleSort(field) {
+    if (sortConfig.value.field === field) {
+        sortConfig.value.order = sortConfig.value.order === 'asc' ? 'desc' : 'asc';
+    }
+    else {
+        sortConfig.value.field = field;
+        sortConfig.value.order = 'asc';
+    }
+}
+function normStatus(status) {
+    const s = String(status || '').toLowerCase().trim();
+    if (s === 'available' || s === 'idle' || s === 'free')
+        return 'available';
+    if (s === 'maintenance' || s === 'maintain')
+        return 'maintenance';
+    if (s === 'disabled' || s === 'inactive')
+        return 'disabled';
+    if (s === 'in-use' || s === 'in_use' || s === 'used' || s === 'assigned' || s === 'bound')
+        return 'in-use';
+    if (s === 'deployed' || s === 'deploy')
+        return 'deployed';
+    return 'available';
+}
+function statusLabel(status) {
+    const s = normStatus(status);
+    const labelMap = {
+        'available': '可用',
+        'in-use': '使用中',
+        'maintenance': '維護中',
+        'disabled': '停用',
+        'deployed': '已部署'
+    };
+    return labelMap[s] || status || '-';
+}
 function statusClass(status) {
+    const s = normStatus(status);
     const map = {
         'available': 'bg-green-100 text-green-800 border-green-200',
         'in-use': 'bg-blue-100 text-blue-800 border-blue-200',
         'maintenance': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-        'disabled': 'bg-gray-100 text-gray-800 border-gray-200'
+        'disabled': 'bg-gray-100 text-gray-800 border-gray-200',
+        'deployed': 'bg-purple-100 text-purple-800 border-purple-200'
     };
-    return map[status || ''] || 'bg-gray-100 text-gray-800 border-gray-200';
+    return map[s] || 'bg-gray-100 text-gray-800 border-gray-200';
 }
 async function refreshData() {
     await paging.refresh();
@@ -78,8 +158,13 @@ async function submitModal(device, isEdit) {
     showModal.value = false;
     await paging.refresh();
 }
-// watch filters from url
-watch(() => [filters.value.status, filters.value.model, filters.value.imei], () => applyFilters(), { deep: true });
+// watch filters from url (但不在初始化時觸發)
+let isInitializing = true;
+watch(() => [filters.value.status, filters.value.model, filters.value.imei], () => {
+    if (!isInitializing) {
+        applyFilters();
+    }
+}, { deep: true });
 async function confirmDelete(d) {
     if (!confirm(`確定刪除設備 ${d.IMEI} 嗎？`))
         return;
@@ -95,24 +180,28 @@ onMounted(async () => {
         filters.value.model = String(q['telemetry_model'] || '');
         filters.value.imei = String(q['telemetry_imei'] || '');
         console.log('[TelemetryDevices] URL filters restored:', filters.value);
-        console.log('[TelemetryDevices] Fetching device status options...');
-        await telemetry.fetchDeviceStatusOptions();
-        console.log('[TelemetryDevices] Status options loaded:', telemetry.statusOptions);
-        // 初始載入分頁資料
-        console.log('[TelemetryDevices] Starting pagination refresh...');
-        await paging.refresh({
-            status: (filters.value.status || undefined),
-            model: filters.value.model || undefined,
-            IMEI_q: filters.value.imei || undefined
-        });
-        console.log('[TelemetryDevices] Pagination data loaded:', {
+        // 同時載入狀態選項和分頁資料
+        console.log('[TelemetryDevices] Loading status options and initial data...');
+        await Promise.all([
+            telemetry.fetchDeviceStatusOptions(),
+            paging.refresh({
+                status: (filters.value.status || undefined),
+                model: filters.value.model || undefined,
+                IMEI_q: filters.value.imei || undefined
+            })
+        ]);
+        console.log('[TelemetryDevices] Initialization complete:', {
+            statusOptions: telemetry.statusOptions,
             dataLength: paging.data.value.length,
             total: paging.total.value,
             loading: paging.loading.value
         });
+        // 初始化完成，允許 watch 觸發
+        isInitializing = false;
     }
     catch (error) {
         console.error('[TelemetryDevices] Error during initialization:', error);
+        isInitializing = false;
     }
 });
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
@@ -211,9 +300,11 @@ for (const [s] of __VLS_getVForSourceType((__VLS_ctx.statusOptions))) {
         key: (s),
         value: (s),
     });
-    (s);
+    (__VLS_ctx.statusLabel(s));
 }
-__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "max-w-[14rem]" },
+});
 __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
     for: "td-model",
     ...{ class: "block text-sm font-medium text-gray-700 mb-1" },
@@ -225,7 +316,9 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
     placeholder: "例如 TD-2024-IoT",
 });
 (__VLS_ctx.filters.model);
-__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "max-w-[14rem]" },
+});
 __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
     for: "td-imei",
     ...{ class: "block text-sm font-medium text-gray-700 mb-1" },
@@ -271,21 +364,91 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.table, __VLS_intrinsicElements
 __VLS_asFunctionalElement(__VLS_intrinsicElements.thead, __VLS_intrinsicElements.thead)({
     ...{ class: "bg-gray-50" },
 });
-__VLS_asFunctionalElement(__VLS_intrinsicElements.tr, __VLS_intrinsicElements.tr)({});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-    ...{ class: "px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider" },
+__VLS_asFunctionalElement(__VLS_intrinsicElements.tr, __VLS_intrinsicElements.tr)({
+    ...{ class: "text-left text-xs font-semibold uppercase tracking-wider text-gray-600" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-    ...{ class: "px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider" },
+    ...{ onClick: (...[$event]) => {
+            __VLS_ctx.handleSort('imei');
+        } },
+    ...{ class: "px-4 py-3 cursor-pointer hover:bg-gray-100 transition-colors" },
 });
-__VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-    ...{ class: "px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider" },
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "flex items-center gap-1" },
 });
+if (__VLS_ctx.sortConfig.field === 'imei') {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+        ...{ class: (__VLS_ctx.sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down') },
+        ...{ class: "w-3 h-3" },
+    });
+}
+else {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+        ...{ class: "i-ph-caret-up-down w-3 h-3 opacity-30" },
+    });
+}
 __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-    ...{ class: "px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider" },
+    ...{ onClick: (...[$event]) => {
+            __VLS_ctx.handleSort('name');
+        } },
+    ...{ class: "px-4 py-3 cursor-pointer hover:bg-gray-100 transition-colors" },
 });
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "flex items-center gap-1" },
+});
+if (__VLS_ctx.sortConfig.field === 'name') {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+        ...{ class: (__VLS_ctx.sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down') },
+        ...{ class: "w-3 h-3" },
+    });
+}
+else {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+        ...{ class: "i-ph-caret-up-down w-3 h-3 opacity-30" },
+    });
+}
 __VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
-    ...{ class: "px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider" },
+    ...{ onClick: (...[$event]) => {
+            __VLS_ctx.handleSort('model');
+        } },
+    ...{ class: "px-4 py-3 cursor-pointer hover:bg-gray-100 transition-colors" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "flex items-center gap-1" },
+});
+if (__VLS_ctx.sortConfig.field === 'model') {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+        ...{ class: (__VLS_ctx.sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down') },
+        ...{ class: "w-3 h-3" },
+    });
+}
+else {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+        ...{ class: "i-ph-caret-up-down w-3 h-3 opacity-30" },
+    });
+}
+__VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
+    ...{ onClick: (...[$event]) => {
+            __VLS_ctx.handleSort('status');
+        } },
+    ...{ class: "px-4 py-3 cursor-pointer hover:bg-gray-100 transition-colors" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "flex items-center gap-1" },
+});
+if (__VLS_ctx.sortConfig.field === 'status') {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+        ...{ class: (__VLS_ctx.sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down') },
+        ...{ class: "w-3 h-3" },
+    });
+}
+else {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+        ...{ class: "i-ph-caret-up-down w-3 h-3 opacity-30" },
+    });
+}
+__VLS_asFunctionalElement(__VLS_intrinsicElements.th, __VLS_intrinsicElements.th)({
+    ...{ class: "px-4 py-3 text-right" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.tbody, __VLS_intrinsicElements.tbody)({
     ...{ class: "bg-white divide-y divide-gray-200" },
@@ -313,61 +476,31 @@ for (const [d] of __VLS_getVForSourceType((__VLS_ctx.rows))) {
         ...{ class: "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border" },
         ...{ class: (__VLS_ctx.statusClass(d.status)) },
     });
-    (d.status || '-');
+    (__VLS_ctx.statusLabel(d.status));
     __VLS_asFunctionalElement(__VLS_intrinsicElements.td, __VLS_intrinsicElements.td)({
         ...{ class: "px-4 py-3" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "flex items-center gap-2 justify-end" },
     });
-    const __VLS_24 = {}.Button;
-    /** @type {[typeof __VLS_components.Button, typeof __VLS_components.Button, ]} */ ;
-    // @ts-ignore
-    const __VLS_25 = __VLS_asFunctionalComponent(__VLS_24, new __VLS_24({
-        ...{ 'onClick': {} },
-        variant: "outline",
-        size: "xs",
-    }));
-    const __VLS_26 = __VLS_25({
-        ...{ 'onClick': {} },
-        variant: "outline",
-        size: "xs",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_25));
-    let __VLS_28;
-    let __VLS_29;
-    let __VLS_30;
-    const __VLS_31 = {
-        onClick: (...[$event]) => {
-            __VLS_ctx.openEditModal(d);
-        }
-    };
-    __VLS_27.slots.default;
-    var __VLS_27;
-    const __VLS_32 = {}.Button;
-    /** @type {[typeof __VLS_components.Button, typeof __VLS_components.Button, ]} */ ;
-    // @ts-ignore
-    const __VLS_33 = __VLS_asFunctionalComponent(__VLS_32, new __VLS_32({
-        ...{ 'onClick': {} },
-        variant: "ghost",
-        size: "xs",
-        ...{ class: "text-red-600" },
-    }));
-    const __VLS_34 = __VLS_33({
-        ...{ 'onClick': {} },
-        variant: "ghost",
-        size: "xs",
-        ...{ class: "text-red-600" },
-    }, ...__VLS_functionalComponentArgsRest(__VLS_33));
-    let __VLS_36;
-    let __VLS_37;
-    let __VLS_38;
-    const __VLS_39 = {
-        onClick: (...[$event]) => {
-            __VLS_ctx.confirmDelete(d);
-        }
-    };
-    __VLS_35.slots.default;
-    var __VLS_35;
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+        ...{ onClick: (...[$event]) => {
+                __VLS_ctx.openEditModal(d);
+            } },
+        ...{ class: "inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-indigo-500 transition-colors" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+        ...{ class: "i-ph-pencil-simple w-3.5 h-3.5 mr-1" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+        ...{ onClick: (...[$event]) => {
+                __VLS_ctx.confirmDelete(d);
+            } },
+        ...{ class: "inline-flex items-center px-3 py-1.5 border border-red-300 text-xs font-medium rounded-md text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-red-500 transition-colors" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+        ...{ class: "i-ph-trash w-3.5 h-3.5 mr-1" },
+    });
 }
 if (!__VLS_ctx.rows.length && !__VLS_ctx.paging.loading.value) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
@@ -385,7 +518,7 @@ if (__VLS_ctx.paging.loading.value) {
 if (__VLS_ctx.paging.total.value > 0) {
     /** @type {[typeof PaginationBar, ]} */ ;
     // @ts-ignore
-    const __VLS_40 = __VLS_asFunctionalComponent(PaginationBar, new PaginationBar({
+    const __VLS_24 = __VLS_asFunctionalComponent(PaginationBar, new PaginationBar({
         ...{ 'onPageChange': {} },
         ...{ 'onLimitChange': {} },
         ...{ 'onPrev': {} },
@@ -399,7 +532,7 @@ if (__VLS_ctx.paging.total.value > 0) {
         hasNextPage: (__VLS_ctx.paging.hasNextPage.value),
         hasPrevPage: (__VLS_ctx.paging.hasPrevPage.value),
     }));
-    const __VLS_41 = __VLS_40({
+    const __VLS_25 = __VLS_24({
         ...{ 'onPageChange': {} },
         ...{ 'onLimitChange': {} },
         ...{ 'onPrev': {} },
@@ -412,49 +545,49 @@ if (__VLS_ctx.paging.total.value > 0) {
         pageRange: (__VLS_ctx.paging.pageRange.value),
         hasNextPage: (__VLS_ctx.paging.hasNextPage.value),
         hasPrevPage: (__VLS_ctx.paging.hasPrevPage.value),
-    }, ...__VLS_functionalComponentArgsRest(__VLS_40));
-    let __VLS_43;
-    let __VLS_44;
-    let __VLS_45;
-    const __VLS_46 = {
+    }, ...__VLS_functionalComponentArgsRest(__VLS_24));
+    let __VLS_27;
+    let __VLS_28;
+    let __VLS_29;
+    const __VLS_30 = {
         onPageChange: (__VLS_ctx.paging.goToPage)
     };
-    const __VLS_47 = {
+    const __VLS_31 = {
         onLimitChange: (__VLS_ctx.paging.changeLimit)
     };
-    const __VLS_48 = {
+    const __VLS_32 = {
         onPrev: (__VLS_ctx.paging.prevPage)
     };
-    const __VLS_49 = {
+    const __VLS_33 = {
         onNext: (__VLS_ctx.paging.nextPage)
     };
-    var __VLS_42;
+    var __VLS_26;
 }
 if (__VLS_ctx.showModal) {
     /** @type {[typeof TelemetryDeviceModal, ]} */ ;
     // @ts-ignore
-    const __VLS_50 = __VLS_asFunctionalComponent(TelemetryDeviceModal, new TelemetryDeviceModal({
+    const __VLS_34 = __VLS_asFunctionalComponent(TelemetryDeviceModal, new TelemetryDeviceModal({
         ...{ 'onClose': {} },
         ...{ 'onSubmit': {} },
         device: (__VLS_ctx.editingDevice),
         statusOptions: (__VLS_ctx.statusOptions),
     }));
-    const __VLS_51 = __VLS_50({
+    const __VLS_35 = __VLS_34({
         ...{ 'onClose': {} },
         ...{ 'onSubmit': {} },
         device: (__VLS_ctx.editingDevice),
         statusOptions: (__VLS_ctx.statusOptions),
-    }, ...__VLS_functionalComponentArgsRest(__VLS_50));
-    let __VLS_53;
-    let __VLS_54;
-    let __VLS_55;
-    const __VLS_56 = {
+    }, ...__VLS_functionalComponentArgsRest(__VLS_34));
+    let __VLS_37;
+    let __VLS_38;
+    let __VLS_39;
+    const __VLS_40 = {
         onClose: (__VLS_ctx.closeModal)
     };
-    const __VLS_57 = {
+    const __VLS_41 = {
         onSubmit: (__VLS_ctx.submitModal)
     };
-    var __VLS_52;
+    var __VLS_36;
 }
 /** @type {__VLS_StyleScopedClasses['space-y-6']} */ ;
 /** @type {__VLS_StyleScopedClasses['flex']} */ ;
@@ -490,6 +623,7 @@ if (__VLS_ctx.showModal) {
 /** @type {__VLS_StyleScopedClasses['mb-1']} */ ;
 /** @type {__VLS_StyleScopedClasses['input-base']} */ ;
 /** @type {__VLS_StyleScopedClasses['w-full']} */ ;
+/** @type {__VLS_StyleScopedClasses['max-w-[14rem]']} */ ;
 /** @type {__VLS_StyleScopedClasses['block']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
 /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
@@ -497,6 +631,7 @@ if (__VLS_ctx.showModal) {
 /** @type {__VLS_StyleScopedClasses['mb-1']} */ ;
 /** @type {__VLS_StyleScopedClasses['input-base']} */ ;
 /** @type {__VLS_StyleScopedClasses['w-full']} */ ;
+/** @type {__VLS_StyleScopedClasses['max-w-[14rem]']} */ ;
 /** @type {__VLS_StyleScopedClasses['block']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
 /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
@@ -513,46 +648,71 @@ if (__VLS_ctx.showModal) {
 /** @type {__VLS_StyleScopedClasses['overflow-x-auto']} */ ;
 /** @type {__VLS_StyleScopedClasses['w-full']} */ ;
 /** @type {__VLS_StyleScopedClasses['bg-gray-50']} */ ;
-/** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-3']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-left']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
+/** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
 /** @type {__VLS_StyleScopedClasses['uppercase']} */ ;
 /** @type {__VLS_StyleScopedClasses['tracking-wider']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
 /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-left']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-/** @type {__VLS_StyleScopedClasses['uppercase']} */ ;
-/** @type {__VLS_StyleScopedClasses['tracking-wider']} */ ;
+/** @type {__VLS_StyleScopedClasses['cursor-pointer']} */ ;
+/** @type {__VLS_StyleScopedClasses['hover:bg-gray-100']} */ ;
+/** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['gap-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['i-ph-caret-up-down']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['opacity-30']} */ ;
 /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-left']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-/** @type {__VLS_StyleScopedClasses['uppercase']} */ ;
-/** @type {__VLS_StyleScopedClasses['tracking-wider']} */ ;
+/** @type {__VLS_StyleScopedClasses['cursor-pointer']} */ ;
+/** @type {__VLS_StyleScopedClasses['hover:bg-gray-100']} */ ;
+/** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['gap-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['i-ph-caret-up-down']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['opacity-30']} */ ;
 /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-left']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-/** @type {__VLS_StyleScopedClasses['uppercase']} */ ;
-/** @type {__VLS_StyleScopedClasses['tracking-wider']} */ ;
+/** @type {__VLS_StyleScopedClasses['cursor-pointer']} */ ;
+/** @type {__VLS_StyleScopedClasses['hover:bg-gray-100']} */ ;
+/** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['gap-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['i-ph-caret-up-down']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['opacity-30']} */ ;
+/** @type {__VLS_StyleScopedClasses['px-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['py-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['cursor-pointer']} */ ;
+/** @type {__VLS_StyleScopedClasses['hover:bg-gray-100']} */ ;
+/** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['gap-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['i-ph-caret-up-down']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['opacity-30']} */ ;
 /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['py-3']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-right']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
-/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
-/** @type {__VLS_StyleScopedClasses['uppercase']} */ ;
-/** @type {__VLS_StyleScopedClasses['tracking-wider']} */ ;
 /** @type {__VLS_StyleScopedClasses['bg-white']} */ ;
 /** @type {__VLS_StyleScopedClasses['divide-y']} */ ;
 /** @type {__VLS_StyleScopedClasses['divide-gray-200']} */ ;
@@ -585,7 +745,48 @@ if (__VLS_ctx.showModal) {
 /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
 /** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
 /** @type {__VLS_StyleScopedClasses['justify-end']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-red-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['inline-flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['px-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['py-1.5']} */ ;
+/** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-gray-300']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-md']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-white']} */ ;
+/** @type {__VLS_StyleScopedClasses['hover:bg-gray-50']} */ ;
+/** @type {__VLS_StyleScopedClasses['focus:outline-none']} */ ;
+/** @type {__VLS_StyleScopedClasses['focus:ring-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['focus:ring-offset-0']} */ ;
+/** @type {__VLS_StyleScopedClasses['focus:ring-indigo-500']} */ ;
+/** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
+/** @type {__VLS_StyleScopedClasses['i-ph-pencil-simple']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-3.5']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-3.5']} */ ;
+/** @type {__VLS_StyleScopedClasses['mr-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['inline-flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['px-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['py-1.5']} */ ;
+/** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-red-300']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-md']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-red-700']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-white']} */ ;
+/** @type {__VLS_StyleScopedClasses['hover:bg-red-50']} */ ;
+/** @type {__VLS_StyleScopedClasses['focus:outline-none']} */ ;
+/** @type {__VLS_StyleScopedClasses['focus:ring-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['focus:ring-offset-0']} */ ;
+/** @type {__VLS_StyleScopedClasses['focus:ring-red-500']} */ ;
+/** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
+/** @type {__VLS_StyleScopedClasses['i-ph-trash']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-3.5']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-3.5']} */ ;
+/** @type {__VLS_StyleScopedClasses['mr-1']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-center']} */ ;
 /** @type {__VLS_StyleScopedClasses['py-8']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
@@ -604,9 +805,12 @@ const __VLS_self = (await import('vue')).defineComponent({
             PaginationBar: PaginationBar,
             TelemetryDeviceModal: TelemetryDeviceModal,
             filters: filters,
+            sortConfig: sortConfig,
             statusOptions: statusOptions,
             paging: paging,
             rows: rows,
+            handleSort: handleSort,
+            statusLabel: statusLabel,
             statusClass: statusClass,
             refreshData: refreshData,
             applyFilters: applyFilters,

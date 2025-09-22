@@ -26,20 +26,68 @@
     <!-- ── User / Role 表格 ─────────────────────────────────────── -->
     <div class="card overflow-x-auto">
       <table class="min-w-full text-left text-sm">
-        <thead class="bg-white/5 text-gray-900 sticky top-0">
-          <tr>
-            <th class="px-4 py-2 w-[180px] font-medium">Email</th>
-            <th class="px-4 py-2 w-[120px] font-medium">姓名</th>
-            <th class="px-4 py-2 w-[100px] font-medium">手機</th>
-            <th class="px-4 py-2 w-[100px] font-medium">身份證號</th>
-            <th class="px-4 py-2 w-[80px] font-medium">角色</th>
-            <th class="px-4 py-2 text-center w-[70px] font-medium">狀態</th>
-            <th class="px-4 py-2 w-[160px]"></th>
+        <thead class="bg-gray-50 text-gray-600 sticky top-0">
+          <tr class="text-left text-xs font-semibold uppercase tracking-wider">
+            <th class="px-4 py-3 w-[180px] cursor-pointer hover:bg-gray-100 transition-colors" @click="handleSort('email')">
+              <div class="flex items-center gap-1">
+                Email
+                <i v-if="sortConfig.field === 'email'"
+                   :class="sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down'"
+                   class="w-3 h-3"></i>
+                <i v-else class="i-ph-caret-up-down w-3 h-3 opacity-30"></i>
+              </div>
+            </th>
+            <th class="px-4 py-3 w-[120px] cursor-pointer hover:bg-gray-100 transition-colors" @click="handleSort('fullName')">
+              <div class="flex items-center gap-1">
+                姓名
+                <i v-if="sortConfig.field === 'fullName'"
+                   :class="sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down'"
+                   class="w-3 h-3"></i>
+                <i v-else class="i-ph-caret-up-down w-3 h-3 opacity-30"></i>
+              </div>
+            </th>
+            <th class="px-4 py-3 w-[100px] cursor-pointer hover:bg-gray-100 transition-colors" @click="handleSort('phone')">
+              <div class="flex items-center gap-1">
+                手機
+                <i v-if="sortConfig.field === 'phone'"
+                   :class="sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down'"
+                   class="w-3 h-3"></i>
+                <i v-else class="i-ph-caret-up-down w-3 h-3 opacity-30"></i>
+              </div>
+            </th>
+            <th class="px-4 py-3 w-[100px] cursor-pointer hover:bg-gray-100 transition-colors" @click="handleSort('nationalId')">
+              <div class="flex items-center gap-1">
+                身份證號
+                <i v-if="sortConfig.field === 'nationalId'"
+                   :class="sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down'"
+                   class="w-3 h-3"></i>
+                <i v-else class="i-ph-caret-up-down w-3 h-3 opacity-30"></i>
+              </div>
+            </th>
+            <th class="px-4 py-3 w-[80px] cursor-pointer hover:bg-gray-100 transition-colors" @click="handleSort('role')">
+              <div class="flex items-center gap-1">
+                角色
+                <i v-if="sortConfig.field === 'role'"
+                   :class="sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down'"
+                   class="w-3 h-3"></i>
+                <i v-else class="i-ph-caret-up-down w-3 h-3 opacity-30"></i>
+              </div>
+            </th>
+            <th class="px-4 py-3 text-center w-[70px] cursor-pointer hover:bg-gray-100 transition-colors" @click="handleSort('status')">
+              <div class="flex items-center gap-1 justify-center">
+                狀態
+                <i v-if="sortConfig.field === 'status'"
+                   :class="sortConfig.order === 'asc' ? 'i-ph-caret-up' : 'i-ph-caret-down'"
+                   class="w-3 h-3"></i>
+                <i v-else class="i-ph-caret-up-down w-3 h-3 opacity-30"></i>
+              </div>
+            </th>
+            <th class="px-4 py-3 w-[160px]"></th>
           </tr>
         </thead>
         <tbody>
           <tr
-            v-for="u in store.usersWithRole"
+            v-for="u in sortedUsers"
             :key="u.id"
             class="border-t border-white/5 hover:bg-brand-400/5 transition"
           >
@@ -109,14 +157,39 @@
                   {{ u.active ? '啟用' : '停用' }}
                 </span>
               </td>
-              <td class="px-4 py-2 text-right space-x-2">
-                <button class="btn !text-xs" @click="beginEdit(u)">編輯</button>
-                <button
-                  class="btn !text-xs"
-                  @click="store.toggleActive(u.id)"
-                >
-                  {{ u.active ? '停用' : '啟用' }}
-                </button>
+              <td class="px-4 py-3">
+                <div class="flex items-center justify-end gap-2">
+                  <!-- 編輯按鈕 -->
+                  <button
+                    class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-blue-500 transition-colors"
+                    @click="beginEdit(u)"
+                  >
+                    <i class="i-ph-pencil-simple w-3.5 h-3.5 mr-1"></i>
+                    編輯
+                  </button>
+
+                  <!-- 停用/啟用按鈕 -->
+                  <button
+                    class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border focus:outline-none focus:ring-2 focus:ring-offset-0 transition-colors"
+                    :class="u.active
+                      ? 'text-amber-700 bg-amber-50 border-amber-200 hover:bg-amber-100 focus:ring-amber-500'
+                      : 'text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100 focus:ring-emerald-500'"
+                    @click="store.toggleActive(u.id)"
+                  >
+                    <i :class="u.active ? 'i-ph-pause-circle w-3.5 h-3.5 mr-1' : 'i-ph-play-circle w-3.5 h-3.5 mr-1'"></i>
+                    {{ u.active ? '停用' : '啟用' }}
+                  </button>
+
+                  <!-- 刪除按鈕 -->
+                  <button
+                    class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-md hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    @click="confirmDelete(u)"
+                    :disabled="store.loading"
+                  >
+                    <i class="i-ph-trash w-3.5 h-3.5 mr-1"></i>
+                    刪除
+                  </button>
+                </div>
               </td>
             </template>
           </tr>
@@ -148,8 +221,18 @@
               class="input flex-1"
               type="email"
               placeholder="user@example.com"
+              @blur="runEmailAvailabilityCheck(true)"
             />
           </div>
+          <p
+            class="text-xs min-h-[1.25rem] pl-24"
+            :class="emailStatus.available === false ? 'text-rose-500' : emailStatus.available ? 'text-emerald-600' : 'text-gray-500'"
+          >
+            <span v-if="emailStatus.checking">檢查中…</span>
+            <span v-else-if="emailStatus.available === true">此電子郵件可使用</span>
+            <span v-else-if="emailStatus.available === false">{{ emailStatus.message || '此電子郵件已被使用' }}</span>
+            <span v-else-if="emailStatus.message">{{ emailStatus.message }}</span>
+          </p>
           <div class="flex items-center gap-3">
             <label class="w-24">姓名</label>
             <input
@@ -229,7 +312,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, reactive } from 'vue'
+import { onMounted, ref, reactive, watch, computed } from 'vue'
 import { Dialog, DialogPanel }      from '@headlessui/vue'
 import { Plus, RefreshCw }          from 'lucide-vue-next'
 import { useUsers }                 from '@/stores/users'
@@ -240,6 +323,67 @@ import type { User, Role } from '@/types'
 // store
 const store = useUsers()
 onMounted(() => store.fetchAll())
+
+// Sorting configuration
+const sortConfig = ref({
+  field: '' as string,
+  order: 'asc' as 'asc' | 'desc'
+})
+
+// Sorted users
+const sortedUsers = computed(() => {
+  let list = [...store.usersWithRole]
+
+  // Apply sorting
+  if (sortConfig.value.field) {
+    list.sort((a, b) => {
+      let aVal: any = ''
+      let bVal: any = ''
+
+      switch (sortConfig.value.field) {
+        case 'email':
+          aVal = a.email
+          bVal = b.email
+          break
+        case 'fullName':
+          aVal = a.fullName
+          bVal = b.fullName
+          break
+        case 'phone':
+          aVal = a.phone || ''
+          bVal = b.phone || ''
+          break
+        case 'nationalId':
+          aVal = a.nationalId || ''
+          bVal = b.nationalId || ''
+          break
+        case 'role':
+          aVal = a.roleName
+          bVal = b.roleName
+          break
+        case 'status':
+          aVal = a.active ? 1 : 0
+          bVal = b.active ? 1 : 0
+          break
+      }
+
+      const compareResult = aVal < bVal ? -1 : aVal > bVal ? 1 : 0
+      return sortConfig.value.order === 'asc' ? compareResult : -compareResult
+    })
+  }
+
+  return list
+})
+
+// Sorting function
+function handleSort(field: string) {
+  if (sortConfig.value.field === field) {
+    sortConfig.value.order = sortConfig.value.order === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortConfig.value.field = field
+    sortConfig.value.order = 'asc'
+  }
+}
 
 // 編輯
 const editingId = ref<string>('')
@@ -273,9 +417,58 @@ const temp = reactive<{ email:string; fullName:string; roleId:string; active:boo
 const emailInput = ref<HTMLInputElement|null>(null)
 function openCreate() {
   Object.assign(temp, { email: '', fullName: '', roleId: '', active: true, phone: '', nationalId: '' })
+  resetEmailStatus()
   showDlg.value = true
 }
-function addUser() {
+
+const emailStatus = reactive<{ checking: boolean; available: boolean | null; message: string }>({
+  checking: false,
+  available: null,
+  message: ''
+})
+let emailTimer: ReturnType<typeof setTimeout> | undefined
+
+function resetEmailStatus() {
+  emailStatus.checking = false
+  emailStatus.available = null
+  emailStatus.message = ''
+}
+
+async function runEmailAvailabilityCheck(force = false) {
+  const email = temp.email?.trim()
+  if (!email) {
+    resetEmailStatus()
+    return
+  }
+  if (!force && emailStatus.available !== null) {
+    return
+  }
+  try {
+    emailStatus.checking = true
+    const { available, message } = await store.checkAvailability({ email })
+    emailStatus.available = available
+    emailStatus.message = message || (available ? '此電子郵件可使用' : '此電子郵件已被使用')
+  } catch (err: any) {
+    emailStatus.available = null
+    emailStatus.message = err?.message || '檢查失敗'
+  } finally {
+    emailStatus.checking = false
+  }
+}
+
+watch(() => temp.email, (value) => {
+  if (emailTimer) clearTimeout(emailTimer)
+  if (!value) {
+    resetEmailStatus()
+    return
+  }
+  emailStatus.checking = true
+  emailTimer = setTimeout(() => {
+    runEmailAvailabilityCheck(true)
+  }, 450)
+})
+
+async function addUser() {
   if (!temp.email || !temp.fullName || !temp.roleId) {
     alert('請完整填寫 Email、姓名與角色')
     return
@@ -289,6 +482,19 @@ function addUser() {
     alert('一般會員需要身份證號')
     return
   }
+
+  if (emailStatus.available === false) {
+    alert(emailStatus.message || '此電子郵件已被使用')
+    return
+  }
+
+  if (emailStatus.available === null && !emailStatus.checking && temp.email) {
+    await runEmailAvailabilityCheck(true)
+    if (emailStatus.available === false) {
+      alert(emailStatus.message || '此電子郵件已被使用')
+      return
+    }
+  }
   // 使用統一註冊方法支援所有用戶類型
   const userTypeMap: { [key: string]: 'tourist' | 'real' | 'staff' | 'admin' } = {
     'visitor': 'tourist',
@@ -299,16 +505,31 @@ function addUser() {
 
   const userType = userTypeMap[temp.roleId] || 'tourist'
 
-  store.registerUser({
-    email: temp.email,
-    fullName: temp.fullName,
-    phone: temp.phone,
-    nationalId: temp.nationalId || '', // 可選
-    userType: userType,
-    active: temp.active
-  })
-  .then(() => { showDlg.value = false })
-  .catch(err => { alert(err?.message || '用戶註冊失敗') })
+  try {
+    await store.registerUser({
+      email: temp.email,
+      fullName: temp.fullName,
+      phone: temp.phone,
+      nationalId: temp.nationalId || '', // 可選
+      userType: userType,
+      active: temp.active
+    })
+    showDlg.value = false
+  } catch (err: any) {
+    alert(err?.message || '用戶註冊失敗')
+  }
+}
+
+async function confirmDelete(user: UserRow) {
+  const label = user.fullName || user.email
+  if (!window.confirm(`確定要刪除「${label}」嗎？`)) {
+    return
+  }
+  try {
+    await store.removeUser(user.id)
+  } catch (err: any) {
+    alert(err?.message || '刪除失敗')
+  }
 }
 </script>
 

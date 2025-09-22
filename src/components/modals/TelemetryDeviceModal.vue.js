@@ -5,7 +5,25 @@ const props = defineProps();
 const emit = defineEmits();
 const submitting = ref(false);
 const isEdit = computed(() => !!props.device);
-const statusOptions = computed(() => props.statusOptions || ['available', 'in-use', 'maintenance', 'disabled']);
+// 確保始終有完整的狀態選項
+const statusOptions = computed(() => {
+    const options = props.statusOptions;
+    // 如果沒有傳入選項或選項不完整，使用預設值
+    if (!options || options.length < 5) {
+        return ['available', 'in-use', 'maintenance', 'disabled', 'deployed'];
+    }
+    return options;
+});
+function statusLabel(status) {
+    const labelMap = {
+        'available': '可用',
+        'in-use': '使用中',
+        'maintenance': '維護中',
+        'disabled': '停用',
+        'deployed': '已部署'
+    };
+    return labelMap[status || ''] || status || '-';
+}
 const form = reactive({
     IMEI: ((_a = props.device) === null || _a === void 0 ? void 0 : _a.IMEI) || '',
     name: ((_b = props.device) === null || _b === void 0 ? void 0 : _b.name) || '',
@@ -103,7 +121,9 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.form, __VLS_intrinsicElements.
     ...{ onSubmit: (__VLS_ctx.handleSubmit) },
     ...{ class: "space-y-4" },
 });
-__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "max-w-[18rem]" },
+});
 __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
     ...{ class: "block text-sm font-medium text-gray-700 mb-1" },
 });
@@ -126,7 +146,9 @@ if (__VLS_ctx.errors.IMEI) {
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "grid grid-cols-1 sm:grid-cols-2 gap-4" },
 });
-__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "max-w-[16rem]" },
+});
 __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
     ...{ class: "block text-sm font-medium text-gray-700 mb-1" },
 });
@@ -136,7 +158,9 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
     ...{ class: "input-base w-full" },
     placeholder: "裝置名稱",
 });
-__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "max-w-[16rem]" },
+});
 __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
     ...{ class: "block text-sm font-medium text-gray-700 mb-1" },
 });
@@ -159,7 +183,7 @@ for (const [opt] of __VLS_getVForSourceType((__VLS_ctx.statusOptions))) {
         key: (opt),
         value: (opt),
     });
-    (opt);
+    (__VLS_ctx.statusLabel(opt));
 }
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "px-6 py-4 bg-gray-50 flex items-center justify-end gap-2 border-t border-gray-200" },
@@ -255,6 +279,7 @@ var __VLS_19;
 /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['space-y-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['max-w-[18rem]']} */ ;
 /** @type {__VLS_StyleScopedClasses['block']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
 /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
@@ -270,6 +295,7 @@ var __VLS_19;
 /** @type {__VLS_StyleScopedClasses['grid-cols-1']} */ ;
 /** @type {__VLS_StyleScopedClasses['sm:grid-cols-2']} */ ;
 /** @type {__VLS_StyleScopedClasses['gap-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['max-w-[16rem]']} */ ;
 /** @type {__VLS_StyleScopedClasses['block']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
 /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
@@ -277,6 +303,7 @@ var __VLS_19;
 /** @type {__VLS_StyleScopedClasses['mb-1']} */ ;
 /** @type {__VLS_StyleScopedClasses['input-base']} */ ;
 /** @type {__VLS_StyleScopedClasses['w-full']} */ ;
+/** @type {__VLS_StyleScopedClasses['max-w-[16rem]']} */ ;
 /** @type {__VLS_StyleScopedClasses['block']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
 /** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
@@ -311,6 +338,7 @@ const __VLS_self = (await import('vue')).defineComponent({
             submitting: submitting,
             isEdit: isEdit,
             statusOptions: statusOptions,
+            statusLabel: statusLabel,
             form: form,
             errors: errors,
             handleSubmit: handleSubmit,

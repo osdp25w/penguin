@@ -1,8 +1,10 @@
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Button } from '@/design/components';
 import { useAuth } from '@/stores/auth';
 import EditProfileModal from '@/components/profile/EditProfileModal.vue';
+import ToastHost from '@/components/ToastHost.vue';
+import { ensureKoalaWsConnected, setConnectionStatusCallback } from '@/services/koala_ws';
 const route = useRoute();
 const router = useRouter();
 const auth = useAuth();
@@ -10,6 +12,25 @@ const sidebarOpen = ref(false);
 const userMenuOpen = ref(false);
 const userMenuRef = ref();
 const showProfileModal = ref(false);
+// WebSocket 連線狀態
+const wsConnected = ref(null);
+const wsStatusText = computed(() => {
+    if (wsConnected.value === null)
+        return '未連線';
+    return wsConnected.value ? '已連線' : '斷線';
+});
+const wsStatusClass = computed(() => {
+    if (wsConnected.value === null)
+        return 'border-gray-200 bg-gray-50 text-gray-600';
+    return wsConnected.value
+        ? 'border-green-200 bg-green-50 text-green-700'
+        : 'border-amber-200 bg-amber-50 text-amber-700';
+});
+const wsIndicatorClass = computed(() => {
+    if (wsConnected.value === null)
+        return 'bg-gray-400';
+    return wsConnected.value ? 'bg-green-500' : 'bg-amber-500';
+});
 // 當前使用者資訊
 const currentUser = computed(() => auth.user || {
     name: '管理員',
@@ -23,39 +44,52 @@ const userInitials = computed(() => {
 const currentPageTitle = computed(() => {
     return route.meta.title || '總覽';
 });
-const allNavigation = [
+const baseNavigation = [
     { name: '總覽', href: '/', icon: 'i-ph-house' },
     { name: '場域地圖', href: '/sites', icon: 'i-ph-map-pin' },
-    { name: '車輛清單', href: '/vehicles', icon: 'i-ph-bicycle' },
-    { name: '警報中心', href: '/alerts', icon: 'i-ph-warning-circle' },
-    { name: 'ML 預測', href: '/ml', icon: 'i-ph-chart-line-up' },
-    { name: '遙測設備', href: '/admin/telemetry', icon: 'i-ph-wifi-high' },
-    { name: '場域管理', href: '/admin/sites', icon: 'i-ph-map-pin-line' },
-    { name: '帳號管理', href: '/admin/users', icon: 'i-ph-users' },
+    { name: '警報中心', href: '/alerts', icon: 'i-ph-warning-circle' }
 ];
-// 依角色過濾：member 只能看到「場域地圖」，admin/staff 可見管理功能
+const memberNavigation = [
+    { name: '場域地圖', href: '/sites', icon: 'i-ph-map-pin' },
+    { name: '我的租借', href: '/my-rentals', icon: 'i-ph-clock-counter-clockwise' }
+];
+const privilegedNavigation = [
+    { name: '總覽', href: '/', icon: 'i-ph-house' },
+    { name: '場域地圖', href: '/sites', icon: 'i-ph-map-pin' },
+    { name: '租借管理', href: '/admin/rentals', icon: 'i-ph-clipboard-text' },
+    { name: '車輛清單', href: '/vehicles', icon: 'i-ph-bicycle' },
+    { name: '遙測設備', href: '/admin/telemetry', icon: 'i-ph-wifi-high' },
+    // { name: '場域管理', href: '/admin/sites', icon: 'i-ph-map-pin-line' }, // 暫時隱藏
+    { name: '帳號管理', href: '/admin/users', icon: 'i-ph-users' },
+    { name: '警報中心', href: '/alerts', icon: 'i-ph-warning-circle' },
+    { name: 'ML 預測', href: '/ml', icon: 'i-ph-chart-line-up' }
+];
+// 依角色過濾：member 僅限部分選單，admin/staff 顯示完整管理功能
 const navigation = computed(() => {
     var _a, _b;
     const role = ((_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId) || sessionStorage.getItem('penguin.role') || localStorage.getItem('penguin.role');
-    console.log('[AppShell] Navigation filtering:', {
+    console.log('[AppShell] Navigation filtering - DETAILED DEBUG:', {
         role,
         userRole: (_b = auth.user) === null || _b === void 0 ? void 0 : _b.roleId,
         sessionRole: sessionStorage.getItem('penguin.role'),
-        localRole: localStorage.getItem('penguin.role')
+        localRole: localStorage.getItem('penguin.role'),
+        authUser: auth.user,
+        isLogin: auth.isLogin
     });
-    if (role === 'member') {
-        return allNavigation.filter(i => i.href === '/sites');
+    // member, visitor, tourist 都只能看到場域地圖和我的租借
+    if (role === 'member' || role === 'visitor' || role === 'tourist') {
+        console.log('[AppShell] Using member navigation for role:', role);
+        return memberNavigation;
     }
     const isPrivileged = role === 'admin' || role === 'staff';
-    const adminPaths = ['/admin/users', '/admin/sites', '/admin/telemetry'];
-    const filtered = allNavigation.filter(i => (adminPaths.includes(i.href) ? isPrivileged : true));
+    const nav = isPrivileged ? privilegedNavigation : baseNavigation;
     console.log('[AppShell] Navigation filtered result:', {
+        role,
         isPrivileged,
-        allItemsCount: allNavigation.length,
-        filteredItemsCount: filtered.length,
-        filtered: filtered.map(i => ({ name: i.name, href: i.href }))
+        selectedNav: isPrivileged ? 'privileged' : 'base',
+        items: nav.map(i => ({ name: i.name, href: i.href }))
     });
-    return filtered;
+    return nav;
 });
 const userMenuItems = [
     { name: '個人資料', action: 'profile', icon: 'i-ph-user' },
@@ -66,6 +100,20 @@ const isActiveRoute = (href) => {
         return route.path === '/';
     }
     return route.path.startsWith(href);
+};
+// 當 member/tourist 訪問禁止頁面時重導向到場域地圖
+const checkAccessAndRedirect = () => {
+    var _a;
+    const role = (_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId;
+    if (role === 'member' || role === 'visitor' || role === 'tourist') {
+        const currentPath = route.path;
+        const allowedPaths = ['/sites', '/my-rentals', '/login', '/register'];
+        const isAllowed = allowedPaths.some(path => currentPath.startsWith(path));
+        if (!isAllowed) {
+            console.log('[AppShell] Redirecting unauthorized member/tourist from:', currentPath);
+            router.push('/sites');
+        }
+    }
 };
 const handleUserMenuAction = (item) => {
     console.log('點擊用戶選單項目:', item);
@@ -95,6 +143,39 @@ const handleClickOutside = (event) => {
 };
 onMounted(() => {
     document.addEventListener('click', handleClickOutside);
+    // 檢查權限並重導向
+    checkAccessAndRedirect();
+    // Set up WebSocket connection status callback
+    setConnectionStatusCallback((connected) => {
+        wsConnected.value = connected;
+    });
+});
+watch(() => { var _a; return ((_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId) || sessionStorage.getItem('penguin.role') || localStorage.getItem('penguin.role'); }, (role, prev) => {
+    if (role && role !== prev) {
+        console.log('[AppShell] Role changed, evaluating WS connection:', { role, prev });
+        if (role === 'admin' || role === 'staff' || role === 'member') {
+            ensureKoalaWsConnected().catch((error) => {
+                console.error('[AppShell] WebSocket connection failed for role:', role, error);
+            });
+        }
+        else {
+            wsConnected.value = null;
+        }
+    }
+}, { immediate: true });
+watch(() => auth.isLogin, (loggedIn) => {
+    var _a;
+    if (loggedIn) {
+        const role = ((_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId) || sessionStorage.getItem('penguin.role') || localStorage.getItem('penguin.role');
+        if (role === 'admin' || role === 'staff' || role === 'member') {
+            ensureKoalaWsConnected().catch((error) => {
+                console.error('[AppShell] WebSocket connection failed (login watch):', error);
+            });
+        }
+    }
+    else {
+        wsConnected.value = null;
+    }
 });
 onUnmounted(() => {
     document.removeEventListener('click', handleClickOutside);
@@ -107,6 +188,8 @@ debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
 let __VLS_components;
 let __VLS_directives;
+// CSS variable injection 
+// CSS variable injection end 
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "min-h-screen bg-gray-50" },
 });
@@ -185,8 +268,22 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.
 });
 (__VLS_ctx.currentPageTitle);
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-    ...{ class: "flex items-center" },
+    ...{ class: "flex items-center gap-3" },
 });
+if (__VLS_ctx.wsConnected !== null) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "flex items-center gap-2 px-3 py-1.5 rounded-md border" },
+        ...{ class: (__VLS_ctx.wsStatusClass) },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "w-2 h-2 rounded-full animate-pulse" },
+        ...{ class: (__VLS_ctx.wsIndicatorClass) },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+        ...{ class: "text-xs font-medium" },
+    });
+    (__VLS_ctx.wsStatusText);
+}
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "relative" },
     ref: "userMenuRef",
@@ -419,6 +516,10 @@ if (__VLS_ctx.showProfileModal) {
     };
     var __VLS_54;
 }
+/** @type {[typeof ToastHost, ]} */ ;
+// @ts-ignore
+const __VLS_60 = __VLS_asFunctionalComponent(ToastHost, new ToastHost({}));
+const __VLS_61 = __VLS_60({}, ...__VLS_functionalComponentArgsRest(__VLS_60));
 /** @type {__VLS_StyleScopedClasses['min-h-screen']} */ ;
 /** @type {__VLS_StyleScopedClasses['bg-gray-50']} */ ;
 /** @type {__VLS_StyleScopedClasses['bg-white']} */ ;
@@ -468,6 +569,20 @@ if (__VLS_ctx.showProfileModal) {
 /** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
 /** @type {__VLS_StyleScopedClasses['flex']} */ ;
 /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['gap-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['px-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['py-1.5']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-md']} */ ;
+/** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
+/** @type {__VLS_StyleScopedClasses['animate-pulse']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
 /** @type {__VLS_StyleScopedClasses['relative']} */ ;
 /** @type {__VLS_StyleScopedClasses['flex']} */ ;
 /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
@@ -587,10 +702,15 @@ const __VLS_self = (await import('vue')).defineComponent({
         return {
             Button: Button,
             EditProfileModal: EditProfileModal,
+            ToastHost: ToastHost,
             sidebarOpen: sidebarOpen,
             userMenuOpen: userMenuOpen,
             userMenuRef: userMenuRef,
             showProfileModal: showProfileModal,
+            wsConnected: wsConnected,
+            wsStatusText: wsStatusText,
+            wsStatusClass: wsStatusClass,
+            wsIndicatorClass: wsIndicatorClass,
             currentUser: currentUser,
             userInitials: userInitials,
             currentPageTitle: currentPageTitle,

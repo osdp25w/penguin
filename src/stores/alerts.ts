@@ -119,8 +119,14 @@ export const useAlerts = defineStore('alerts', {
         generated.forEach(a => this.list.unshift(a))
       }
 
-      ws.onopen  = () => (this.isLive = true)
-      ws.onclose = () => (this.isLive = false)
+      ws.onopen  = () => {
+        this.isLive = true
+        import('./toasts').then(m => m.useToasts().success('開發用資料流已連線'))
+      }
+      ws.onclose = () => {
+        this.isLive = false
+        import('./toasts').then(m => m.useToasts().warning('開發用資料流已中斷'))
+      }
     },
 
     /* 關閉 / 確認單筆警報 --------------------------------------- */

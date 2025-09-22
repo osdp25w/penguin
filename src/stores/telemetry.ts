@@ -26,7 +26,8 @@ export const useTelemetry = defineStore('telemetry', () => {
   const available = ref<TelemetryDevice[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
-  const statusOptions = ref<string[]>([])
+  // 始終保持完整的狀態選項列表
+  const statusOptions = ref<string[]>(['available', 'in-use', 'maintenance', 'disabled', 'deployed'])
 
   function normalizeStatus(input?: string): TelemetryStatus {
     const s = String(input || '').toLowerCase().trim()
@@ -138,6 +139,14 @@ export const useTelemetry = defineStore('telemetry', () => {
 
         devices.value = out
         error.value = null
+
+        // 從實際數據中提取唯一的狀態值（可選：用於將來擴展）
+        const uniqueStatuses = [...new Set(rows.map((r: any) => normalizeStatus(r.status)))]
+        console.log('[Telemetry] Unique statuses from current data:', uniqueStatuses)
+
+        // 確保狀態選項始終包含完整列表（不覆蓋）
+        console.log('[Telemetry] Current status options:', statusOptions.value)
+
         console.log('[Telemetry] Paged API success:', out.length, 'devices loaded, total:', total)
         return { data: out, total }
       }
@@ -180,27 +189,36 @@ export const useTelemetry = defineStore('telemetry', () => {
   }
 
   async function fetchDeviceStatusOptions() {
+    // 此函數現在主要用於向後兼容，狀態選項已預設初始化
+    console.log('[Telemetry] fetchDeviceStatusOptions called, but status options already initialized:', statusOptions.value)
+
+    // 可選：嘗試從 API 獲取額外的狀態選項（但不覆蓋預設值）
     try {
       const res: any = await http.get('/api/telemetry/device-status-options/')
+      console.log('[Telemetry] Status options API response:', res)
 
-      // 處理 Koala API 格式
       if (res && res.code === 2000 && res.data) {
         const data = res.data
-        const arr = Array.isArray(data) ? data : Object.values(data || {})
-        statusOptions.value = arr.map((s: any) => normalizeStatus(String(s)))
-        console.log('[Telemetry] Status options loaded:', statusOptions.value)
-      } else {
-        // 降級處理
-        const rows = res?.results || res?.data || res || []
-        statusOptions.value = (Array.isArray(rows) ? rows : Object.values(rows || {})).map((s: any) => normalizeStatus(String(s)))
-      }
+        const options = data.status_options || data
 
-      if (!Array.isArray(statusOptions.value) || statusOptions.value.length === 0) {
-        statusOptions.value = ['available', 'in-use', 'maintenance', 'disabled', 'deployed']
+        if (Array.isArray(options)) {
+          // 從 API 選項中提取新的狀態（如果有）
+          const apiStatuses = options.map((opt: any) => {
+            const val = typeof opt === 'string' ? opt : (opt.value || opt)
+            return normalizeStatus(String(val))
+          })
+
+          // 合併新狀態到現有列表（不覆蓋）
+          const merged = [...new Set([...statusOptions.value, ...apiStatuses])]
+          if (merged.length > statusOptions.value.length) {
+            statusOptions.value = merged
+            console.log('[Telemetry] Added new status options from API:', merged)
+          }
+        }
       }
     } catch (e: any) {
-      console.warn('[Telemetry] Failed to load status options, using defaults:', e)
-      statusOptions.value = ['available', 'in-use', 'maintenance', 'disabled', 'deployed']
+      // 靜默處理錯誤，因為已有預設值
+      console.log('[Telemetry] Status options API call failed (using defaults):', e.message)
     }
   }
 

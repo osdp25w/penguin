@@ -17,6 +17,8 @@ const MLPredict      = () => import('@/pages/MLPredict.vue')       // ML 預測
 const UserManagement = () => import('@/pages/UserManagement.vue')  // 帳號管理
 const SiteManagement = () => import('@/pages/SiteManagement.vue')  // 場域管理
 const TelemetryDevices = () => import('@/pages/TelemetryDevices.vue') // 遙測設備管理
+const MemberRentals  = () => import('@/pages/MyRentals.vue')         // 會員租借紀錄
+const StaffRentals   = () => import('@/pages/RentalManagement.vue')  // 租借管理（staff/admin）
 
 /* routes -------------------------------------------------- */
 const routes: RouteRecordRaw[] = [
@@ -46,6 +48,12 @@ const routes: RouteRecordRaw[] = [
         name: 'vehicles', 
         component: Vehicles,
         meta: { title: '車輛清單' }
+      },
+      {
+        path: 'my-rentals',
+        name: 'member-rentals',
+        component: MemberRentals,
+        meta: { title: '我的租借', requiresAuth: true, allowedRoles: ['member', 'visitor', 'tourist'] }
       },
       {
         path: 'alerts',
@@ -78,6 +86,12 @@ const routes: RouteRecordRaw[] = [
         component: TelemetryDevices,
         meta: { title: '遙測設備', requiresAuth: true, requiresAdmin: true }
       },
+      {
+        path: 'admin/rentals',
+        name: 'admin-rentals',
+        component: StaffRentals,
+        meta: { title: '租借管理', requiresAuth: true, requiresAdmin: true }
+      },
       // Legacy paths (redirect to admin/*)
       { path: 'users', redirect: '/admin/users' },
       { path: 'site-management', redirect: '/admin/sites' },
@@ -105,35 +119,57 @@ export const router = createRouter({
 router.beforeEach((to) => {
   const auth = useAuth()
 
+  const requiresAuth = to.matched.some(route => route.meta?.requiresAuth)
+  const requiresAdmin = to.matched.some(route => route.meta?.requiresAdmin)
+  const allowedRolesMeta = to.matched.flatMap(route => (route.meta?.allowedRoles as string[] | undefined) ?? [])
+  const memberOnly = to.matched.some(route => route.meta?.memberOnly)
+  const currentRole = (auth.user?.roleId || sessionStorage.getItem('penguin.role') || localStorage.getItem('penguin.role')) as string | null
+
   console.log('[Router] Navigation to:', to.path, 'Auth state:', {
     isLogin: auth.isLogin,
     user: auth.user,
-    requiresAuth: to.meta.requiresAuth,
-    requiresAdmin: to.meta.requiresAdmin
+    requiresAuth,
+    requiresAdmin,
+    allowedRolesMeta,
+    memberOnly
   })
 
   /* 檢查登入狀態 */
-  if (to.meta.requiresAuth && !auth.isLogin) {
+  if (requiresAuth && !auth.isLogin) {
     console.log('[Router] Redirecting to login - not authenticated')
     return { path: '/login', query: { redirect: to.fullPath } }
   }
 
+  /* 會員（member）和遊客（tourist/visitor）的嚴格權限檢查 - 優先執行 */
+  if (requiresAuth && (currentRole === 'member' || currentRole === 'visitor' || currentRole === 'tourist')) {
+    // Member/Tourist 只能訪問這些頁面
+    const allowedPaths = ['/sites', '/my-rentals']
+
+    // 檢查是否訪問允許的路徑（精確匹配）
+    const isAllowed = allowedPaths.includes(to.path)
+
+    if (!isAllowed) {
+      console.log('[Router] Member/Tourist user blocked from accessing', to.path, '- redirecting to /sites')
+      return '/sites'
+    }
+
+    console.log('[Router] Member/Tourist access granted to', to.path)
+    return // 直接返回，不執行後續檢查
+  }
+
   /* 檢查管理員/工作人員權限（admin 或 staff） */
-  if (to.meta.requiresAdmin) {
+  if (requiresAdmin) {
     let role = auth.user?.roleId as string | null
     if (!role) role = (sessionStorage.getItem('penguin.role') || localStorage.getItem('penguin.role'))
 
     // 正常權限檢查：只允許 admin 或 staff 訪問
     const allowed = role === 'admin' || role === 'staff'
 
-    console.log('[Router] Admin page access check (DEBUG MODE - ALLOWING ALL):', {
+    console.log('[Router] Admin page access check:', {
       path: to.path,
       userRole: role,
       isAllowed: allowed,
-      user: auth.user,
-      sessionRole: sessionStorage.getItem('penguin.role'),
-      localRole: localStorage.getItem('penguin.role'),
-      userRoleFromAuth: auth.user?.roleId
+      user: auth.user
     })
 
     if (!allowed) {
@@ -144,21 +180,26 @@ router.beforeEach((to) => {
     }
   }
 
-  /* 會員（member）僅能瀏覽「場域地圖」頁面 - 但不包括管理頁面（管理頁面已在上面處理） */
-  if (to.meta.requiresAuth && !to.meta.requiresAdmin) {
-    const role = (auth.user?.roleId || sessionStorage.getItem('penguin.role') || localStorage.getItem('penguin.role')) as string | null
-    if (role === 'member') {
-      // 僅允許 /sites，其餘受保護頁面一律導向 /sites
-      if (to.path !== '/sites') {
-        console.log('[Router] Member user redirected from', to.path, 'to /sites')
-        return '/sites'
-      }
+  /* 檢查特定角色權限 */
+  if (allowedRolesMeta.length > 0) {
+    if (!allowedRolesMeta.includes(currentRole || '')) {
+      console.log('[Router] Access denied - role not in allowed list:', { role: currentRole, allowedRoles: allowedRolesMeta, path: to.path })
+      return '/sites' // 預設重導向到場域地圖
+    }
+    console.log('[Router] Access granted by allowedRoles:', { role: currentRole, allowedRoles: allowedRolesMeta, path: to.path })
+  }
+
+  if (memberOnly) {
+    if (currentRole !== 'member') {
+      console.log('[Router] Non-member blocked from memberOnly route, redirecting to /sites')
+      return '/sites'
     }
   }
 
-  /* 設定頁面標題 */
-  if (to.meta.title) {
-    document.title = `${to.meta.title} - 嘉大數據平台`
+  /* 設定頁面標題（如果還沒設定） */
+  const titleFromMatched = to.matched.slice().reverse().find(route => route.meta?.title)?.meta?.title as string | undefined
+  if (titleFromMatched) {
+    document.title = `${titleFromMatched} - 嘉大數據平台`
   } else {
     document.title = '嘉大數據平台'
   }

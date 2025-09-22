@@ -16,6 +16,7 @@ import SimpleReturnDialog from '@/components/returns/SimpleReturnDialog.vue';
 import VehicleTraceFilter from '@/components/filters/VehicleTraceFilter.vue';
 import VehicleFilter from '@/components/filters/VehicleFilter.vue';
 import { useAuth } from '@/stores/auth';
+import { http } from '@/lib/api';
 // ECharts 註冊
 use([BarChart, GridComponent, TooltipComponent, CanvasRenderer]);
 // Stores
@@ -36,28 +37,143 @@ const recentReturns = ref([]);
 const selectedDomain = ref('huali');
 const displayMode = ref('realtime');
 const selectedItem = ref(null);
-const vehicleFilter = ref('all');
 const highlightedVehicle = ref(null);
 const searchQuery = ref('');
+const defaultEndTime = formatDateToLocalHour(new Date());
+const defaultStartTime = formatDateToLocalHour(new Date(Date.now() - 24 * 60 * 60 * 1000));
 const timeRange = ref({
-    start: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
-    end: new Date().toISOString().slice(0, 16)
+    start: defaultStartTime,
+    end: defaultEndTime
 });
-const activeFilter = ref('all');
+const hourOptions = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0'));
+const startDate = computed({
+    get: () => extractDatePart(timeRange.value.start),
+    set: (value) => {
+        updateTimeRange('start', value, extractHourPart(timeRange.value.start));
+    }
+});
+const startHour = computed({
+    get: () => extractHourPart(timeRange.value.start),
+    set: (value) => {
+        updateTimeRange('start', extractDatePart(timeRange.value.start), value);
+    }
+});
+const endDate = computed({
+    get: () => extractDatePart(timeRange.value.end),
+    set: (value) => {
+        updateTimeRange('end', value, extractHourPart(timeRange.value.end));
+    }
+});
+const endHour = computed({
+    get: () => extractHourPart(timeRange.value.end),
+    set: (value) => {
+        updateTimeRange('end', extractDatePart(timeRange.value.end), value);
+    }
+});
 const selectedVehicle = ref(null);
 // 軌跡過濾相關狀態
 const selectedTraceVehicles = ref([]);
 const filteredVehicleTraces = ref({});
 // 即時車輛過濾相關狀態
 const selectedRealtimeVehicles = ref([]);
+// 區分「未套用選擇（顯示全部）」與「已套用選擇但為空（顯示無資料）」
+const selectionApplied = ref(false);
 const realtimeVehicles = ref([]);
 const showRentDialog = ref(false);
 const selectedVehicleForRent = ref(null);
 const showReturnDialog = ref(false);
 const selectedReturnVehicle = ref(null);
+// 成功通知相關
+const showSuccessNotification = ref(false);
+const successMessage = ref('');
 const showRentSuccessDialog = ref(false);
 const currentRental = ref(null);
+const routeTraceMeta = ref({});
+const historyLoading = ref(false);
+const historyError = ref(null);
+let historyRequestToken = 0;
 const seedMockEnabled = computed(() => import.meta.env.VITE_SEED_MOCK === '1');
+function formatDateToLocalHour(date) {
+    const localDate = new Date(date.getTime());
+    localDate.setMinutes(0, 0, 0);
+    const year = localDate.getFullYear();
+    const month = `${localDate.getMonth() + 1}`.padStart(2, '0');
+    const day = `${localDate.getDate()}`.padStart(2, '0');
+    const hour = `${localDate.getHours()}`.padStart(2, '0');
+    return `${year}-${month}-${day}T${hour}:00`;
+}
+function extractDatePart(value) {
+    if (!value || !value.includes('T'))
+        return (value === null || value === void 0 ? void 0 : value.slice(0, 10)) || '';
+    return value.split('T')[0];
+}
+function extractHourPart(value) {
+    if (!value || !value.includes('T'))
+        return '00';
+    const timeSegment = value.split('T')[1] || '00:00';
+    return timeSegment.slice(0, 2);
+}
+function normalizeHour(value) {
+    const parsed = Number.parseInt(value !== null && value !== void 0 ? value : '', 10);
+    if (Number.isFinite(parsed) && parsed >= 0 && parsed < 24) {
+        return String(parsed).padStart(2, '0');
+    }
+    return '00';
+}
+function composeLocalIso(date, hour) {
+    const safeDate = date || '';
+    if (!safeDate)
+        return '';
+    const normalizedHour = normalizeHour(hour);
+    return `${safeDate}T${normalizedHour}:00`;
+}
+function updateTimeRange(edge, date, hour) {
+    if (!date) {
+        return;
+    }
+    const nextValue = composeLocalIso(date, hour);
+    if (!nextValue) {
+        return;
+    }
+    timeRange.value = {
+        ...timeRange.value,
+        [edge]: nextValue
+    };
+}
+function toUtcIso(value) {
+    if (!value) {
+        return null;
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+        return null;
+    }
+    return parsed.toISOString();
+}
+function formatRouteTime(iso) {
+    if (!iso) {
+        return '時間未知';
+    }
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) {
+        return '時間未知';
+    }
+    return date.toLocaleString('zh-TW', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+function formatDistance(meters) {
+    if (typeof meters !== 'number' || Number.isNaN(meters)) {
+        return '—';
+    }
+    if (meters >= 1000) {
+        return `${(meters / 1000).toFixed(1)} km`;
+    }
+    return `${Math.round(meters)} m`;
+}
 // 已移除 mock 車輛資料，改用真實 API 資料 (realtimeVehicles)
 // 軌跡資料將從真實 API 載入，暫時設為空
 /*
@@ -168,26 +284,53 @@ const mockVehicleTraces = computed(() => ({
 */
 // 計算車輛分布的中心點和最佳縮放級別
 const mapCenter = computed(() => {
+    if (displayMode.value === 'history') {
+        const traces = selectedTraceVehicles.value.length
+            ? selectedTraceVehicles.value.map(id => filteredVehicleTraces.value[id]).filter(Boolean)
+            : Object.values(filteredVehicleTraces.value);
+        const points = traces.flat().filter(point => typeof (point === null || point === void 0 ? void 0 : point.lat) === 'number' && typeof (point === null || point === void 0 ? void 0 : point.lon) === 'number');
+        if (points.length > 0) {
+            const lats = points.map(point => point.lat);
+            const lngs = points.map(point => point.lon);
+            const minLat = Math.min(...lats);
+            const maxLat = Math.max(...lats);
+            const minLng = Math.min(...lngs);
+            const maxLng = Math.max(...lngs);
+            const centerLat = (minLat + maxLat) / 2;
+            const centerLng = (minLng + maxLng) / 2;
+            const latDiff = maxLat - minLat;
+            const lngDiff = maxLng - minLng;
+            const maxDiff = Math.max(latDiff, lngDiff);
+            let zoom = 13;
+            if (maxDiff > 0.1)
+                zoom = 10;
+            else if (maxDiff > 0.05)
+                zoom = 11;
+            else if (maxDiff > 0.02)
+                zoom = 12;
+            else if (maxDiff > 0.01)
+                zoom = 13;
+            else
+                zoom = 14;
+            return { lat: centerLat, lng: centerLng, zoom };
+        }
+    }
     const vehicles = realtimeVehicles.value;
     if (vehicles.length === 0) {
-        // 預設花蓮市中心
         return { lat: 23.9739, lng: 121.6014, zoom: 12 };
     }
-    // 計算所有車輛位置的邊界
     const lats = vehicles.map((v) => { var _a; return v.lat || ((_a = v.location) === null || _a === void 0 ? void 0 : _a.lat); }).filter(Boolean);
     const lngs = vehicles.map((v) => { var _a; return v.lon || ((_a = v.location) === null || _a === void 0 ? void 0 : _a.lng); }).filter(Boolean);
     const minLat = Math.min(...lats);
     const maxLat = Math.max(...lats);
     const minLng = Math.min(...lngs);
     const maxLng = Math.max(...lngs);
-    // 計算中心點
     const centerLat = (minLat + maxLat) / 2;
     const centerLng = (minLng + maxLng) / 2;
-    // 計算適當的縮放級別
     const latDiff = maxLat - minLat;
     const lngDiff = maxLng - minLng;
     const maxDiff = Math.max(latDiff, lngDiff);
-    let zoom = 13; // 預設縮放
+    let zoom = 13;
     if (maxDiff > 0.1)
         zoom = 10;
     else if (maxDiff > 0.05)
@@ -211,11 +354,15 @@ const availableTraceVehicles = computed(() => {
         '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
         '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9'
     ];
-    return Object.entries(traces).map(([vehicleId, trace], index) => ({
-        id: vehicleId,
-        color: vehicleColors[index % vehicleColors.length],
-        pointCount: trace.length
-    }));
+    return Object.entries(traces).map(([vehicleId, trace], index) => {
+        var _a;
+        return ({
+            id: vehicleId,
+            label: (_a = routeTraceMeta.value[vehicleId]) === null || _a === void 0 ? void 0 : _a.label,
+            color: vehicleColors[index % vehicleColors.length],
+            pointCount: trace.length
+        });
+    });
 });
 const filteredTraces = computed(() => {
     if (selectedTraceVehicles.value.length === 0) {
@@ -229,50 +376,102 @@ const filteredTraces = computed(() => {
     });
     return filtered;
 });
+const historyRoutes = computed(() => {
+    return Object.entries(filteredTraces.value).map(([traceId, trace]) => {
+        var _a, _b, _c, _d;
+        return ({
+            id: traceId,
+            label: ((_a = routeTraceMeta.value[traceId]) === null || _a === void 0 ? void 0 : _a.label) || traceId,
+            createdAt: (_b = routeTraceMeta.value[traceId]) === null || _b === void 0 ? void 0 : _b.createdAt,
+            distanceMeters: (_c = routeTraceMeta.value[traceId]) === null || _c === void 0 ? void 0 : _c.distanceMeters,
+            averageConfidence: (_d = routeTraceMeta.value[traceId]) === null || _d === void 0 ? void 0 : _d.averageConfidence,
+            pointCount: trace.length
+        });
+    });
+});
 // 即時車輛過濾邏輯
 const filteredRealtimeVehicles = computed(() => {
-    var _a;
+    var _a, _b, _c, _d;
     let list = realtimeVehicles.value;
-    // 角色：member 不顯示已被租借（使用中）的車輛；但可看到低電/維修
+    // 權限濾除：member 不顯示使用中
     const role = (_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId;
     if (role !== 'admin' && role !== 'staff') {
-        list = list.filter(v => v.status !== '使用中' && v.status !== 'in-use');
-    }
-    if (selectedRealtimeVehicles.value.length === 0) {
-        return list;
-    }
-    return list.filter(vehicle => selectedRealtimeVehicles.value.includes(vehicle.id));
-});
-// 過濾後的車輛
-const filteredVehicles = computed(() => {
-    var _a;
-    let vehicles = realtimeVehicles.value;
-    const role = (_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId;
-    if (role !== 'admin' && role !== 'staff') {
-        vehicles = vehicles.filter(v => v.status !== '使用中' && v.status !== 'in-use');
-    }
-    // 根據篩選條件過濾
-    if (vehicleFilter.value !== 'all') {
-        vehicles = vehicles.filter(vehicle => {
-            switch (vehicleFilter.value) {
-                case 'moving':
-                    return vehicle.status === 'in-use' && (vehicle.speed || 0) > 0;
-                case 'offline':
-                    return vehicle.status === 'maintenance';
-                case 'low-battery':
-                    return vehicle.status === 'low-battery' || vehicle.batteryLevel < 20;
-                default:
+        const currentUserId = (_b = auth.user) === null || _b === void 0 ? void 0 : _b.id;
+        const currentUserEmail = ((_d = (_c = auth.user) === null || _c === void 0 ? void 0 : _c.email) === null || _d === void 0 ? void 0 : _d.toLowerCase()) || '';
+        list = list.filter((v) => {
+            const status = v.status || '';
+            if (status === '使用中' || status === 'in-use') {
+                const member = v.currentMember || {};
+                const memberId = member.id != null ? String(member.id) : null;
+                const memberEmail = (member.email || member.memberEmail || '').toLowerCase();
+                if (memberId && currentUserId && memberId === String(currentUserId))
                     return true;
+                if (memberEmail && currentUserEmail && memberEmail === currentUserEmail)
+                    return true;
+                return false;
             }
+            return true;
         });
     }
-    // 根據搜尋條件過濾
+    // （移除頁面級狀態過濾，統一由右側 VehicleFilter 控制）
+    // 搜尋過濾（上方搜尋框）
     if (searchQuery.value.trim()) {
-        const query = searchQuery.value.toLowerCase();
-        vehicles = vehicles.filter(vehicle => vehicle.id.toLowerCase().includes(query) ||
-            vehicle.model.toLowerCase().includes(query));
+        const q = searchQuery.value.toLowerCase();
+        list = list.filter(v => String(v.id).toLowerCase().includes(q) || String(v.name || '').toLowerCase().includes(q));
     }
-    return vehicles;
+    // 清單選取（右側 VehicleFilter）
+    if (selectionApplied.value) {
+        if (selectedRealtimeVehicles.value.length === 0) {
+            return []; // 明確「全部取消選擇」時顯示空
+        }
+        const picked = new Set(selectedRealtimeVehicles.value.map(String));
+        list = list.filter(v => picked.has(String(v.id)));
+    }
+    return list;
+});
+// 供右側 VehicleFilter 顯示的候選清單（受上方搜尋與角色限制影響）
+const availableVehiclesForFilter = computed(() => {
+    var _a, _b, _c, _d;
+    let list = realtimeVehicles.value;
+    // 角色限制：member 不顯示使用中（但保留自己的租借中車輛）
+    const role = (_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId;
+    if (role !== 'admin' && role !== 'staff') {
+        const currentUserId = (_b = auth.user) === null || _b === void 0 ? void 0 : _b.id;
+        const currentUserEmail = ((_d = (_c = auth.user) === null || _c === void 0 ? void 0 : _c.email) === null || _d === void 0 ? void 0 : _d.toLowerCase()) || '';
+        list = list.filter(v => {
+            if (v.status === '使用中' || v.status === 'in-use') {
+                const member = v.currentMember || {};
+                const memberId = member.id != null ? String(member.id) : null;
+                const memberEmail = (member.email || member.memberEmail || '').toLowerCase();
+                if (memberId && currentUserId && memberId === String(currentUserId))
+                    return true;
+                if (memberEmail && currentUserEmail && memberEmail === currentUserEmail)
+                    return true;
+                return false;
+            }
+            return true;
+        });
+    }
+    // 上方搜尋框
+    if (searchQuery.value.trim()) {
+        const q = searchQuery.value.toLowerCase();
+        list = list.filter(v => String(v.id).toLowerCase().includes(q) || String(v.name || '').toLowerCase().includes(q));
+    }
+    return list;
+});
+// 監聽右側清單的變化以標記 selectionApplied
+watch(selectedRealtimeVehicles, () => {
+    selectionApplied.value = true;
+});
+watch(timeRange, () => {
+    if (displayMode.value === 'history') {
+        loadHistoryTrajectories();
+    }
+}, { deep: true });
+watch(selectedDomain, () => {
+    if (displayMode.value === 'history') {
+        loadHistoryTrajectories();
+    }
 });
 // 計算屬性
 const totalVehicles = computed(() => {
@@ -361,17 +560,11 @@ function selectVehicle(vehicle) {
     highlightedVehicle.value = vehicle.id;
     // TODO: 高亮地圖上的車輛位置並居中
 }
-// Filter and search functions
-function setActiveFilter(filter) {
-    vehicleFilter.value = filter;
-}
-function getStatusColor(status) {
-    const colors = {
-        active: 'text-green-600 dark:text-green-400',
-        maintenance: 'text-yellow-600 dark:text-yellow-400',
-        offline: 'text-red-600 dark:text-red-400'
-    };
-    return colors[status] || 'text-gray-600';
+function focusTrace(traceId) {
+    if (!filteredVehicleTraces.value[traceId]) {
+        return;
+    }
+    selectedTraceVehicles.value = [traceId];
 }
 function getStatusText(status) {
     const texts = {
@@ -440,16 +633,81 @@ async function loadVehiclesByDomain() {
     }
 }
 async function loadHistoryTrajectories() {
-    // 載入歷史軌跡資料
+    const requestId = ++historyRequestToken;
+    historyLoading.value = true;
+    historyError.value = null;
     try {
-        console.log('載入歷史軌跡資料');
-        // TODO: 當有軌跡 API 時，在此調用
-        // 暫時設為空物件，避免錯誤
-        filteredVehicleTraces.value = {};
+        const startIso = toUtcIso(timeRange.value.start);
+        const endIso = toUtcIso(timeRange.value.end);
+        let effectiveStart = startIso;
+        let effectiveEnd = endIso;
+        if (effectiveStart && effectiveEnd) {
+            const startDate = new Date(effectiveStart);
+            const endDate = new Date(effectiveEnd);
+            if (startDate > endDate) {
+                effectiveStart = endIso;
+                effectiveEnd = startIso;
+            }
+        }
+        const params = new URLSearchParams({ limit: '20' });
+        if (effectiveStart)
+            params.set('created_at__gte', effectiveStart);
+        if (effectiveEnd)
+            params.set('created_at__lte', effectiveEnd);
+        if (selectedDomain.value)
+            params.set('domain', selectedDomain.value);
+        const query = params.toString();
+        const response = await http.get(`/api/statistic/routes/${query ? `?${query}` : ''}`);
+        const payload = Array.isArray(response === null || response === void 0 ? void 0 : response.data) ? response.data : [];
+        const traces = {};
+        const meta = {};
+        payload.forEach((entry, memberIndex) => {
+            var _a, _b, _c;
+            const memberName = ((_a = entry === null || entry === void 0 ? void 0 : entry.member) === null || _a === void 0 ? void 0 : _a.full_name) || `會員 #${(_c = (_b = entry === null || entry === void 0 ? void 0 : entry.member) === null || _b === void 0 ? void 0 : _b.id) !== null && _c !== void 0 ? _c : memberIndex + 1}`;
+            const routes = Array.isArray(entry === null || entry === void 0 ? void 0 : entry.routes) ? entry.routes : [];
+            routes.forEach((route, routeIndex) => {
+                var _a, _b, _c;
+                const rawId = (route === null || route === void 0 ? void 0 : route.id) != null ? String(route.id) : `${(_b = (_a = entry === null || entry === void 0 ? void 0 : entry.member) === null || _a === void 0 ? void 0 : _a.id) !== null && _b !== void 0 ? _b : memberIndex + 1}-${routeIndex + 1}`;
+                const traceId = `route-${rawId}`;
+                const coordinates = Array.isArray((_c = route === null || route === void 0 ? void 0 : route.geometry) === null || _c === void 0 ? void 0 : _c.coordinates) ? route.geometry.coordinates : [];
+                if (coordinates.length < 2)
+                    return;
+                traces[traceId] = coordinates.map((coord) => {
+                    const [lon, lat] = coord || [];
+                    return {
+                        lat: typeof lat === 'number' ? lat : 0,
+                        lon: typeof lon === 'number' ? lon : 0,
+                        timestamp: (route === null || route === void 0 ? void 0 : route.created_at) || endIso || startIso || new Date().toISOString()
+                    };
+                });
+                meta[traceId] = {
+                    label: `${memberName} · #${rawId}`,
+                    createdAt: route === null || route === void 0 ? void 0 : route.created_at,
+                    distanceMeters: route === null || route === void 0 ? void 0 : route.distance_meters,
+                    averageConfidence: route === null || route === void 0 ? void 0 : route.average_confidence,
+                    memberName
+                };
+            });
+        });
+        if (requestId === historyRequestToken) {
+            filteredVehicleTraces.value = traces;
+            routeTraceMeta.value = meta;
+            selectedTraceVehicles.value = Object.keys(traces);
+        }
     }
     catch (error) {
         console.error('載入軌跡資料失敗:', error);
-        filteredVehicleTraces.value = {};
+        if (requestId === historyRequestToken) {
+            historyError.value = error instanceof Error ? error.message : String(error);
+            filteredVehicleTraces.value = {};
+            routeTraceMeta.value = {};
+            selectedTraceVehicles.value = [];
+        }
+    }
+    finally {
+        if (requestId === historyRequestToken) {
+            historyLoading.value = false;
+        }
     }
 }
 async function loadRealtimePositions() {
@@ -501,10 +759,50 @@ async function handleRentSuccess(rentRecord) {
     console.log('[SiteMap] Vehicle data refreshed after successful rental');
 }
 // 租借相關函數
-function canRentVehicle(_vehicle) { return true; }
-function getRentButtonTooltip(_vehicle) { return '點擊租借車輛'; }
+const LOW_BATTERY_THRESHOLD = 20;
+function isLowBattery(vehicle) {
+    if (!vehicle)
+        return false;
+    if (vehicle.status === '低電量' || vehicle.status === 'low-battery')
+        return true;
+    if (typeof vehicle.batteryPct === 'number') {
+        return vehicle.batteryPct < LOW_BATTERY_THRESHOLD;
+    }
+    return false;
+}
+function canRentVehicle(vehicle) {
+    if (!vehicle)
+        return false;
+    const blockedStatuses = ['使用中', 'in-use', '租借中', 'rented', '維修', 'maintenance'];
+    return !blockedStatuses.includes(vehicle.status);
+}
+function canReturnVehicle(vehicle) {
+    if (!vehicle)
+        return false;
+    return vehicle.status === '使用中' || vehicle.status === 'in-use';
+}
+function getRentButtonTooltip(vehicle) {
+    if (!vehicle)
+        return '';
+    if (!canRentVehicle(vehicle)) {
+        return vehicle.status === '維修' || vehicle.status === 'maintenance'
+            ? '車輛維修中，暫不可租借'
+            : '目前無法租借此車輛';
+    }
+    if (isLowBattery(vehicle)) {
+        return '車輛電量偏低，請確認是否仍要租借';
+    }
+    return '點擊租借車輛';
+}
 function handleRentVehicle(vehicle) {
-    // 不做前端條件限制，直接交由後端驗證
+    if (!canRentVehicle(vehicle))
+        return;
+    if (isLowBattery(vehicle)) {
+        const proceed = window.confirm('此車輛目前電量偏低，仍要租借嗎？');
+        if (!proceed) {
+            return;
+        }
+    }
     selectedVehicleForRent.value = vehicle;
     showRentDialog.value = true;
 }
@@ -535,7 +833,14 @@ async function onReturnSuccess(returnRecord) {
     // 關閉歸還對話框
     showReturnDialog.value = false;
     selectedReturnVehicle.value = null;
-    // 重新載入相關資料
+    // 顯示成功對話框
+    showSuccessNotification.value = true;
+    successMessage.value = `車輛 ${returnRecord.vehicleId} 已成功歸還！`;
+    // 1秒後自動刷新頁面
+    setTimeout(() => {
+        window.location.reload();
+    }, 1000);
+    // 立即重新載入相關資料
     if (sitesStore.selected) {
         await Promise.all([
             sitesStore.fetchSites(),
@@ -633,21 +938,55 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.d
     ...{ class: "flex items-center space-x-4" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-    ...{ class: "flex items-center space-x-2" },
+    ...{ class: "flex items-center space-x-3" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "flex items-center space-x-1" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
+    ...{ class: "text-xs text-gray-500 self-center" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
-    type: "datetime-local",
-    ...{ class: "px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" },
+    type: "date",
+    ...{ class: "h-8 px-2 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" },
 });
-(__VLS_ctx.timeRange.start);
+(__VLS_ctx.startDate);
+__VLS_asFunctionalElement(__VLS_intrinsicElements.select, __VLS_intrinsicElements.select)({
+    value: (__VLS_ctx.startHour),
+    ...{ class: "h-8 px-2 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" },
+});
+for (const [hour] of __VLS_getVForSourceType((__VLS_ctx.hourOptions))) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
+        key: (hour),
+        value: (hour),
+    });
+    (hour);
+}
 __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-    ...{ class: "text-gray-500" },
+    ...{ class: "text-gray-400 self-center" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "flex items-center space-x-1" },
+});
+__VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
+    ...{ class: "text-xs text-gray-500 self-center" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
-    type: "datetime-local",
-    ...{ class: "px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" },
+    type: "date",
+    ...{ class: "h-8 px-2 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" },
 });
-(__VLS_ctx.timeRange.end);
+(__VLS_ctx.endDate);
+__VLS_asFunctionalElement(__VLS_intrinsicElements.select, __VLS_intrinsicElements.select)({
+    value: (__VLS_ctx.endHour),
+    ...{ class: "h-8 px-2 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" },
+});
+for (const [hour] of __VLS_getVForSourceType((__VLS_ctx.hourOptions))) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
+        key: (hour),
+        value: (hour),
+    });
+    (hour);
+}
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "relative" },
 });
@@ -655,13 +994,13 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
     value: (__VLS_ctx.searchQuery),
     type: "text",
     placeholder: "搜尋車輛/編號/標籤",
-    ...{ class: "pl-8 pr-3 py-1.5 border border-gray-300 rounded-md text-sm w-48 focus:outline-none focus:ring-2 focus:ring-indigo-500" },
+    ...{ class: "h-8 pl-8 pr-3 border border-gray-300 rounded-md text-sm w-48 focus:outline-none focus:ring-2 focus:ring-indigo-500" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
     ...{ class: "i-ph-magnifying-glass absolute left-2.5 top-2 w-4 h-4 text-gray-400" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
-    ...{ class: "px-4 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500" },
+    ...{ class: "h-8 px-4 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "flex-1 flex overflow-hidden" },
@@ -731,137 +1070,228 @@ else {
     // @ts-ignore
     const __VLS_10 = __VLS_asFunctionalComponent(VehicleFilter, new VehicleFilter({
         modelValue: (__VLS_ctx.selectedRealtimeVehicles),
-        availableVehicles: (__VLS_ctx.realtimeVehicles),
+        availableVehicles: (__VLS_ctx.availableVehiclesForFilter),
     }));
     const __VLS_11 = __VLS_10({
         modelValue: (__VLS_ctx.selectedRealtimeVehicles),
-        availableVehicles: (__VLS_ctx.realtimeVehicles),
+        availableVehicles: (__VLS_ctx.availableVehiclesForFilter),
     }, ...__VLS_functionalComponentArgsRest(__VLS_10));
 }
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "flex-1 overflow-y-auto p-4 space-y-3" },
 });
-for (const [vehicle] of __VLS_getVForSourceType((__VLS_ctx.displayMode === 'realtime' ? __VLS_ctx.filteredRealtimeVehicles : __VLS_ctx.filteredVehicles))) {
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ onClick: (...[$event]) => {
-                __VLS_ctx.selectVehicle(vehicle);
-            } },
-        key: (vehicle.id),
-        ...{ class: ({ 'ring-2 ring-indigo-500 bg-indigo-50': __VLS_ctx.highlightedVehicle === vehicle.id }) },
-        ...{ class: "bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex items-center justify-between mb-2" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex items-center space-x-2" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.h4, __VLS_intrinsicElements.h4)({
-        ...{ class: "font-semibold text-gray-900" },
-    });
-    (vehicle.id);
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-        ...{ class: (__VLS_ctx.getStatusBadgeClass(vehicle.status)) },
-        ...{ class: "px-2 py-0.5 rounded-full text-xs font-medium" },
-    });
-    (__VLS_ctx.getStatusText(vehicle.status));
-    if (vehicle.currentMember) {
+if (__VLS_ctx.displayMode === 'history') {
+    if (__VLS_ctx.historyLoading) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "mb-2 p-2 bg-blue-50 rounded text-sm" },
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "flex items-center space-x-1 text-blue-700" },
+            ...{ class: "flex items-center justify-center text-sm text-gray-500" },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
-            ...{ class: "i-ph-user w-4 h-4" },
+            ...{ class: "i-ph-spinner mr-2 animate-spin w-4 h-4" },
         });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-            ...{ class: "font-medium" },
-        });
-        (vehicle.currentMember.name);
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "text-blue-600 text-xs mt-1" },
-        });
-        (vehicle.currentMember.phone);
     }
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "grid grid-cols-2 gap-2 text-sm text-gray-600 mb-3" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex items-center space-x-1" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
-        ...{ class: "i-ph-gauge w-4 h-4" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
-    (vehicle.vehicleSpeed || vehicle.speedKph || 0);
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex items-center space-x-1" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
-        ...{ class: "i-ph-battery-high w-4 h-4" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
-    (vehicle.batteryPct);
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex items-center space-x-1" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
-        ...{ class: "i-ph-map-pin w-4 h-4" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
-    (vehicle.lat.toFixed(6));
-    (vehicle.lon.toFixed(6));
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex items-center space-x-1" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
-        ...{ class: "i-ph-clock w-4 h-4" },
-    });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
-    (__VLS_ctx.getRelativeTime(vehicle.lastSeen || new Date().toISOString()));
-    if ((vehicle.status === '使用中' || vehicle.status === 'in-use') && vehicle.registeredUser) {
+    else if (__VLS_ctx.historyError) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "mb-3" },
+            ...{ class: "rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600" },
         });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-            ...{ class: "flex items-center space-x-1 text-sm text-blue-700" },
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
-            ...{ class: "i-ph-user w-4 h-4" },
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
-        (vehicle.registeredUser);
+        (__VLS_ctx.historyError);
     }
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "flex justify-end" },
-    });
-    if (!(vehicle.status === '使用中' || vehicle.status === 'in-use')) {
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
-            ...{ onClick: (...[$event]) => {
-                    if (!(!(vehicle.status === '使用中' || vehicle.status === 'in-use')))
-                        return;
-                    __VLS_ctx.handleRentVehicle(vehicle);
-                } },
-            title: (__VLS_ctx.getRentButtonTooltip(vehicle)),
-            ...{ class: "px-3 py-1.5 text-sm font-medium rounded-lg transition-colors bg-indigo-600 text-white hover:bg-indigo-700" },
-        });
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
-            ...{ class: "i-ph-key w-4 h-4 mr-1" },
+    else if (__VLS_ctx.historyRoutes.length === 0) {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500" },
         });
     }
     else {
-        __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+        for (const [route] of __VLS_getVForSourceType((__VLS_ctx.historyRoutes))) {
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ onClick: (...[$event]) => {
+                        if (!(__VLS_ctx.displayMode === 'history'))
+                            return;
+                        if (!!(__VLS_ctx.historyLoading))
+                            return;
+                        if (!!(__VLS_ctx.historyError))
+                            return;
+                        if (!!(__VLS_ctx.historyRoutes.length === 0))
+                            return;
+                        __VLS_ctx.focusTrace(route.id);
+                    } },
+                key: (route.id),
+                ...{ class: ({ 'ring-2 ring-indigo-500 bg-indigo-50': __VLS_ctx.selectedTraceVehicles.includes(route.id) }) },
+                ...{ class: "bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ class: "flex items-center justify-between mb-2" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.h4, __VLS_intrinsicElements.h4)({
+                ...{ class: "font-semibold text-gray-900" },
+            });
+            (route.label);
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+                ...{ class: "text-xs text-gray-500" },
+            });
+            (__VLS_ctx.formatRouteTime(route.createdAt));
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ class: "grid grid-cols-2 gap-2 text-sm text-gray-600" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ class: "flex items-center space-x-1" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+                ...{ class: "i-ph-map-trifold w-4 h-4" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+            (__VLS_ctx.formatDistance(route.distanceMeters));
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ class: "flex items-center space-x-1" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+                ...{ class: "i-ph-dots-three-outline w-4 h-4" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+            (route.pointCount);
+            if (route.averageConfidence != null) {
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                    ...{ class: "flex items-center space-x-1 col-span-2" },
+                });
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+                    ...{ class: "i-ph-target w-4 h-4" },
+                });
+                __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+                ((route.averageConfidence * 100).toFixed(1));
+            }
+        }
+    }
+}
+else {
+    for (const [vehicle] of __VLS_getVForSourceType((__VLS_ctx.filteredRealtimeVehicles))) {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
             ...{ onClick: (...[$event]) => {
-                    if (!!(!(vehicle.status === '使用中' || vehicle.status === 'in-use')))
+                    if (!!(__VLS_ctx.displayMode === 'history'))
                         return;
-                    __VLS_ctx.handleReturnVehicle(vehicle);
+                    __VLS_ctx.selectVehicle(vehicle);
                 } },
-            ...{ class: "px-3 py-1.5 text-sm font-medium rounded-lg bg-orange-600 text-white hover:bg-orange-700 transition-colors" },
+            key: (vehicle.id),
+            ...{ class: ({ 'ring-2 ring-indigo-500 bg-indigo-50': __VLS_ctx.highlightedVehicle === vehicle.id }) },
+            ...{ class: "bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "flex items-center justify-between mb-2" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "flex items-center space-x-2" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.h4, __VLS_intrinsicElements.h4)({
+            ...{ class: "font-semibold text-gray-900" },
+        });
+        (vehicle.id);
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+            ...{ class: (__VLS_ctx.getStatusBadgeClass(vehicle.status)) },
+            ...{ class: "px-2 py-0.5 rounded-full text-xs font-medium" },
+        });
+        (__VLS_ctx.getStatusText(vehicle.status));
+        if (vehicle.currentMember) {
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ class: "mb-2 p-2 bg-blue-50 rounded text-sm" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ class: "flex items-center space-x-1 text-blue-700" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+                ...{ class: "i-ph-user w-4 h-4" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+                ...{ class: "font-medium" },
+            });
+            (vehicle.currentMember.name);
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ class: "text-blue-600 text-xs mt-1" },
+            });
+            (vehicle.currentMember.phone);
+        }
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "grid grid-cols-2 gap-2 text-sm text-gray-600 mb-3" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "flex items-center space-x-1" },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
-            ...{ class: "i-ph-handbag w-4 h-4 mr-1" },
+            ...{ class: "i-ph-gauge w-4 h-4" },
         });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+        (vehicle.vehicleSpeed || vehicle.speedKph || 0);
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "flex items-center space-x-1" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: "i-ph-battery-high w-4 h-4" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+        (vehicle.batteryPct);
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "flex items-center space-x-1" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: "i-ph-map-pin w-4 h-4" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+        (vehicle.lat.toFixed(6));
+        (vehicle.lon.toFixed(6));
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "flex items-center space-x-1" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: "i-ph-clock w-4 h-4" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+        (__VLS_ctx.getRelativeTime(vehicle.lastSeen || new Date().toISOString()));
+        if ((vehicle.status === '使用中' || vehicle.status === 'in-use') && vehicle.currentMember && vehicle.currentMember.name) {
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ class: "mb-3" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                ...{ class: "flex items-center space-x-1 text-sm text-blue-700" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+                ...{ class: "i-ph-user w-4 h-4" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+            (vehicle.currentMember.name);
+        }
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "flex justify-end" },
+        });
+        if (__VLS_ctx.canRentVehicle(vehicle)) {
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+                ...{ onClick: (...[$event]) => {
+                        if (!!(__VLS_ctx.displayMode === 'history'))
+                            return;
+                        if (!(__VLS_ctx.canRentVehicle(vehicle)))
+                            return;
+                        __VLS_ctx.handleRentVehicle(vehicle);
+                    } },
+                title: (__VLS_ctx.getRentButtonTooltip(vehicle)),
+                ...{ class: "px-3 py-1.5 text-sm font-medium rounded-lg transition-colors bg-indigo-600 text-white hover:bg-indigo-700" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+                ...{ class: "i-ph-key w-4 h-4 mr-1" },
+            });
+        }
+        else if (__VLS_ctx.canReturnVehicle(vehicle)) {
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+                ...{ onClick: (...[$event]) => {
+                        if (!!(__VLS_ctx.displayMode === 'history'))
+                            return;
+                        if (!!(__VLS_ctx.canRentVehicle(vehicle)))
+                            return;
+                        if (!(__VLS_ctx.canReturnVehicle(vehicle)))
+                            return;
+                        __VLS_ctx.handleReturnVehicle(vehicle);
+                    } },
+                ...{ class: "px-3 py-1.5 text-sm font-medium rounded-lg bg-orange-600 text-white hover:bg-orange-700 transition-colors" },
+            });
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+                ...{ class: "i-ph-handbag w-4 h-4 mr-1" },
+            });
+        }
     }
 }
 /** @type {[typeof RentDialog, ]} */ ;
@@ -931,6 +1361,39 @@ const __VLS_35 = {
     onSuccess: (__VLS_ctx.onReturnSuccess)
 };
 var __VLS_30;
+if (__VLS_ctx.showSuccessNotification) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "bg-white rounded-2xl p-8 max-w-md w-full transform animate-bounce-in" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "flex flex-col items-center text-center" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-4" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+        ...{ class: "i-ph-check-circle-fill w-12 h-12 text-green-600" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.h3, __VLS_intrinsicElements.h3)({
+        ...{ class: "text-xl font-bold text-gray-900 mb-2" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({
+        ...{ class: "text-gray-600 mb-4" },
+    });
+    (__VLS_ctx.successMessage);
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "bg-blue-50 rounded-lg px-4 py-3 w-full" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+        ...{ class: "i-ph-spinner w-5 h-5 text-blue-600 animate-spin inline-block mr-2" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+        ...{ class: "text-sm text-blue-700" },
+    });
+}
 /** @type {__VLS_StyleScopedClasses['flex']} */ ;
 /** @type {__VLS_StyleScopedClasses['h-screen']} */ ;
 /** @type {__VLS_StyleScopedClasses['bg-gray-50']} */ ;
@@ -987,9 +1450,15 @@ var __VLS_30;
 /** @type {__VLS_StyleScopedClasses['space-x-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['flex']} */ ;
 /** @type {__VLS_StyleScopedClasses['items-center']} */ ;
-/** @type {__VLS_StyleScopedClasses['space-x-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['space-x-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['space-x-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
+/** @type {__VLS_StyleScopedClasses['self-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-8']} */ ;
 /** @type {__VLS_StyleScopedClasses['px-2']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-1']} */ ;
 /** @type {__VLS_StyleScopedClasses['border']} */ ;
 /** @type {__VLS_StyleScopedClasses['border-gray-300']} */ ;
 /** @type {__VLS_StyleScopedClasses['rounded']} */ ;
@@ -997,9 +1466,34 @@ var __VLS_30;
 /** @type {__VLS_StyleScopedClasses['focus:outline-none']} */ ;
 /** @type {__VLS_StyleScopedClasses['focus:ring-2']} */ ;
 /** @type {__VLS_StyleScopedClasses['focus:ring-indigo-500']} */ ;
-/** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-8']} */ ;
 /** @type {__VLS_StyleScopedClasses['px-2']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-gray-300']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+/** @type {__VLS_StyleScopedClasses['focus:outline-none']} */ ;
+/** @type {__VLS_StyleScopedClasses['focus:ring-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['focus:ring-indigo-500']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-400']} */ ;
+/** @type {__VLS_StyleScopedClasses['self-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['space-x-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
+/** @type {__VLS_StyleScopedClasses['self-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-8']} */ ;
+/** @type {__VLS_StyleScopedClasses['px-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-gray-300']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+/** @type {__VLS_StyleScopedClasses['focus:outline-none']} */ ;
+/** @type {__VLS_StyleScopedClasses['focus:ring-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['focus:ring-indigo-500']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-8']} */ ;
+/** @type {__VLS_StyleScopedClasses['px-2']} */ ;
 /** @type {__VLS_StyleScopedClasses['border']} */ ;
 /** @type {__VLS_StyleScopedClasses['border-gray-300']} */ ;
 /** @type {__VLS_StyleScopedClasses['rounded']} */ ;
@@ -1008,9 +1502,9 @@ var __VLS_30;
 /** @type {__VLS_StyleScopedClasses['focus:ring-2']} */ ;
 /** @type {__VLS_StyleScopedClasses['focus:ring-indigo-500']} */ ;
 /** @type {__VLS_StyleScopedClasses['relative']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-8']} */ ;
 /** @type {__VLS_StyleScopedClasses['pl-8']} */ ;
 /** @type {__VLS_StyleScopedClasses['pr-3']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-1.5']} */ ;
 /** @type {__VLS_StyleScopedClasses['border']} */ ;
 /** @type {__VLS_StyleScopedClasses['border-gray-300']} */ ;
 /** @type {__VLS_StyleScopedClasses['rounded-md']} */ ;
@@ -1026,8 +1520,8 @@ var __VLS_30;
 /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-gray-400']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-8']} */ ;
 /** @type {__VLS_StyleScopedClasses['px-4']} */ ;
-/** @type {__VLS_StyleScopedClasses['py-1.5']} */ ;
 /** @type {__VLS_StyleScopedClasses['bg-indigo-600']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-white']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
@@ -1070,6 +1564,75 @@ var __VLS_30;
 /** @type {__VLS_StyleScopedClasses['overflow-y-auto']} */ ;
 /** @type {__VLS_StyleScopedClasses['p-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['space-y-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['justify-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
+/** @type {__VLS_StyleScopedClasses['i-ph-spinner']} */ ;
+/** @type {__VLS_StyleScopedClasses['mr-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['animate-spin']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded']} */ ;
+/** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-red-200']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-red-50']} */ ;
+/** @type {__VLS_StyleScopedClasses['px-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['py-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-red-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded']} */ ;
+/** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-gray-200']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-gray-50']} */ ;
+/** @type {__VLS_StyleScopedClasses['px-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['py-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
+/** @type {__VLS_StyleScopedClasses['ring-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['ring-indigo-500']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-indigo-50']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-white']} */ ;
+/** @type {__VLS_StyleScopedClasses['border']} */ ;
+/** @type {__VLS_StyleScopedClasses['border-gray-200']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
+/** @type {__VLS_StyleScopedClasses['p-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['hover:shadow-md']} */ ;
+/** @type {__VLS_StyleScopedClasses['transition-shadow']} */ ;
+/** @type {__VLS_StyleScopedClasses['cursor-pointer']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['justify-between']} */ ;
+/** @type {__VLS_StyleScopedClasses['mb-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['font-semibold']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-xs']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-500']} */ ;
+/** @type {__VLS_StyleScopedClasses['grid']} */ ;
+/** @type {__VLS_StyleScopedClasses['grid-cols-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['space-x-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['i-ph-map-trifold']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['space-x-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['i-ph-dots-three-outline']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['space-x-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['col-span-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['i-ph-target']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['ring-2']} */ ;
 /** @type {__VLS_StyleScopedClasses['ring-indigo-500']} */ ;
 /** @type {__VLS_StyleScopedClasses['bg-indigo-50']} */ ;
@@ -1178,6 +1741,58 @@ var __VLS_30;
 /** @type {__VLS_StyleScopedClasses['w-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['h-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['mr-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['fixed']} */ ;
+/** @type {__VLS_StyleScopedClasses['inset-0']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-black']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-opacity-50']} */ ;
+/** @type {__VLS_StyleScopedClasses['z-50']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['justify-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['p-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-white']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-2xl']} */ ;
+/** @type {__VLS_StyleScopedClasses['p-8']} */ ;
+/** @type {__VLS_StyleScopedClasses['max-w-md']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-full']} */ ;
+/** @type {__VLS_StyleScopedClasses['transform']} */ ;
+/** @type {__VLS_StyleScopedClasses['animate-bounce-in']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex-col']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-20']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-20']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-green-100']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-full']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['justify-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['mb-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['i-ph-check-circle-fill']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-12']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-12']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-green-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-xl']} */ ;
+/** @type {__VLS_StyleScopedClasses['font-bold']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-900']} */ ;
+/** @type {__VLS_StyleScopedClasses['mb-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['mb-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-blue-50']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
+/** @type {__VLS_StyleScopedClasses['px-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['py-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-full']} */ ;
+/** @type {__VLS_StyleScopedClasses['i-ph-spinner']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-5']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-5']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-blue-600']} */ ;
+/** @type {__VLS_StyleScopedClasses['animate-spin']} */ ;
+/** @type {__VLS_StyleScopedClasses['inline-block']} */ ;
+/** @type {__VLS_StyleScopedClasses['mr-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-blue-700']} */ ;
 var __VLS_dollars;
 const __VLS_self = (await import('vue')).defineComponent({
     setup() {
@@ -1194,31 +1809,44 @@ const __VLS_self = (await import('vue')).defineComponent({
             selectedItem: selectedItem,
             highlightedVehicle: highlightedVehicle,
             searchQuery: searchQuery,
-            timeRange: timeRange,
+            hourOptions: hourOptions,
+            startDate: startDate,
+            startHour: startHour,
+            endDate: endDate,
+            endHour: endHour,
             selectedTraceVehicles: selectedTraceVehicles,
             filteredVehicleTraces: filteredVehicleTraces,
             selectedRealtimeVehicles: selectedRealtimeVehicles,
-            realtimeVehicles: realtimeVehicles,
             showRentDialog: showRentDialog,
             selectedVehicleForRent: selectedVehicleForRent,
             showReturnDialog: showReturnDialog,
             selectedReturnVehicle: selectedReturnVehicle,
+            showSuccessNotification: showSuccessNotification,
+            successMessage: successMessage,
             showRentSuccessDialog: showRentSuccessDialog,
             currentRental: currentRental,
+            historyLoading: historyLoading,
+            historyError: historyError,
+            formatRouteTime: formatRouteTime,
+            formatDistance: formatDistance,
             mapCenter: mapCenter,
             availableTraceVehicles: availableTraceVehicles,
             filteredTraces: filteredTraces,
+            historyRoutes: historyRoutes,
             filteredRealtimeVehicles: filteredRealtimeVehicles,
-            filteredVehicles: filteredVehicles,
+            availableVehiclesForFilter: availableVehiclesForFilter,
             totalVehicles: totalVehicles,
             getStatusBadgeClass: getStatusBadgeClass,
             getRelativeTime: getRelativeTime,
             selectVehicle: selectVehicle,
+            focusTrace: focusTrace,
             getStatusText: getStatusText,
             handleDomainChange: handleDomainChange,
             handleDisplayModeChange: handleDisplayModeChange,
             handleMapSelect: handleMapSelect,
             handleRentSuccess: handleRentSuccess,
+            canRentVehicle: canRentVehicle,
+            canReturnVehicle: canReturnVehicle,
             getRentButtonTooltip: getRentButtonTooltip,
             handleRentVehicle: handleRentVehicle,
             handleReturnVehicle: handleReturnVehicle,

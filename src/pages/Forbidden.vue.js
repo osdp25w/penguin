@@ -1,3 +1,22 @@
+import { computed } from 'vue';
+import { useAuth } from '@/stores/auth';
+const auth = useAuth();
+const redirectPath = computed(() => {
+    var _a;
+    const role = (_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId;
+    if (role === 'member' || role === 'visitor' || role === 'tourist') {
+        return '/sites';
+    }
+    return '/';
+});
+const redirectText = computed(() => {
+    var _a;
+    const role = (_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId;
+    if (role === 'member' || role === 'visitor' || role === 'tourist') {
+        return '回到場域地圖';
+    }
+    return '回到首頁';
+});
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
 let __VLS_components;
@@ -18,14 +37,15 @@ const __VLS_0 = {}.RouterLink;
 /** @type {[typeof __VLS_components.RouterLink, typeof __VLS_components.routerLink, typeof __VLS_components.RouterLink, typeof __VLS_components.routerLink, ]} */ ;
 // @ts-ignore
 const __VLS_1 = __VLS_asFunctionalComponent(__VLS_0, new __VLS_0({
-    to: "/",
+    to: (__VLS_ctx.redirectPath),
     ...{ class: "mt-6 inline-block rounded bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-500" },
 }));
 const __VLS_2 = __VLS_1({
-    to: "/",
+    to: (__VLS_ctx.redirectPath),
     ...{ class: "mt-6 inline-block rounded bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-500" },
 }, ...__VLS_functionalComponentArgsRest(__VLS_1));
 __VLS_3.slots.default;
+(__VLS_ctx.redirectText);
 var __VLS_3;
 /** @type {__VLS_StyleScopedClasses['grid']} */ ;
 /** @type {__VLS_StyleScopedClasses['h-[70vh]']} */ ;
@@ -50,7 +70,10 @@ var __VLS_3;
 var __VLS_dollars;
 const __VLS_self = (await import('vue')).defineComponent({
     setup() {
-        return {};
+        return {
+            redirectPath: redirectPath,
+            redirectText: redirectText,
+        };
     },
 });
 export default (await import('vue')).defineComponent({

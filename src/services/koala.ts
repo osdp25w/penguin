@@ -59,28 +59,23 @@ export const Koala = {
           return j.token as string
         }
 
-        // Use server-side encryption only (Node crypto implementation) for full parity
-        try {
-          const r = await fetch('/api/fernet/encrypt', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: password })
-          })
-          if (r.ok) {
-            const j = await r.json()
-            if (j?.token && j.token !== password) {
-              console.log('[Fernet] Encrypted via server endpoint: /api/fernet/encrypt')
-              return j.token
-            }
-          } else {
-            console.warn('Server encrypt not ok:', r.status)
-          }
-        } catch (err) {
-          console.warn('Server encrypt endpoint failed:', err)
+        // Use browser-side encryption with CryptoJS
+        const { fernetEncrypt } = await import('@/lib/fernet_client')
+        const loginKey = (window as any).CONFIG?.KOALA_LOGIN_KEY || import.meta.env.VITE_KOALA_LOGIN_KEY
+
+        if (!loginKey) {
+          console.error('[Fernet] No login key available for encryption')
+          throw new Error('ENCRYPTION_FAILED: Missing encryption key')
         }
 
-        // No fallback — enforce server-side encryption
-        throw new Error('ENCRYPTION_FAILED: Server encryption unavailable')
+        try {
+          const encrypted = fernetEncrypt(password, loginKey)
+          console.log('[Fernet] Password encrypted using browser-side encryption')
+          return encrypted
+        } catch (err) {
+          console.error('[Fernet] Browser-side encryption failed:', err)
+          throw new Error('ENCRYPTION_FAILED: Browser encryption failed')
+        }
       }
 
       try {

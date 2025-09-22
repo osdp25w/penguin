@@ -129,7 +129,7 @@ async function handleConfirmReturn() {
     const ok = await rentalsStore.returnByBikeId(props.vehicle.id, { return_location: isMember.value ? returnLocation.value : undefined })
     if (!ok) throw new Error('Koala 歸還動作失敗')
 
-    // 補一筆記錄供 UI 顯示；即使 /api/v1/returns 失敗也不阻擋
+    // 建立本地歸還記錄供 UI 顯示（不呼叫 /api/v1/returns）
     const now = new Date().toISOString()
     const returnData = {
       vehicleId: props.vehicle.id,
@@ -139,12 +139,8 @@ async function handleConfirmReturn() {
       issues: undefined,
       photos: undefined
     }
-    let returnRecord: any = null
-    try {
-      returnRecord = await returnsStore.confirmReturnVehicle(returnData)
-    } catch {
-      returnRecord = { id: `local-${now}`, ...returnData, createdAt: now }
-    }
+    // 直接使用本地記錄，不嘗試呼叫不存在的 API
+    const returnRecord = { id: `local-${now}`, ...returnData, createdAt: now }
     emit('success', returnRecord)
     emit('close')
   } catch (error) {

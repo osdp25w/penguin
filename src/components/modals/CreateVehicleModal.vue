@@ -26,12 +26,7 @@
             </div>
 
             <!-- 基礎屬性 -->
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">SoC (%)</label>
-                <input v-model.number="form.batteryLevel" type="number" min="0" max="100" class="input-base w-full" placeholder="0-100" />
-                <p v-if="errors.batteryLevel" class="text-xs text-red-600 mt-1">{{ errors.batteryLevel }}</p>
-              </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">狀態</label>
                 <select v-model="form.status" class="input-base w-full">
@@ -93,16 +88,6 @@
               </div>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">緯度（選填）</label>
-                <input v-model.number="form.lat" type="number" step="0.000001" class="input-base w-full" placeholder="25.061410" />
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">經度（選填）</label>
-                <input v-model.number="form.lon" type="number" step="0.000001" class="input-base w-full" placeholder="121.602744" />
-              </div>
-            </div>
           </form>
         </div>
 
@@ -139,14 +124,11 @@ const meta = useBikeMeta()
 const telemetry = useTelemetry()
 const imeiQuery = ref('')
 
-const form = reactive<{ 
+const form = reactive<{
   id: string
   name: string
-  batteryLevel: number | null
   status: Vehicle['status']
   siteId: string
-  lat: number | null
-  lon: number | null
   categoryId?: string | number | ''
   seriesId?: string | number | ''
   model?: string
@@ -154,18 +136,15 @@ const form = reactive<{
 }>({
   id: '',
   name: '',
-  batteryLevel: null,
   status: 'available',
   siteId: '',
-  lat: null,
-  lon: null,
   categoryId: '',
   seriesId: '',
   model: '',
   telemetryImei: ''
 })
 
-const errors = reactive<{ id?: string; batteryLevel?: string }>({})
+const errors = reactive<{ id?: string }>({})
 
 const siteOptions = computed(() => props.sites || [])
 const categoryOptions = computed(() => meta.categories)
@@ -191,18 +170,10 @@ onMounted(async () => {
 
 function validate() {
   errors.id = undefined
-  errors.batteryLevel = undefined
   let ok = true
   if (!form.id) {
     errors.id = '請輸入車輛 ID'
     ok = false
-  }
-  if (form.batteryLevel != null) {
-    const v = Number(form.batteryLevel)
-    if (Number.isNaN(v) || v < 0 || v > 100) {
-      errors.batteryLevel = 'SoC 必須在 0 - 100 之間'
-      ok = false
-    }
   }
   return ok
 }
@@ -211,16 +182,15 @@ async function handleSubmit() {
   if (!validate()) return
   submitting.value = true
   try {
-    const battery = form.batteryLevel == null ? undefined : Number(form.batteryLevel)
     const vehicle: Vehicle & { seriesId?: number | string; telemetryImei?: string | null } = {
       id: form.id,
       name: form.name || undefined,
-      batteryLevel: battery,
-      batteryPct: battery,
+      batteryLevel: undefined,
+      batteryPct: undefined,
       status: form.status,
       siteId: form.siteId || undefined,
-      lat: form.lat == null ? undefined : Number(form.lat),
-      lon: form.lon == null ? undefined : Number(form.lon),
+      lat: undefined,
+      lon: undefined,
       mqttStatus: 'online',
       lastSeen: new Date().toISOString(),
       createdAt: new Date().toISOString(),

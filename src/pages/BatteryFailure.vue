@@ -10,7 +10,7 @@ onMounted(() => ml.fetchBatteryRisk())
   <div class="space-y-6">
     <header class="flex items-center justify-between">
       <h2 class="text-2xl font-bold">電池耗電 / 故障機率</h2>
-      <button class="btn" @click="ml.fetchBatteryRisk" :disabled="ml.loading">重新整理</button>
+      <button class="btn" @click="() => { void ml.fetchBatteryRisk() }" :disabled="ml.loading">重新整理</button>
     </header>
 
     <div class="card overflow-auto">
