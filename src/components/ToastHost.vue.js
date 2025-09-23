@@ -35,6 +35,7 @@ for (const [t] of __VLS_getVForSourceType((__VLS_ctx.toasts.items))) {
         key: (t.id),
         ...{ class: "rounded-lg shadow-lg border p-3 flex items-start gap-3 text-sm bg-white" },
         ...{ class: (__VLS_ctx.kindClass(t.kind)) },
+        ...{ 'data-testid': `toast-${t.kind}` },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
     __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({

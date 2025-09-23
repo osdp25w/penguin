@@ -5,6 +5,7 @@ import PaginationBar from '@/components/PaginationBar.vue';
 import TelemetryDeviceModal from '@/components/modals/TelemetryDeviceModal.vue';
 import { usePaging } from '@/composables/usePaging';
 import { DEFAULT_TELEMETRY_STATUS_OPTIONS, useTelemetry } from '@/stores/telemetry';
+import { useToasts } from '@/stores/toasts';
 // 全局錯誤捕獲
 onErrorCaptured((err, instance, info) => {
     console.error('[TelemetryDevices] Component error captured:', {
@@ -16,9 +17,52 @@ onErrorCaptured((err, instance, info) => {
     return false; // 不阻止錯誤傳播
 });
 const telemetry = useTelemetry();
+const toasts = useToasts();
 const route = useRoute();
 const router = useRouter();
 const filters = ref({ status: '', model: '', imei: '' });
+const deletingMap = ref({});
+const LOCALE_MESSAGES = {
+    'zh-TW': {
+        'telemetry.delete.confirm': '確定要刪除設備 {imei} 嗎？',
+        'telemetry.delete.success': '已刪除設備：{label}',
+        'telemetry.delete.error.title': '刪除失敗',
+        'telemetry.delete.error.association': '無法刪除，該設備仍綁定腳踏車（例如：{bike}）。請先解除綁定後再刪除。',
+        'telemetry.delete.error.generic': '刪除失敗，請稍後再試。',
+        'telemetry.delete.action': '刪除',
+        'telemetry.delete.working': '刪除中…',
+        'telemetry.create.success': '已新增設備：{label}',
+        'telemetry.create.error.title': '新增失敗',
+        'telemetry.create.error.generic': '新增失敗，請稍後再試。'
+    },
+    en: {
+        'telemetry.delete.confirm': 'Are you sure you want to delete device {imei}?',
+        'telemetry.delete.success': 'Device deleted: {label}',
+        'telemetry.delete.error.title': 'Delete failed',
+        'telemetry.delete.error.association': 'Cannot delete because the device is still bound to a bike (e.g. {bike}). Please unbind it before deleting.',
+        'telemetry.delete.error.generic': 'Delete failed. Please try again later.',
+        'telemetry.delete.action': 'Delete',
+        'telemetry.delete.working': 'Deleting…',
+        'telemetry.create.success': 'Device created: {label}',
+        'telemetry.create.error.title': 'Create failed',
+        'telemetry.create.error.generic': 'Create failed. Please try again later.'
+    }
+};
+function resolveLocale() {
+    if (typeof navigator === 'undefined')
+        return 'en';
+    const lang = navigator.language || (navigator.languages && navigator.languages[0]) || 'en';
+    return lang.toLowerCase().includes('zh') ? 'zh-TW' : 'en';
+}
+const currentLocale = resolveLocale();
+function translate(key, params) {
+    const table = LOCALE_MESSAGES[currentLocale] || LOCALE_MESSAGES.en;
+    const fallback = LOCALE_MESSAGES.en;
+    const template = (table === null || table === void 0 ? void 0 : table[key]) || fallback[key] || key;
+    if (!params)
+        return template;
+    return template.replace(/\{(\w+)\}/g, (_, token) => String(params[token] !== undefined ? params[token] : `{${token}}`));
+}
 // Sorting configuration
 const sortConfig = ref({
     field: '',
@@ -28,6 +72,65 @@ const statusOptions = computed(() => {
     const options = telemetry.statusOptions;
     return (options === null || options === void 0 ? void 0 : options.length) > 0 ? options : DEFAULT_TELEMETRY_STATUS_OPTIONS;
 });
+function setDeleting(imei, value) {
+    if (value) {
+        deletingMap.value = Object.assign(Object.assign({}, deletingMap.value), { [imei]: true });
+    }
+    else {
+        const map = Object.assign({}, deletingMap.value);
+        delete map[imei];
+        deletingMap.value = map;
+    }
+}
+function isDeleting(imei) {
+    var _a;
+    return Boolean((_a = deletingMap.value) === null || _a === void 0 ? void 0 : _a[imei]);
+}
+function deviceLabel(device) {
+    const name = typeof (device === null || device === void 0 ? void 0 : device.name) === 'string' ? device.name.trim() : '';
+    if (name)
+        return name;
+    return String((device === null || device === void 0 ? void 0 : device.IMEI) || '');
+}
+function parseKoalaError(error) {
+    if (!error)
+        return null;
+    const raw = typeof error === 'string'
+        ? error
+        : typeof (error === null || error === void 0 ? void 0 : error.message) === 'string'
+            ? error.message
+            : '';
+    if (!raw)
+        return null;
+    try {
+        return JSON.parse(raw);
+    }
+    catch (_a) {
+        return null;
+    }
+}
+function extractErrorDetail(payload) {
+    if (!payload || !payload.details)
+        return null;
+    const details = payload.details;
+    if (typeof details === 'string')
+        return details;
+    if (Array.isArray(details))
+        return details.filter(Boolean).join('\n');
+    if (typeof details === 'object') {
+        const parts = [];
+        for (const value of Object.values(details)) {
+            if (!value)
+                continue;
+            if (typeof value === 'string')
+                parts.push(value);
+            else if (Array.isArray(value))
+                parts.push(value.filter(Boolean).join('\n'));
+        }
+        return parts.length ? parts.join('\n') : null;
+    }
+    return null;
+}
 const paging = usePaging({
     fetcher: async ({ limit, offset }) => {
         return await telemetry.fetchDevicesPaged({
@@ -146,12 +249,31 @@ function closeModal() {
     showModal.value = false;
 }
 async function submitModal(device, isEdit) {
-    if (isEdit)
-        await telemetry.updateDevice(device.IMEI, { name: device.name, model: device.model, status: device.status });
-    else
-        await telemetry.createDevice(device);
-    showModal.value = false;
-    await paging.refresh();
+    try {
+        if (isEdit) {
+            await telemetry.updateDevice(device.IMEI, { name: device.name, model: device.model, status: device.status });
+        }
+        else {
+            await telemetry.createDevice(device);
+            toasts.success(translate('telemetry.create.success', {
+                label: deviceLabel(device),
+                imei: device.IMEI
+            }));
+        }
+        showModal.value = false;
+        await paging.refresh();
+    }
+    catch (error) {
+        if (!isEdit) {
+            const payload = parseKoalaError(error);
+            const detail = extractErrorDetail(payload) || (payload === null || payload === void 0 ? void 0 : payload.msg) || (payload === null || payload === void 0 ? void 0 : payload.message);
+            const message = detail
+                ? `${translate('telemetry.create.error.generic')}\n${detail}`
+                : translate('telemetry.create.error.generic');
+            toasts.error(message, translate('telemetry.create.error.title'));
+        }
+        console.error('[TelemetryDevices] Failed to submit device:', error);
+    }
 }
 // watch filters from url (但不在初始化時觸發)
 let isInitializing = true;
@@ -161,10 +283,38 @@ watch(() => [filters.value.status, filters.value.model, filters.value.imei], () 
     }
 }, { deep: true });
 async function confirmDelete(d) {
-    if (!confirm(`確定刪除設備 ${d.IMEI} 嗎？`))
+    if (isDeleting(d.IMEI))
         return;
-    await telemetry.deleteDevice(d.IMEI);
-    await paging.refresh();
+    if (!confirm(translate('telemetry.delete.confirm', { imei: d.IMEI })))
+        return;
+    setDeleting(d.IMEI, true);
+    try {
+        await telemetry.deleteDevice(d.IMEI);
+        toasts.success(translate('telemetry.delete.success', {
+            label: deviceLabel(d),
+            imei: d.IMEI
+        }));
+        await paging.refresh();
+    }
+    catch (error) {
+        const payload = parseKoalaError(error);
+    const associationMessage = payload && payload.details && typeof payload.details.bike_association === 'string'
+        ? payload.details.bike_association
+        : undefined;
+        if (payload && payload.code === 4000 && associationMessage) {
+            const match = /bike\s+([A-Za-z0-9_-]+)/i.exec(associationMessage);
+            const bikeId = (match === null || match === void 0 ? void 0 : match[1]) || '-';
+            const message = translate('telemetry.delete.error.association', { bike: bikeId });
+            toasts.error(`${message}\n${associationMessage}`, translate('telemetry.delete.error.title'));
+        }
+        else {
+            toasts.error(translate('telemetry.delete.error.generic'), translate('telemetry.delete.error.title'));
+        }
+        console.error('[TelemetryDevices] Delete device failed:', error);
+    }
+    finally {
+        setDeleting(d.IMEI, false);
+    }
 }
 onMounted(async () => {
     console.log('[TelemetryDevices] Component mounted, starting initialization...');
@@ -488,14 +638,27 @@ for (const [d] of __VLS_getVForSourceType((__VLS_ctx.rows))) {
         ...{ class: "i-ph-pencil-simple w-3.5 h-3.5 mr-1" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+        ...{ 'data-testid': "telemetry-delete-btn" },
         ...{ onClick: (...[$event]) => {
                 __VLS_ctx.confirmDelete(d);
             } },
-        ...{ class: "inline-flex items-center px-3 py-1.5 border border-red-300 text-xs font-medium rounded-md text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-red-500 transition-colors" },
+        disabled: (__VLS_ctx.isDeleting(d.IMEI)),
+        'aria-busy': (__VLS_ctx.isDeleting(d.IMEI)),
+        ...{ class: "inline-flex items-center px-3 py-1.5 border border-red-300 text-xs font-medium rounded-md text-red-700 bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-red-500" },
+        ...{ class: (__VLS_ctx.isDeleting(d.IMEI) ? 'opacity-60 cursor-not-allowed bg-red-50' : 'hover:bg-red-50') },
     });
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
-        ...{ class: "i-ph-trash w-3.5 h-3.5 mr-1" },
-    });
+    if (!__VLS_ctx.isDeleting(d.IMEI)) {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: "i-ph-trash w-3.5 h-3.5 mr-1" },
+        });
+    }
+    else {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
+            ...{ class: "i-ph-spinner w-3.5 h-3.5 mr-1 animate-spin" },
+        });
+    }
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
+    (__VLS_ctx.isDeleting(d.IMEI) ? __VLS_ctx.translate('telemetry.delete.working') : __VLS_ctx.translate('telemetry.delete.action'));
 }
 if (!__VLS_ctx.rows.length && !__VLS_ctx.paging.loading.value) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
@@ -807,6 +970,8 @@ const __VLS_self = (await import('vue')).defineComponent({
             handleSort: handleSort,
             statusLabel: statusLabel,
             statusClass: statusClass,
+            translate: translate,
+            isDeleting: isDeleting,
             refreshData: refreshData,
             applyFilters: applyFilters,
             showModal: showModal,
