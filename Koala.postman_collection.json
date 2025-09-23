@@ -653,7 +653,7 @@
 									}
 								],
 								"url": {
-									"raw": "{{base_url}}/api/rental/member/rentals/",
+									"raw": "{{base_url}}/api/rental/member/rentals/?limit=1&offset=1",
 									"host": [
 										"{{base_url}}"
 									],
@@ -663,6 +663,16 @@
 										"member",
 										"rentals",
 										""
+									],
+									"query": [
+										{
+											"key": "limit",
+											"value": "1"
+										},
+										{
+											"key": "offset",
+											"value": "1"
+										}
 									]
 								},
 								"description": "Generated from cURL:  curl -X GET \"http://localhost:8000/api/rental/member/rentals/\" \\\n    -H \"Authorization: Bearer YOUR_MEMBER_TOKEN\" \\\n    -H \"Content-Type: application/json\""
@@ -1064,7 +1074,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "// {\n//   \"email\": \"{{staff_staff_email}}\",\n//   \"password\": \"{{staff_encrypted_password}}\"\n// }\n\n\n{\n  \"email\": \"{{staff_admin_email}}\",\n  \"password\": \"{{staff_encrypted_password}}\"\n}",
+									"raw": "// {\n//   \"email\": \"{{staff_staff_email}}\",\n//   \"password\": \"{{staff_encrypted_password}}\"\n// }\n\n\n{\n  \"email\": \"{{staff_admin_email}}\",\n  \"password\": \"{{staff_encrypted_password}}\"\n  // \"password\": \"gAAAAABo0RDdRl7bSi_FpisuKToj-b--PqXt3ZGw8Fft8L-jq58Vo0sP-9DUbVMmQWiZ8BqI5Xon1x-zdTUL5uFQW-fXljwvgw==\"\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -2009,6 +2019,46 @@
 									}
 								],
 								"url": {
+									"raw": "{{base_url}}/api/bike/realtime-status/",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"bike",
+										"realtime-status",
+										""
+									]
+								},
+								"description": "Generated from cURL:   curl -X GET \"http://localhost:8000/api/bike/realtime-status/\" \\\n    -H \"Authorization: Bearer YOUR_STAFF_TOKEN\" \\\n    -H \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "get a bike",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer YOUR_STAFF_TOKEN"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
 									"raw": "{{base_url}}/api/bike/realtime-status/?bike_id_q=SIMULATOR-HUALIEN005",
 									"host": [
 										"{{base_url}}"
@@ -2071,6 +2121,104 @@
 				{
 					"name": "BikeRental",
 					"item": [
+						{
+							"name": "list all rentals",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/rental/staff/rentals/?limit=0&offset=0",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"rental",
+										"staff",
+										"rentals",
+										""
+									],
+									"query": [
+										{
+											"key": "limit",
+											"value": "0"
+										},
+										{
+											"key": "offset",
+											"value": "0"
+										}
+									]
+								},
+								"description": "Generated from cURL: curl -s \"http://localhost:8000/api/rental/staff/rentals/\" \\\n  --header \"Authorization: Bearer \n  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU4NjA4OTMwLCJpYXQiOjE3NTg1MjI1MzAsImp0a\n  SI6IjJjN2ZjYWVkNDhhZTQwNzdiYTg4YjgwYjUwZmRkYjVmIiwidXNlcl9pZCI6MTUxfQ.nIkn9_6CR2yB4dvZW4O2VtQN_EwXxea0nz0o--WE-38\" \\\n  --header \"Content-Type: application/json\""
+							},
+							"response": []
+						},
+						{
+							"name": "filter rentals by status",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{staff_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/api/rental/staff/rentals/?rental_status=active",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"rental",
+										"staff",
+										"rentals",
+										""
+									],
+									"query": [
+										{
+											"key": "rental_status",
+											"value": "active"
+										}
+									]
+								},
+								"description": "Generated from cURL: curl -s \"http://localhost:8000/api/rental/staff/rentals/?rental_status=active\" \\\n  --header \"Authorization: Bearer \n  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzU4NjA4OTMwLCJpYXQiOjE3NTg1MjI1MzAsImp0a\n  SI6IjJjN2ZjYWVkNDhhZTQwNzdiYTg4YjgwYjUwZmRkYjVmIiwidXNlcl9pZCI6MTUxfQ.nIkn9_6CR2yB4dvZW4O2VtQN_EwXxea0nz0o--WE-38\" \\\n  --header \"Content-Type: application/json\""
+							},
+							"response": []
+						},
 						{
 							"name": "rental a bike to member via email",
 							"request": {
@@ -2243,7 +2391,7 @@
 									}
 								},
 								"url": {
-									"raw": "{{base_url}}/api/rental/staff/rentals/7/",
+									"raw": "{{base_url}}/api/rental/staff/rentals/6/",
 									"host": [
 										"{{base_url}}"
 									],
@@ -2252,7 +2400,7 @@
 										"rental",
 										"staff",
 										"rentals",
-										"7",
+										"6",
 										""
 									]
 								},
@@ -2408,7 +2556,7 @@
 									}
 								],
 								"url": {
-									"raw": "{{base_url}}/api/telemetry/devices/",
+									"raw": "{{base_url}}/api/telemetry/devices/?limit=1&offset=1",
 									"host": [
 										"{{base_url}}"
 									],
@@ -2417,6 +2565,16 @@
 										"telemetry",
 										"devices",
 										""
+									],
+									"query": [
+										{
+											"key": "limit",
+											"value": "1"
+										},
+										{
+											"key": "offset",
+											"value": "1"
+										}
 									]
 								},
 								"description": "Generated from cURL: curl -X GET \"http://localhost:8000/api/telemetry/devices/\" \\\n    -H \"Authorization: Bearer YOUR_TOKEN\""
@@ -3472,7 +3630,7 @@
 									"bearer": [
 										{
 											"key": "token",
-											"value": "{{staff_access_token}}",
+											"value": "",
 											"type": "string"
 										}
 									]
@@ -3489,7 +3647,7 @@
 									}
 								],
 								"url": {
-									"raw": "{{base_url}}/api/statistic/routes/",
+									"raw": "{{base_url}}/api/statistic/routes/?limit=1&offset=1",
 									"host": [
 										"{{base_url}}"
 									],
@@ -3498,6 +3656,16 @@
 										"statistic",
 										"routes",
 										""
+									],
+									"query": [
+										{
+											"key": "limit",
+											"value": "1"
+										},
+										{
+											"key": "offset",
+											"value": "1"
+										}
 									]
 								},
 								"description": "Generated from cURL: curl -X GET \"http://localhost:8000/api/statistics/routes/\" \\\n    -H \"Authorization: Bearer YOUR_TOKEN_HERE\" \\\n    -H \"Content-Type: application/json\""
