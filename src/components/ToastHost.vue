@@ -3,7 +3,8 @@
     <TransitionGroup name="toast" tag="div">
       <div v-for="t in toasts.items" :key="t.id"
            class="rounded-lg shadow-lg border p-3 flex items-start gap-3 text-sm bg-white"
-           :class="kindClass(t.kind)">
+           :class="kindClass(t.kind)"
+           :data-testid="`toast-${t.kind}`">
         <div>
           <i :class="iconClass(t.kind)" class="w-5 h-5"></i>
         </div>
@@ -42,4 +43,3 @@ const iconClass = (k: string) => (
 .toast-enter-from { opacity: 0; transform: translateY(-4px); }
 .toast-leave-to { opacity: 0; transform: translateY(-4px); }
 </style>
-

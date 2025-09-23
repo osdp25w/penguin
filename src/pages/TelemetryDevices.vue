@@ -108,11 +108,16 @@
                     編輯
                   </button>
                   <button
+                    data-testid="telemetry-delete-btn"
                     @click="confirmDelete(d)"
-                    class="inline-flex items-center px-3 py-1.5 border border-red-300 text-xs font-medium rounded-md text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-red-500 transition-colors"
+                    :disabled="isDeleting(d.IMEI)"
+                    :aria-busy="isDeleting(d.IMEI)"
+                    class="inline-flex items-center px-3 py-1.5 border border-red-300 text-xs font-medium rounded-md text-red-700 bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-red-500"
+                    :class="isDeleting(d.IMEI) ? 'opacity-60 cursor-not-allowed bg-red-50' : 'hover:bg-red-50'"
                   >
-                    <i class="i-ph-trash w-3.5 h-3.5 mr-1"></i>
-                    刪除
+                    <i v-if="!isDeleting(d.IMEI)" class="i-ph-trash w-3.5 h-3.5 mr-1"></i>
+                    <i v-else class="i-ph-spinner w-3.5 h-3.5 mr-1 animate-spin"></i>
+                    <span>{{ isDeleting(d.IMEI) ? translate('telemetry.delete.working') : translate('telemetry.delete.action') }}</span>
                   </button>
                 </div>
               </td>
@@ -163,6 +168,7 @@ import PaginationBar from '@/components/PaginationBar.vue'
 import TelemetryDeviceModal from '@/components/modals/TelemetryDeviceModal.vue'
 import { usePaging } from '@/composables/usePaging'
 import { DEFAULT_TELEMETRY_STATUS_OPTIONS, useTelemetry } from '@/stores/telemetry'
+import { useToasts } from '@/stores/toasts'
 
 // 全局錯誤捕獲
 onErrorCaptured((err, instance, info) => {
@@ -176,10 +182,68 @@ onErrorCaptured((err, instance, info) => {
 })
 
 const telemetry = useTelemetry()
+const toasts = useToasts()
 const route = useRoute()
 const router = useRouter()
 
+type LocaleKey = 'zh-TW' | 'en'
+type MessageKey =
+  | 'telemetry.delete.confirm'
+  | 'telemetry.delete.success'
+  | 'telemetry.delete.error.title'
+  | 'telemetry.delete.error.association'
+  | 'telemetry.delete.error.generic'
+  | 'telemetry.delete.action'
+  | 'telemetry.delete.working'
+  | 'telemetry.create.success'
+  | 'telemetry.create.error.title'
+  | 'telemetry.create.error.generic'
+
+const LOCALE_MESSAGES: Record<LocaleKey, Record<MessageKey, string>> = {
+  'zh-TW': {
+    'telemetry.delete.confirm': '確定要刪除設備 {imei} 嗎？',
+    'telemetry.delete.success': '已刪除設備：{label}',
+    'telemetry.delete.error.title': '刪除失敗',
+    'telemetry.delete.error.association': '無法刪除，該設備仍綁定腳踏車（例如：{bike}）。請先解除綁定後再刪除。',
+    'telemetry.delete.error.generic': '刪除失敗，請稍後再試。',
+    'telemetry.delete.action': '刪除',
+    'telemetry.delete.working': '刪除中…',
+    'telemetry.create.success': '已新增設備：{label}',
+    'telemetry.create.error.title': '新增失敗',
+    'telemetry.create.error.generic': '新增失敗，請稍後再試。'
+  },
+  en: {
+    'telemetry.delete.confirm': 'Are you sure you want to delete device {imei}?',
+    'telemetry.delete.success': 'Device deleted: {label}',
+    'telemetry.delete.error.title': 'Delete failed',
+    'telemetry.delete.error.association': 'Cannot delete because the device is still bound to a bike (e.g. {bike}). Please unbind it before deleting.',
+    'telemetry.delete.error.generic': 'Delete failed. Please try again later.',
+    'telemetry.delete.action': 'Delete',
+    'telemetry.delete.working': 'Deleting…',
+    'telemetry.create.success': 'Device created: {label}',
+    'telemetry.create.error.title': 'Create failed',
+    'telemetry.create.error.generic': 'Create failed. Please try again later.'
+  }
+}
+
+function resolveLocale(): LocaleKey {
+  if (typeof navigator === 'undefined') return 'en'
+  const lang = navigator.language || navigator.languages?.[0] || 'en'
+  return lang.toLowerCase().includes('zh') ? 'zh-TW' : 'en'
+}
+
+const currentLocale: LocaleKey = resolveLocale()
+
+function translate(key: MessageKey, params?: Record<string, string | number>): string {
+  const table = LOCALE_MESSAGES[currentLocale] ?? LOCALE_MESSAGES.en
+  const fallback = LOCALE_MESSAGES.en
+  const template = table[key] ?? fallback[key] ?? key
+  if (!params) return template
+  return template.replace(/\{(\w+)\}/g, (_, token) => String(params[token] ?? `{${token}}`))
+}
+
 const filters = ref<{ status: string; model: string; imei: string }>({ status: '', model: '', imei: '' })
+const deletingMap = ref<Record<string, boolean>>({})
 
 // Sorting configuration
 const sortConfig = ref({
@@ -191,6 +255,60 @@ const statusOptions = computed(() => {
   const options = telemetry.statusOptions
   return options && options.length > 0 ? options : DEFAULT_TELEMETRY_STATUS_OPTIONS
 })
+
+function setDeleting(imei: string, value: boolean) {
+  if (value) {
+    deletingMap.value = { ...deletingMap.value, [imei]: true }
+  } else {
+    const { [imei]: _removed, ...rest } = deletingMap.value
+    deletingMap.value = rest
+  }
+}
+
+function isDeleting(imei: string) {
+  return Boolean(deletingMap.value[imei])
+}
+
+function deviceLabel(device: any): string {
+  const name = typeof device?.name === 'string' ? device.name.trim() : ''
+  if (name) return name
+  return String(device?.IMEI ?? '')
+}
+
+function parseKoalaError(error: unknown): any {
+  if (!error) return null
+  const raw = typeof error === 'string'
+    ? error
+    : typeof (error as any)?.message === 'string'
+      ? (error as any).message
+      : ''
+  if (!raw) return null
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+function extractErrorDetail(payload: any): string | null {
+  if (!payload || !payload.details) return null
+
+  const details = payload.details
+  if (typeof details === 'string') return details
+  if (Array.isArray(details)) return details.filter(Boolean).join('\n')
+
+  if (typeof details === 'object') {
+    const parts: string[] = []
+    for (const value of Object.values(details)) {
+      if (!value) continue
+      if (typeof value === 'string') parts.push(value)
+      else if (Array.isArray(value)) parts.push(value.filter(Boolean).join('\n'))
+    }
+    return parts.length ? parts.join('\n') : null
+  }
+
+  return null
+}
 
 const paging = usePaging({
   fetcher: async ({ limit, offset }) => {
@@ -320,10 +438,31 @@ function closeModal() {
 }
 
 async function submitModal(device: any, isEdit: boolean) {
-  if (isEdit) await telemetry.updateDevice(device.IMEI, { name: device.name, model: device.model, status: device.status })
-  else await telemetry.createDevice(device)
-  showModal.value = false
-  await paging.refresh()
+  try {
+    if (isEdit) {
+      await telemetry.updateDevice(device.IMEI, { name: device.name, model: device.model, status: device.status })
+    } else {
+      await telemetry.createDevice(device)
+      toasts.success(translate('telemetry.create.success', {
+        label: deviceLabel(device),
+        imei: device.IMEI
+      }))
+    }
+
+    showModal.value = false
+    await paging.refresh()
+  } catch (error) {
+    if (!isEdit) {
+      const payload = parseKoalaError(error)
+      const detail = extractErrorDetail(payload) || payload?.msg || payload?.message
+      const message = detail
+        ? `${translate('telemetry.create.error.generic')}\n${detail}`
+        : translate('telemetry.create.error.generic')
+      toasts.error(message, translate('telemetry.create.error.title'))
+    }
+
+    console.error('[TelemetryDevices] Failed to submit device:', error)
+  }
 }
 
 // watch filters from url (但不在初始化時觸發)
@@ -339,9 +478,38 @@ watch(
 )
 
 async function confirmDelete(d: any) {
-  if (!confirm(`確定刪除設備 ${d.IMEI} 嗎？`)) return
-  await telemetry.deleteDevice(d.IMEI)
-  await paging.refresh()
+  if (isDeleting(d.IMEI)) return
+
+  const confirmed = confirm(translate('telemetry.delete.confirm', { imei: d.IMEI }))
+  if (!confirmed) return
+
+  setDeleting(d.IMEI, true)
+  try {
+    await telemetry.deleteDevice(d.IMEI)
+    toasts.success(translate('telemetry.delete.success', {
+      label: deviceLabel(d),
+      imei: d.IMEI
+    }))
+    await paging.refresh()
+  } catch (error: any) {
+    const payload = parseKoalaError(error)
+    const associationMessage = typeof payload?.details?.bike_association === 'string'
+      ? payload.details.bike_association
+      : undefined
+
+    if (payload?.code === 4000 && associationMessage) {
+      const match = /bike\s+([A-Za-z0-9_-]+)/i.exec(associationMessage)
+      const bikeId = match?.[1] || '-'
+      const message = translate('telemetry.delete.error.association', { bike: bikeId })
+      toasts.error(`${message}\n${associationMessage}`, translate('telemetry.delete.error.title'))
+    } else {
+      toasts.error(translate('telemetry.delete.error.generic'), translate('telemetry.delete.error.title'))
+    }
+
+    console.error('[TelemetryDevices] Delete device failed:', error)
+  } finally {
+    setDeleting(d.IMEI, false)
+  }
 }
 
 onMounted(async () => {
