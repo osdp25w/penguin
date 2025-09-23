@@ -4,7 +4,7 @@ import { Button } from '@/design/components';
 import PaginationBar from '@/components/PaginationBar.vue';
 import TelemetryDeviceModal from '@/components/modals/TelemetryDeviceModal.vue';
 import { usePaging } from '@/composables/usePaging';
-import { useTelemetry } from '@/stores/telemetry';
+import { DEFAULT_TELEMETRY_STATUS_OPTIONS, useTelemetry } from '@/stores/telemetry';
 // 全局錯誤捕獲
 onErrorCaptured((err, instance, info) => {
     console.error('[TelemetryDevices] Component error captured:', {
@@ -24,14 +24,9 @@ const sortConfig = ref({
     field: '',
     order: 'asc'
 });
-// 確保始終有完整的狀態選項列表
 const statusOptions = computed(() => {
     const options = telemetry.statusOptions;
-    // 如果 store 中的選項為空或不完整，使用預設值
-    if (!options || options.length < 5) {
-        return ['available', 'in-use', 'maintenance', 'disabled', 'deployed'];
-    }
-    return options;
+    return (options === null || options === void 0 ? void 0 : options.length) > 0 ? options : DEFAULT_TELEMETRY_STATUS_OPTIONS;
 });
 const paging = usePaging({
     fetcher: async ({ limit, offset }) => {

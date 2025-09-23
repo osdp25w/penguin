@@ -1,18 +1,14 @@
 var _a, _b, _c, _d;
 import { ref, reactive, computed, onMounted } from 'vue';
 import { Button } from '@/design/components';
+import { DEFAULT_TELEMETRY_STATUS_OPTIONS } from '@/stores/telemetry';
 const props = defineProps();
 const emit = defineEmits();
 const submitting = ref(false);
 const isEdit = computed(() => !!props.device);
-// 確保始終有完整的狀態選項
 const statusOptions = computed(() => {
     const options = props.statusOptions;
-    // 如果沒有傳入選項或選項不完整，使用預設值
-    if (!options || options.length < 5) {
-        return ['available', 'in-use', 'maintenance', 'disabled', 'deployed'];
-    }
-    return options;
+    return (options === null || options === void 0 ? void 0 : options.length) > 0 ? options : DEFAULT_TELEMETRY_STATUS_OPTIONS;
 });
 function statusLabel(status) {
     const labelMap = {
