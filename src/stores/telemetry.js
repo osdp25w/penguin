@@ -2,13 +2,14 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { http } from '@/lib/api';
+export const DEFAULT_TELEMETRY_STATUS_OPTIONS = ['available', 'in-use', 'maintenance', 'disabled', 'deployed'];
 export const useTelemetry = defineStore('telemetry', () => {
     const devices = ref([]);
     const available = ref([]);
     const loading = ref(false);
     const error = ref(null);
     // 始終保持完整的狀態選項列表
-    const statusOptions = ref(['available', 'in-use', 'maintenance', 'disabled', 'deployed']);
+    const statusOptions = ref([...DEFAULT_TELEMETRY_STATUS_OPTIONS]);
     function normalizeStatus(input) {
         const s = String(input || '').toLowerCase().trim();
         if (s === 'available' || s === 'idle' || s === 'free')
@@ -170,34 +171,38 @@ export const useTelemetry = defineStore('telemetry', () => {
         }
     }
     async function fetchDeviceStatusOptions() {
-        // 此函數現在主要用於向後兼容，狀態選項已預設初始化
-        console.log('[Telemetry] fetchDeviceStatusOptions called, but status options already initialized:', statusOptions.value);
-        // 可選：嘗試從 API 獲取額外的狀態選項（但不覆蓋預設值）
         try {
             const res = await http.get('/api/telemetry/device-status-options/');
-            console.log('[Telemetry] Status options API response:', res);
-            if (res && res.code === 2000 && res.data) {
-                const data = res.data;
-                const options = data.status_options || data;
-                if (Array.isArray(options)) {
-                    // 從 API 選項中提取新的狀態（如果有）
-                    const apiStatuses = options.map((opt) => {
-                        const val = typeof opt === 'string' ? opt : (opt.value || opt);
-                        return normalizeStatus(String(val));
-                    });
-                    // 合併新狀態到現有列表（不覆蓋）
-                    const merged = [...new Set([...statusOptions.value, ...apiStatuses])];
-                    if (merged.length > statusOptions.value.length) {
-                        statusOptions.value = merged;
-                        console.log('[Telemetry] Added new status options from API:', merged);
-                    }
+            const payload = (res === null || res === void 0 ? void 0 : res.data) ?? res;
+            const rawOptions = (payload === null || payload === void 0 ? void 0 : payload.status_options) ?? payload;
+            if (Array.isArray(rawOptions)) {
+                const apiStatuses = rawOptions
+                    .map((opt) => {
+                    if (opt == null)
+                        return null;
+                    if (typeof opt === 'string')
+                        return opt;
+                    if (typeof (opt === null || opt === void 0 ? void 0 : opt.value) === 'string')
+                        return opt.value;
+                    if (typeof (opt === null || opt === void 0 ? void 0 : opt.label) === 'string')
+                        return opt.label;
+                    return null;
+                })
+                    .filter((val) => typeof val === 'string' && val.trim().length > 0)
+                    .map((val) => normalizeStatus(val));
+                const unique = apiStatuses.filter((val, idx, arr) => arr.indexOf(val) === idx);
+                if (unique.length > 0) {
+                    statusOptions.value = unique;
+                    return unique;
                 }
             }
+            console.warn('[Telemetry] Status options API returned no usable data, falling back to defaults');
         }
         catch (e) {
-            // 靜默處理錯誤，因為已有預設值
-            console.log('[Telemetry] Status options API call failed (using defaults):', e.message);
+            console.warn('[Telemetry] Failed to fetch status options, using defaults:', e);
         }
+        statusOptions.value = [...DEFAULT_TELEMETRY_STATUS_OPTIONS];
+        return statusOptions.value;
     }
     async function createDevice(payload) {
         try {

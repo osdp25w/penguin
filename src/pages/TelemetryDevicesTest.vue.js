@@ -1,5 +1,5 @@
 import { ref, computed, onMounted, onErrorCaptured } from 'vue';
-import { useTelemetry } from '@/stores/telemetry';
+import { DEFAULT_TELEMETRY_STATUS_OPTIONS, useTelemetry } from '@/stores/telemetry';
 import { usePaging } from '@/composables/usePaging';
 console.log('[TelemetryDevicesTest] Component loading...');
 onErrorCaptured((err, instance, info) => {
@@ -23,7 +23,8 @@ const paging = usePaging({
 });
 const statusOptions = computed(() => {
     console.log('[TelemetryDevicesTest] StatusOptions computed:', telemetry.statusOptions);
-    return telemetry.statusOptions || [];
+    const options = telemetry.statusOptions || [];
+    return options.length > 0 ? options : DEFAULT_TELEMETRY_STATUS_OPTIONS;
 });
 const telemetryStoreStatus = computed(() => {
     return telemetry ? '✅ Telemetry store 載入成功' : '❌ Telemetry store 載入失敗';
