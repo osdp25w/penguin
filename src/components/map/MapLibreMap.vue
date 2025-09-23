@@ -211,10 +211,18 @@ function addVehiclesLayer(): void {
           id: vehicle.id,
           status: vehicle.status,
           batteryLevel: vehicle.batteryLevel,
+          batteryPct: vehicle.batteryPct,
+          speedKph: vehicle.vehicleSpeed ?? vehicle.speedKph ?? 0,
+          vehicleSpeed: vehicle.vehicleSpeed ?? 0,
+          lastSeen: vehicle.lastSeen,
           brand: vehicle.brand,
           siteId: vehicle.siteId,
           model: vehicle.model,
-          type: 'vehicle'
+          type: 'vehicle',
+          lat: vehicle.location?.lat ?? vehicle.lat ?? null,
+          lon: vehicle.location?.lng ?? vehicle.lon ?? null,
+          currentMemberName: vehicle.currentMember?.name ?? null,
+          currentMemberPhone: vehicle.currentMember?.phone ?? null
         }
       }))
   }
@@ -314,16 +322,22 @@ function bindVehicleEvents(): void {
   })
 }
 
+function findVehicleById(id: string): Vehicle | undefined {
+  return props.vehicles?.find(vehicle => vehicle.id === id)
+}
+
 function handleClick(e: maplibregl.MapMouseEvent): void {
   const feature = e.features?.[0]
   if (feature?.properties && map) {
-    const properties = feature.properties
-    
+    const properties = feature.properties as Record<string, any>
+    const vehicleId = properties.id as string | undefined
+    const vehicle = vehicleId ? findVehicleById(vehicleId) : undefined
+
     // 關閉現有的彈出窗格
     if (popup) {
       popup.remove()
     }
-    
+
     // 取得狀態文字和樣式 (使用與 showVehiclePopup 相同的邏輯)
     const getStatusText = (status: string) => {
       const statusMap: Record<string, string> = {
@@ -358,7 +372,17 @@ function handleClick(e: maplibregl.MapMouseEvent): void {
       }
       return classMap[status] || 'bg-gray-100 text-gray-800'
     }
-    
+
+    const vehicleStatus = vehicle?.status || (properties.status as string)
+    const batteryPct = vehicle?.batteryPct ?? vehicle?.batteryLevel ?? properties.batteryPct ?? properties.batteryLevel ?? 0
+    const speed = vehicle?.vehicleSpeed || vehicle?.speedKph || (vehicle as any)?.speed || (properties.vehicleSpeed as number | undefined) || (properties.speedKph as number | undefined) || (properties.speed as number | undefined) || 0
+    const lat = vehicle?.lat ?? vehicle?.location?.lat ?? properties.lat ?? feature.geometry?.coordinates?.[1]
+    const lon = vehicle?.lon ?? vehicle?.location?.lng ?? properties.lon ?? feature.geometry?.coordinates?.[0]
+    const lastSeen = vehicle?.lastSeen ?? vehicle?.lastUpdate ?? properties.lastSeen ?? new Date().toISOString()
+    const currentMember = vehicle?.currentMember
+    const memberName = currentMember?.name ?? (properties.currentMemberName as string | undefined) ?? (properties.registeredUser as string | undefined) ?? ''
+    const memberPhone = currentMember?.phone ?? (properties.currentMemberPhone as string | undefined) ?? ''
+
     const getRelativeTime = (isoString: string) => {
       const now = new Date()
       const time = new Date(isoString)
@@ -377,36 +401,37 @@ function handleClick(e: maplibregl.MapMouseEvent): void {
     const popupContent = `
       <div class="p-2 w-64">
         <div class="mb-2">
-          <h4 class="text-base font-semibold text-gray-900">${properties.id}</h4>
+          <h4 class="text-base font-semibold text-gray-900">${vehicleId ?? '未知車輛'}</h4>
         </div>
         
         <div class="grid grid-cols-2 gap-1.5 text-xs">
           <div class="bg-gray-50 p-1.5 rounded text-center">
             <div class="text-gray-600 mb-1">狀態</div>
-            <span class="${getStatusBadgeClass(properties.status)} px-1.5 py-0.5 rounded-full text-xs font-medium">
-              ${getStatusText(properties.status)}
+            <span class="${getStatusBadgeClass(vehicleStatus)} px-1.5 py-0.5 rounded-full text-xs font-medium">
+              ${getStatusText(vehicleStatus)}
             </span>
           </div>
           <div class="bg-gray-50 p-1.5 rounded text-center">
             <div class="text-gray-600 mb-1">電量</div>
-            <div class="font-medium text-gray-900">${properties.batteryPct || properties.battery || 0}%</div>
+            <div class="font-medium text-gray-900">${batteryPct}%</div>
           </div>
           <div class="bg-gray-50 p-1.5 rounded text-center">
             <div class="text-gray-600 mb-1">速度</div>
-            <div class="font-medium text-gray-900">${properties.speedKph || properties.speed || 0} km/h</div>
+            <div class="font-medium text-gray-900">${speed} km/h</div>
           </div>
           <div class="bg-gray-50 p-1.5 rounded text-center">
             <div class="text-gray-600 mb-1">經緯度</div>
-            <div class="font-medium text-gray-900 font-mono">${properties.lat?.toFixed(6) || 'N/A'}, ${properties.lng || properties.lon ? (properties.lng || properties.lon).toFixed(6) : 'N/A'}</div>
+            <div class="font-medium text-gray-900 font-mono">${typeof lat === 'number' ? lat.toFixed(6) : 'N/A'}, ${typeof lon === 'number' ? lon.toFixed(6) : 'N/A'}</div>
           </div>
           <div class="bg-gray-50 p-1.5 rounded col-span-2 text-center">
             <div class="text-gray-600 mb-1">最後更新</div>
-            <div class="font-medium text-gray-900">${getRelativeTime(properties.lastSeen || new Date().toISOString())}</div>
+            <div class="font-medium text-gray-900">${getRelativeTime(lastSeen)}</div>
           </div>
-          ${(properties.status === '使用中' || properties.status === 'in-use') && properties.registeredUser ? `
+          ${(vehicleStatus === '使用中' || vehicleStatus === 'in-use') && memberName ? `
           <div class="bg-blue-50 p-1.5 rounded col-span-2 text-center">
             <div class="text-gray-600 mb-1">使用者</div>
-            <div class="font-medium text-blue-700">${properties.registeredUser}</div>
+            <div class="font-medium text-blue-700">${memberName}</div>
+            ${memberPhone ? `<div class="text-blue-600 text-xs mt-1">${memberPhone}</div>` : ''}
           </div>
           ` : ''}
         </div>
@@ -425,7 +450,7 @@ function handleClick(e: maplibregl.MapMouseEvent): void {
       .addTo(map)
       
     // 同時發送選擇事件（保持原有功能）
-    emit('select', properties.id)
+    emit('select', vehicleId ?? properties.id)
   }
 }
 

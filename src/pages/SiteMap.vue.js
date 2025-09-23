@@ -27,6 +27,18 @@ const alertsStore = useAlerts();
 const returnsStore = useReturns();
 const rentalsStore = useRentals();
 const auth = useAuth();
+// 權限控制
+const canViewHistory = computed(() => {
+    var _a;
+    const role = (_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId;
+    return role === 'admin' || role === 'staff';
+});
+// 監聽權限變化，如果沒有權限查看歷史，自動切換到即時模式
+watch(canViewHistory, (hasPermission) => {
+    if (!hasPermission && displayMode.value === 'history') {
+        displayMode.value = 'realtime';
+    }
+});
 // 響應式狀態
 const showSetupGuide = ref(false);
 const showSeedGuide = ref(false);
@@ -285,9 +297,10 @@ const mockVehicleTraces = computed(() => ({
 // 計算車輛分布的中心點和最佳縮放級別
 const mapCenter = computed(() => {
     if (displayMode.value === 'history') {
+        const tracesData = filteredVehicleTraces.value || {};
         const traces = selectedTraceVehicles.value.length
-            ? selectedTraceVehicles.value.map(id => filteredVehicleTraces.value[id]).filter(Boolean)
-            : Object.values(filteredVehicleTraces.value);
+            ? selectedTraceVehicles.value.map(id => tracesData[id]).filter(Boolean)
+            : Object.values(tracesData);
         const points = traces.flat().filter(point => typeof (point === null || point === void 0 ? void 0 : point.lat) === 'number' && typeof (point === null || point === void 0 ? void 0 : point.lon) === 'number');
         if (points.length > 0) {
             const lats = points.map(point => point.lat);
@@ -349,7 +362,7 @@ const mapCenter = computed(() => {
 });
 // 軌跡過濾相關計算屬性
 const availableTraceVehicles = computed(() => {
-    const traces = filteredVehicleTraces.value;
+    const traces = filteredVehicleTraces.value || {};
     const vehicleColors = [
         '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
         '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9'
@@ -365,19 +378,21 @@ const availableTraceVehicles = computed(() => {
     });
 });
 const filteredTraces = computed(() => {
+    const traces = filteredVehicleTraces.value || {};
     if (selectedTraceVehicles.value.length === 0) {
-        return filteredVehicleTraces.value;
+        return traces;
     }
     const filtered = {};
     selectedTraceVehicles.value.forEach(vehicleId => {
-        if (filteredVehicleTraces.value[vehicleId]) {
-            filtered[vehicleId] = filteredVehicleTraces.value[vehicleId];
+        if (traces[vehicleId]) {
+            filtered[vehicleId] = traces[vehicleId];
         }
     });
     return filtered;
 });
 const historyRoutes = computed(() => {
-    return Object.entries(filteredTraces.value).map(([traceId, trace]) => {
+    return Object.entries(filteredTraces.value)
+        .map(([traceId, trace]) => {
         var _a, _b, _c, _d;
         return ({
             id: traceId,
@@ -387,6 +402,11 @@ const historyRoutes = computed(() => {
             averageConfidence: (_d = routeTraceMeta.value[traceId]) === null || _d === void 0 ? void 0 : _d.averageConfidence,
             pointCount: trace.length
         });
+    })
+        .sort((a, b) => {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bTime - aTime;
     });
 });
 // 即時車輛過濾邏輯
@@ -561,10 +581,57 @@ function selectVehicle(vehicle) {
     // TODO: 高亮地圖上的車輛位置並居中
 }
 function focusTrace(traceId) {
-    if (!filteredVehicleTraces.value[traceId]) {
+    const traces = filteredVehicleTraces.value || {};
+    if (!traces[traceId]) {
         return;
     }
-    selectedTraceVehicles.value = [traceId];
+    // 如果當前只選中了這個 traceId，則取消選取（顯示全部）
+    if (selectedTraceVehicles.value.length === 1 && selectedTraceVehicles.value[0] === traceId) {
+        // 恢復顯示所有軌跡
+        selectedTraceVehicles.value = Object.keys(traces);
+    }
+    else {
+        // 否則只選中這個 traceId
+        selectedTraceVehicles.value = [traceId];
+        // 計算該路線的中心點並縮放地圖
+        const tracePoints = traces[traceId];
+        if (tracePoints && tracePoints.length > 0) {
+            const validPoints = tracePoints.filter(point => typeof (point === null || point === void 0 ? void 0 : point.lat) === 'number' && typeof (point === null || point === void 0 ? void 0 : point.lon) === 'number');
+            if (validPoints.length > 0) {
+                const lats = validPoints.map(p => p.lat);
+                const lngs = validPoints.map(p => p.lon);
+                const minLat = Math.min(...lats);
+                const maxLat = Math.max(...lats);
+                const minLng = Math.min(...lngs);
+                const maxLng = Math.max(...lngs);
+                // 計算適當的縮放級別
+                const latDiff = maxLat - minLat;
+                const lngDiff = maxLng - minLng;
+                const maxDiff = Math.max(latDiff, lngDiff);
+                let zoom = 14;
+                if (maxDiff > 0.1)
+                    zoom = 11;
+                else if (maxDiff > 0.05)
+                    zoom = 12;
+                else if (maxDiff > 0.02)
+                    zoom = 13;
+                else if (maxDiff > 0.01)
+                    zoom = 14;
+                else
+                    zoom = 15;
+                // 觸發地圖中心更新
+                selectedItem.value = {
+                    type: 'trace',
+                    id: traceId,
+                    center: {
+                        lat: (minLat + maxLat) / 2,
+                        lng: (minLng + maxLng) / 2,
+                        zoom: zoom
+                    }
+                };
+            }
+        }
+    }
 }
 function getStatusText(status) {
     const texts = {
@@ -670,16 +737,23 @@ async function loadHistoryTrajectories() {
                 const rawId = (route === null || route === void 0 ? void 0 : route.id) != null ? String(route.id) : `${(_b = (_a = entry === null || entry === void 0 ? void 0 : entry.member) === null || _a === void 0 ? void 0 : _a.id) !== null && _b !== void 0 ? _b : memberIndex + 1}-${routeIndex + 1}`;
                 const traceId = `route-${rawId}`;
                 const coordinates = Array.isArray((_c = route === null || route === void 0 ? void 0 : route.geometry) === null || _c === void 0 ? void 0 : _c.coordinates) ? route.geometry.coordinates : [];
-                if (coordinates.length < 2)
-                    return;
-                traces[traceId] = coordinates.map((coord) => {
-                    const [lon, lat] = coord || [];
+                const points = coordinates
+                    .map((coord) => {
+                    if (!Array.isArray(coord) || coord.length < 2)
+                        return null;
+                    const [lon, lat] = coord;
+                    if (typeof lat !== 'number' || typeof lon !== 'number')
+                        return null;
                     return {
-                        lat: typeof lat === 'number' ? lat : 0,
-                        lon: typeof lon === 'number' ? lon : 0,
+                        lat,
+                        lon,
                         timestamp: (route === null || route === void 0 ? void 0 : route.created_at) || endIso || startIso || new Date().toISOString()
                     };
-                });
+                })
+                    .filter((point) => Boolean(point));
+                if (points.length < 2)
+                    return;
+                traces[traceId] = points;
                 meta[traceId] = {
                     label: `${memberName} · #${rawId}`,
                     createdAt: route === null || route === void 0 ? void 0 : route.created_at,
@@ -931,61 +1005,65 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.select, __VLS_intrinsicElement
 __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
     value: "realtime",
 });
-__VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
-    value: "history",
-});
+if (__VLS_ctx.canViewHistory) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
+        value: "history",
+    });
+}
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "flex items-center space-x-4" },
 });
-__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-    ...{ class: "flex items-center space-x-3" },
-});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-    ...{ class: "flex items-center space-x-1" },
-});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
-    ...{ class: "text-xs text-gray-500 self-center" },
-});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
-    type: "date",
-    ...{ class: "h-8 px-2 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" },
-});
-(__VLS_ctx.startDate);
-__VLS_asFunctionalElement(__VLS_intrinsicElements.select, __VLS_intrinsicElements.select)({
-    value: (__VLS_ctx.startHour),
-    ...{ class: "h-8 px-2 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" },
-});
-for (const [hour] of __VLS_getVForSourceType((__VLS_ctx.hourOptions))) {
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
-        key: (hour),
-        value: (hour),
+if (__VLS_ctx.displayMode === 'history') {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "flex items-center space-x-3" },
     });
-    (hour);
-}
-__VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
-    ...{ class: "text-gray-400 self-center" },
-});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-    ...{ class: "flex items-center space-x-1" },
-});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
-    ...{ class: "text-xs text-gray-500 self-center" },
-});
-__VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
-    type: "date",
-    ...{ class: "h-8 px-2 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" },
-});
-(__VLS_ctx.endDate);
-__VLS_asFunctionalElement(__VLS_intrinsicElements.select, __VLS_intrinsicElements.select)({
-    value: (__VLS_ctx.endHour),
-    ...{ class: "h-8 px-2 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" },
-});
-for (const [hour] of __VLS_getVForSourceType((__VLS_ctx.hourOptions))) {
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
-        key: (hour),
-        value: (hour),
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "flex items-center space-x-1" },
     });
-    (hour);
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
+        ...{ class: "text-xs text-gray-500 self-center" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
+        type: "date",
+        ...{ class: "h-8 px-2 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" },
+    });
+    (__VLS_ctx.startDate);
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.select, __VLS_intrinsicElements.select)({
+        value: (__VLS_ctx.startHour),
+        ...{ class: "h-8 px-2 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" },
+    });
+    for (const [hour] of __VLS_getVForSourceType((__VLS_ctx.hourOptions))) {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
+            key: (hour),
+            value: (hour),
+        });
+        (hour);
+    }
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+        ...{ class: "text-gray-400 self-center" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "flex items-center space-x-1" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
+        ...{ class: "text-xs text-gray-500 self-center" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
+        type: "date",
+        ...{ class: "h-8 px-2 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" },
+    });
+    (__VLS_ctx.endDate);
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.select, __VLS_intrinsicElements.select)({
+        value: (__VLS_ctx.endHour),
+        ...{ class: "h-8 px-2 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" },
+    });
+    for (const [hour] of __VLS_getVForSourceType((__VLS_ctx.hourOptions))) {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
+            key: (hour),
+            value: (hour),
+        });
+        (hour);
+    }
 }
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "relative" },
@@ -1051,7 +1129,7 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.h3, __VLS_intrinsicElements.h3
     ...{ class: "text-lg font-semibold text-gray-900" },
 });
 (__VLS_ctx.displayMode === 'history'
-    ? `軌跡過濾 (${Object.keys(__VLS_ctx.filteredTraces).length}/${Object.keys(__VLS_ctx.filteredVehicleTraces.value).length})`
+    ? `軌跡過濾 (${Object.keys(__VLS_ctx.filteredTraces || {}).length}/${Object.keys(__VLS_ctx.filteredVehicleTraces || {}).length})`
     : `車輛過濾 (${__VLS_ctx.filteredRealtimeVehicles.length}/${__VLS_ctx.totalVehicles})`);
 if (__VLS_ctx.displayMode === 'history') {
     /** @type {[typeof VehicleTraceFilter, ]} */ ;
@@ -1804,6 +1882,7 @@ const __VLS_self = (await import('vue')).defineComponent({
             VehicleTraceFilter: VehicleTraceFilter,
             VehicleFilter: VehicleFilter,
             sitesStore: sitesStore,
+            canViewHistory: canViewHistory,
             selectedDomain: selectedDomain,
             displayMode: displayMode,
             selectedItem: selectedItem,

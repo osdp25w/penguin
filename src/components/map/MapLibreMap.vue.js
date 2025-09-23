@@ -137,22 +137,33 @@ function addVehiclesLayer() {
         type: 'FeatureCollection',
         features: props.vehicles
             .filter(vehicle => vehicle.location) // 只顯示有位置資訊的車輛
-            .map(vehicle => ({
-            type: 'Feature',
-            geometry: {
-                type: 'Point',
-                coordinates: [vehicle.location.lng, vehicle.location.lat]
-            },
-            properties: {
-                id: vehicle.id,
-                status: vehicle.status,
-                batteryLevel: vehicle.batteryLevel,
-                brand: vehicle.brand,
-                siteId: vehicle.siteId,
-                model: vehicle.model,
-                type: 'vehicle'
-            }
-        }))
+            .map(vehicle => {
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
+            return ({
+                type: 'Feature',
+                geometry: {
+                    type: 'Point',
+                    coordinates: [vehicle.location.lng, vehicle.location.lat]
+                },
+                properties: {
+                    id: vehicle.id,
+                    status: vehicle.status,
+                    batteryLevel: vehicle.batteryLevel,
+                    batteryPct: vehicle.batteryPct,
+                    speedKph: (_b = (_a = vehicle.vehicleSpeed) !== null && _a !== void 0 ? _a : vehicle.speedKph) !== null && _b !== void 0 ? _b : 0,
+                    vehicleSpeed: (_c = vehicle.vehicleSpeed) !== null && _c !== void 0 ? _c : 0,
+                    lastSeen: vehicle.lastSeen,
+                    brand: vehicle.brand,
+                    siteId: vehicle.siteId,
+                    model: vehicle.model,
+                    type: 'vehicle',
+                    lat: (_f = (_e = (_d = vehicle.location) === null || _d === void 0 ? void 0 : _d.lat) !== null && _e !== void 0 ? _e : vehicle.lat) !== null && _f !== void 0 ? _f : null,
+                    lon: (_j = (_h = (_g = vehicle.location) === null || _g === void 0 ? void 0 : _g.lng) !== null && _h !== void 0 ? _h : vehicle.lon) !== null && _j !== void 0 ? _j : null,
+                    currentMemberName: (_l = (_k = vehicle.currentMember) === null || _k === void 0 ? void 0 : _k.name) !== null && _l !== void 0 ? _l : null,
+                    currentMemberPhone: (_o = (_m = vehicle.currentMember) === null || _m === void 0 ? void 0 : _m.phone) !== null && _o !== void 0 ? _o : null
+                }
+            });
+        })
     };
     // 移除既有圖層
     if (map.getSource('vehicles')) {
@@ -248,11 +259,17 @@ function bindVehicleEvents() {
             map.getCanvas().style.cursor = '';
     });
 }
+function findVehicleById(id) {
+    var _a;
+    return (_a = props.vehicles) === null || _a === void 0 ? void 0 : _a.find(vehicle => vehicle.id === id);
+}
 function handleClick(e) {
-    var _a, _b;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0;
     const feature = (_a = e.features) === null || _a === void 0 ? void 0 : _a[0];
     if ((feature === null || feature === void 0 ? void 0 : feature.properties) && map) {
         const properties = feature.properties;
+        const vehicleId = properties.id;
+        const vehicle = vehicleId ? findVehicleById(vehicleId) : undefined;
         // 關閉現有的彈出窗格
         if (popup) {
             popup.remove();
@@ -290,6 +307,15 @@ function handleClick(e) {
             };
             return classMap[status] || 'bg-gray-100 text-gray-800';
         };
+        const vehicleStatus = (vehicle === null || vehicle === void 0 ? void 0 : vehicle.status) || properties.status;
+        const batteryPct = (_e = (_d = (_c = (_b = vehicle === null || vehicle === void 0 ? void 0 : vehicle.batteryPct) !== null && _b !== void 0 ? _b : vehicle === null || vehicle === void 0 ? void 0 : vehicle.batteryLevel) !== null && _c !== void 0 ? _c : properties.batteryPct) !== null && _d !== void 0 ? _d : properties.batteryLevel) !== null && _e !== void 0 ? _e : 0;
+        const speed = (vehicle === null || vehicle === void 0 ? void 0 : vehicle.vehicleSpeed) || (vehicle === null || vehicle === void 0 ? void 0 : vehicle.speedKph) || (vehicle === null || vehicle === void 0 ? void 0 : vehicle.speed) || properties.vehicleSpeed || properties.speedKph || properties.speed || 0;
+        const lat = (_j = (_h = (_f = vehicle === null || vehicle === void 0 ? void 0 : vehicle.lat) !== null && _f !== void 0 ? _f : (_g = vehicle === null || vehicle === void 0 ? void 0 : vehicle.location) === null || _g === void 0 ? void 0 : _g.lat) !== null && _h !== void 0 ? _h : properties.lat) !== null && _j !== void 0 ? _j : (_l = (_k = feature.geometry) === null || _k === void 0 ? void 0 : _k.coordinates) === null || _l === void 0 ? void 0 : _l[1];
+        const lon = (_q = (_p = (_m = vehicle === null || vehicle === void 0 ? void 0 : vehicle.lon) !== null && _m !== void 0 ? _m : (_o = vehicle === null || vehicle === void 0 ? void 0 : vehicle.location) === null || _o === void 0 ? void 0 : _o.lng) !== null && _p !== void 0 ? _p : properties.lon) !== null && _q !== void 0 ? _q : (_s = (_r = feature.geometry) === null || _r === void 0 ? void 0 : _r.coordinates) === null || _s === void 0 ? void 0 : _s[0];
+        const lastSeen = (_v = (_u = (_t = vehicle === null || vehicle === void 0 ? void 0 : vehicle.lastSeen) !== null && _t !== void 0 ? _t : vehicle === null || vehicle === void 0 ? void 0 : vehicle.lastUpdate) !== null && _u !== void 0 ? _u : properties.lastSeen) !== null && _v !== void 0 ? _v : new Date().toISOString();
+        const currentMember = vehicle === null || vehicle === void 0 ? void 0 : vehicle.currentMember;
+        const memberName = (_y = (_x = (_w = currentMember === null || currentMember === void 0 ? void 0 : currentMember.name) !== null && _w !== void 0 ? _w : properties.currentMemberName) !== null && _x !== void 0 ? _x : properties.registeredUser) !== null && _y !== void 0 ? _y : '';
+        const memberPhone = (_0 = (_z = currentMember === null || currentMember === void 0 ? void 0 : currentMember.phone) !== null && _z !== void 0 ? _z : properties.currentMemberPhone) !== null && _0 !== void 0 ? _0 : '';
         const getRelativeTime = (isoString) => {
             const now = new Date();
             const time = new Date(isoString);
@@ -309,36 +335,37 @@ function handleClick(e) {
         const popupContent = `
       <div class="p-2 w-64">
         <div class="mb-2">
-          <h4 class="text-base font-semibold text-gray-900">${properties.id}</h4>
+          <h4 class="text-base font-semibold text-gray-900">${vehicleId !== null && vehicleId !== void 0 ? vehicleId : '未知車輛'}</h4>
         </div>
         
         <div class="grid grid-cols-2 gap-1.5 text-xs">
           <div class="bg-gray-50 p-1.5 rounded text-center">
             <div class="text-gray-600 mb-1">狀態</div>
-            <span class="${getStatusBadgeClass(properties.status)} px-1.5 py-0.5 rounded-full text-xs font-medium">
-              ${getStatusText(properties.status)}
+            <span class="${getStatusBadgeClass(vehicleStatus)} px-1.5 py-0.5 rounded-full text-xs font-medium">
+              ${getStatusText(vehicleStatus)}
             </span>
           </div>
           <div class="bg-gray-50 p-1.5 rounded text-center">
             <div class="text-gray-600 mb-1">電量</div>
-            <div class="font-medium text-gray-900">${properties.batteryPct || properties.battery || 0}%</div>
+            <div class="font-medium text-gray-900">${batteryPct}%</div>
           </div>
           <div class="bg-gray-50 p-1.5 rounded text-center">
             <div class="text-gray-600 mb-1">速度</div>
-            <div class="font-medium text-gray-900">${properties.speedKph || properties.speed || 0} km/h</div>
+            <div class="font-medium text-gray-900">${speed} km/h</div>
           </div>
           <div class="bg-gray-50 p-1.5 rounded text-center">
             <div class="text-gray-600 mb-1">經緯度</div>
-            <div class="font-medium text-gray-900 font-mono">${((_b = properties.lat) === null || _b === void 0 ? void 0 : _b.toFixed(6)) || 'N/A'}, ${properties.lng || properties.lon ? (properties.lng || properties.lon).toFixed(6) : 'N/A'}</div>
+            <div class="font-medium text-gray-900 font-mono">${typeof lat === 'number' ? lat.toFixed(6) : 'N/A'}, ${typeof lon === 'number' ? lon.toFixed(6) : 'N/A'}</div>
           </div>
           <div class="bg-gray-50 p-1.5 rounded col-span-2 text-center">
             <div class="text-gray-600 mb-1">最後更新</div>
-            <div class="font-medium text-gray-900">${getRelativeTime(properties.lastSeen || new Date().toISOString())}</div>
+            <div class="font-medium text-gray-900">${getRelativeTime(lastSeen)}</div>
           </div>
-          ${(properties.status === '使用中' || properties.status === 'in-use') && properties.registeredUser ? `
+          ${(vehicleStatus === '使用中' || vehicleStatus === 'in-use') && memberName ? `
           <div class="bg-blue-50 p-1.5 rounded col-span-2 text-center">
             <div class="text-gray-600 mb-1">使用者</div>
-            <div class="font-medium text-blue-700">${properties.registeredUser}</div>
+            <div class="font-medium text-blue-700">${memberName}</div>
+            ${memberPhone ? `<div class="text-blue-600 text-xs mt-1">${memberPhone}</div>` : ''}
           </div>
           ` : ''}
         </div>
@@ -355,7 +382,7 @@ function handleClick(e) {
             .setHTML(popupContent)
             .addTo(map);
         // 同時發送選擇事件（保持原有功能）
-        emit('select', properties.id);
+        emit('select', vehicleId !== null && vehicleId !== void 0 ? vehicleId : properties.id);
     }
 }
 // 輔助函數：獲取狀態顯示文字
@@ -420,8 +447,16 @@ watch(() => props.vehicleTraces, () => {
 watch(() => props.selected, (selectedItem) => {
     if (!map || !selectedItem)
         return;
+    // 如果選中的是軌跡（從 focusTrace 函數傳來）
+    if ('type' in selectedItem && selectedItem.type === 'trace' && 'center' in selectedItem) {
+        map.flyTo({
+            center: [selectedItem.center.lng, selectedItem.center.lat],
+            zoom: selectedItem.center.zoom,
+            duration: 1000
+        });
+    }
     // 如果選中的是車輛，移動地圖到車輛位置
-    if ('lat' in selectedItem && 'lon' in selectedItem) {
+    else if ('lat' in selectedItem && 'lon' in selectedItem) {
         map.flyTo({
             center: [selectedItem.lon, selectedItem.lat],
             zoom: 16,

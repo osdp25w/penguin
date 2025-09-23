@@ -429,6 +429,19 @@ const currentRental = ref<any>(null)
 const routeTraceMeta = ref<Record<string, RouteTraceMeta>>({})
 const historyLoading = ref(false)
 const historyError = ref<string | null>(null)
+
+interface HistoryPagination {
+  count: number
+  next: string | null
+  previous: string | null
+}
+
+const historyPagination = ref<HistoryPagination>({
+  count: 0,
+  next: null,
+  previous: null
+})
+
 let historyRequestToken = 0
 
 const seedMockEnabled = computed(() => import.meta.env.VITE_SEED_MOCK === '1')
@@ -1079,18 +1092,29 @@ async function loadHistoryTrajectories(): Promise<void> {
 
     const query = params.toString()
     const response: any = await http.get(`/api/statistic/routes/${query ? `?${query}` : ''}`)
-    const payload = Array.isArray(response?.data) ? response.data : []
+
+    const dataSection = response?.data ?? {}
+    let entries: any[] = []
+    if (Array.isArray(dataSection?.results)) {
+      entries = dataSection.results
+    } else if (Array.isArray(dataSection)) {
+      entries = dataSection
+    } else if (Array.isArray(response?.results)) {
+      entries = response.results
+    }
 
     const traces: Record<string, Array<{ lat: number; lon: number; timestamp: string }>> = {}
     const meta: Record<string, RouteTraceMeta> = {}
 
-    payload.forEach((entry: any, memberIndex: number) => {
-      const memberName: string = entry?.member?.full_name || `會員 #${entry?.member?.id ?? memberIndex + 1}`
+    entries.forEach((entry: any, memberIndex: number) => {
+      const member = entry?.member || {}
+      const memberId = member?.id ?? memberIndex + 1
+      const memberName: string = member?.full_name || `會員 #${memberId}`
       const routes = Array.isArray(entry?.routes) ? entry.routes : []
 
       routes.forEach((route: any, routeIndex: number) => {
-        const rawId = route?.id != null ? String(route.id) : `${entry?.member?.id ?? memberIndex + 1}-${routeIndex + 1}`
-        const traceId = `route-${rawId}`
+        const routeIdPart = route?.id != null ? String(route.id) : `${routeIndex + 1}`
+        const traceId = `member-${memberId}-route-${routeIdPart}`
         const coordinates = Array.isArray(route?.geometry?.coordinates) ? route.geometry.coordinates : []
 
         const points = coordinates
@@ -1104,14 +1128,14 @@ async function loadHistoryTrajectories(): Promise<void> {
               timestamp: route?.created_at || endIso || startIso || new Date().toISOString()
             }
           })
-          .filter((point): point is { lat: number; lon: number; timestamp: string } => Boolean(point))
+          .filter((point: { lat: number; lon: number; timestamp: string } | null): point is { lat: number; lon: number; timestamp: string } => Boolean(point))
 
         if (points.length < 2) return
 
         traces[traceId] = points
 
         meta[traceId] = {
-          label: `${memberName} · #${rawId}`,
+          label: `${memberName} · #${routeIdPart}`,
           createdAt: route?.created_at,
           distanceMeters: route?.distance_meters,
           averageConfidence: route?.average_confidence,
@@ -1121,6 +1145,17 @@ async function loadHistoryTrajectories(): Promise<void> {
     })
 
     if (requestId === historyRequestToken) {
+      const rawCount = dataSection?.count
+      const parsedCount = typeof rawCount === 'number'
+        ? rawCount
+        : (typeof rawCount === 'string' && rawCount.trim() !== '' ? Number(rawCount) : null)
+      const count = typeof parsedCount === 'number' && Number.isFinite(parsedCount)
+        ? parsedCount
+        : entries.length
+      const next = typeof dataSection?.next === 'string' ? dataSection.next : null
+      const previous = typeof dataSection?.previous === 'string' ? dataSection.previous : null
+
+      historyPagination.value = { count, next, previous }
       filteredVehicleTraces.value = traces
       routeTraceMeta.value = meta
       selectedTraceVehicles.value = Object.keys(traces)
@@ -1132,6 +1167,7 @@ async function loadHistoryTrajectories(): Promise<void> {
       filteredVehicleTraces.value = {}
       routeTraceMeta.value = {}
       selectedTraceVehicles.value = []
+      historyPagination.value = { count: 0, next: null, previous: null }
     }
   } finally {
     if (requestId === historyRequestToken) {
