@@ -13,12 +13,17 @@
             <div class="flex items-center space-x-2">
               <label class="text-sm font-medium text-gray-700">場域地點</label>
               <select 
-                v-model="selectedDomain"
+                v-model="selectedSiteId"
                 class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                @change="handleDomainChange"
               >
-                <option value="huali">華麗轉身</option>
-                <option value="shunqi">順其自然</option>
+                <option value="">全部場域</option>
+                <option
+                  v-for="site in sitesStore.list"
+                  :key="site.id"
+                  :value="site.id"
+                >
+                  {{ site.name }}
+                </option>
               </select>
             </div>
             
@@ -220,7 +225,10 @@
                   </div>
                   <div class="flex items-center space-x-1">
                     <i class="i-ph-map-pin w-4 h-4"></i>
-                    <span>{{ vehicle.lat.toFixed(6) }}, {{ vehicle.lon.toFixed(6) }}</span>
+                    <span>
+                      {{ typeof vehicle.lat === 'number' ? vehicle.lat.toFixed(6) : '—' }},
+                      {{ typeof vehicle.lon === 'number' ? vehicle.lon.toFixed(6) : '—' }}
+                    </span>
                   </div>
                   <div class="flex items-center space-x-1">
                     <i class="i-ph-clock w-4 h-4"></i>
@@ -369,7 +377,11 @@ const showRentModal = ref(false)
 const recentReturns = ref<any[]>([])
 
 // 新的響應式狀態
-const selectedDomain = ref('huali')
+const selectedSiteId = ref<string>('')
+const selectedSite = computed(() => {
+  if (!selectedSiteId.value) return null
+  return sitesStore.list.find(site => site.id === selectedSiteId.value) ?? null
+})
 const displayMode = ref('realtime')
 const selectedItem = ref<any>(null)
 const highlightedVehicle = ref<string | null>(null)
@@ -445,6 +457,26 @@ const historyPagination = ref<HistoryPagination>({
 let historyRequestToken = 0
 
 const seedMockEnabled = computed(() => import.meta.env.VITE_SEED_MOCK === '1')
+
+const SITE_RADIUS_KM = 0.5
+
+function haversineDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const toRad = (deg: number) => deg * Math.PI / 180
+  const R = 6371 // Earth radius in km
+  const dLat = toRad(lat2 - lat1)
+  const dLon = toRad(lon2 - lon1)
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
+function isVehicleNearSite(vehicle: any, site: Site, radiusKm = SITE_RADIUS_KM): boolean {
+  const lat = typeof vehicle?.lat === 'number' ? vehicle.lat : vehicle?.location?.lat
+  const lon = typeof vehicle?.lon === 'number' ? vehicle.lon : vehicle?.location?.lng
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false
+  const distance = haversineDistanceKm(lat, lon, site.location.lat, site.location.lng)
+  return distance <= radiusKm
+}
 
 function formatDateToLocalHour(date: Date): string {
   const localDate = new Date(date.getTime())
@@ -644,7 +676,20 @@ const mockVehicleTraces = computed(() => ({
 */
 
 // 計算車輛分布的中心點和最佳縮放級別
+const DEFAULT_CENTER = { lat: 23.9739, lng: 121.6014 }
+
 const mapCenter = computed(() => {
+  if (displayMode.value === 'realtime') {
+    const site = selectedSite.value
+    if (site) {
+      return {
+        lat: site.location.lat,
+        lng: site.location.lng,
+        zoom: 15
+      }
+    }
+  }
+
   if (displayMode.value === 'history') {
     const tracesData = filteredVehicleTraces.value || {}
     const traces = selectedTraceVehicles.value.length
@@ -675,13 +720,30 @@ const mapCenter = computed(() => {
     }
   }
 
-  const vehicles = realtimeVehicles.value
-  if (vehicles.length === 0) {
-    return { lat: 23.9739, lng: 121.6014, zoom: 12 }
+  const site = selectedSite.value
+  if (displayMode.value === 'realtime' && site) {
+    return {
+      lat: site.location.lat,
+      lng: site.location.lng,
+      zoom: 15
+    }
   }
 
-  const lats = vehicles.map((v:any) => v.lat || v.location?.lat).filter(Boolean)
-  const lngs = vehicles.map((v:any) => v.lon || v.location?.lng).filter(Boolean)
+  const vehicles = realtimeVehicles.value
+  if (vehicles.length === 0) {
+    return { ...DEFAULT_CENTER, zoom: 12 }
+  }
+
+  const lats = vehicles
+    .map((v:any) => typeof v.lat === 'number' ? v.lat : v.location?.lat)
+    .filter((value: any): value is number => Number.isFinite(value))
+  const lngs = vehicles
+    .map((v:any) => typeof v.lon === 'number' ? v.lon : v.location?.lng)
+    .filter((value: any): value is number => Number.isFinite(value))
+
+  if (lats.length === 0 || lngs.length === 0) {
+    return { ...DEFAULT_CENTER, zoom: 12 }
+  }
 
   const minLat = Math.min(...lats)
   const maxLat = Math.max(...lats)
@@ -763,6 +825,16 @@ const historyRoutes = computed(() => {
 const filteredRealtimeVehicles = computed(() => {
   let list: any[] = realtimeVehicles.value
 
+  const brandFilters = sitesStore.filters.brands
+  if (brandFilters.length > 0) {
+    // 後端尚未提供車輛與場域直接關聯，暫不依品牌過濾
+  }
+
+  const site = selectedSite.value
+  if (site) {
+    list = list.filter(vehicle => isVehicleNearSite(vehicle, site))
+  }
+
   // 權限濾除：member 不顯示使用中
   const role = auth.user?.roleId
   if (role !== 'admin' && role !== 'staff') {
@@ -805,6 +877,15 @@ const filteredRealtimeVehicles = computed(() => {
 // 供右側 VehicleFilter 顯示的候選清單（受上方搜尋與角色限制影響）
 const availableVehiclesForFilter = computed(() => {
   let list: any[] = realtimeVehicles.value
+
+  const brandFilters = sitesStore.filters.brands
+  if (brandFilters.length > 0) {
+    // 後端尚未提供車輛與場域直接關聯，暫不依品牌過濾
+  }
+  const site = selectedSite.value
+  if (site) {
+    list = list.filter(vehicle => isVehicleNearSite(vehicle, site))
+  }
   // 角色限制：member 不顯示使用中（但保留自己的租借中車輛）
   const role = auth.user?.roleId
   if (role !== 'admin' && role !== 'staff') {
@@ -841,9 +922,31 @@ watch(timeRange, () => {
   }
 }, { deep: true })
 
-watch(selectedDomain, () => {
+watch(selectedSite, (site) => {
+  if (site) {
+    sitesStore.selectSite(site)
+    selectedItem.value = {
+      ...site,
+      type: 'site',
+      center: {
+        lat: site.location.lat,
+        lng: site.location.lng,
+        zoom: 15
+      },
+      lat: site.location.lat,
+      lon: site.location.lng
+    }
+    selectionApplied.value = false
+  } else {
+    sitesStore.selectSite(undefined)
+    selectedItem.value = null
+    selectionApplied.value = false
+  }
+
   if (displayMode.value === 'history') {
     loadHistoryTrajectories()
+  } else {
+    loadRealtimePositions()
   }
 })
 
@@ -862,6 +965,23 @@ const availableVehicles = computed(() => {
   return sitesStore.filteredSites.reduce((sum, site) => sum + site.availableCount, 0)
 })
 
+const siteVehicleCounts = computed(() => {
+  const counts = new Map<string, number>()
+  sitesStore.list.forEach(site => counts.set(site.id, 0))
+
+  realtimeVehicles.value.forEach(vehicle => {
+    const lat = typeof vehicle?.lat === 'number' ? vehicle.lat : vehicle?.location?.lat
+    const lon = typeof vehicle?.lon === 'number' ? vehicle.lon : vehicle?.location?.lng
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return
+    const nearest = findNearestSite(lat, lon)
+    if (nearest) {
+      counts.set(nearest.id, (counts.get(nearest.id) ?? 0) + 1)
+    }
+  })
+
+  return counts
+})
+
 const siteVehicles = computed(() => {
   if (!sitesStore.selected) return []
   return vehiclesStore.getVehiclesBySite(sitesStore.selected.id)
@@ -874,30 +994,33 @@ const recentAlerts = computed(() => {
 
 // 圖表配置
 const chartTheme = 'light'
-const chartOption = computed(() => ({
-  grid: { top: 20, right: 20, bottom: 20, left: 40 },
-  xAxis: {
-    type: 'category',
-    data: ['華麗轉身', '順其自然'],
-    axisLine: { show: false },
-    axisTick: { show: false }
-  },
-  yAxis: {
-    type: 'value',
-    axisLine: { show: false },
-    axisTick: { show: false },
-    splitLine: { lineStyle: { color: '#f3f4f6' } }
-  },
-  series: [{
-    data: [
-      sitesStore.filteredSites.filter(s => s.brand === 'huali').length,
-      sitesStore.filteredSites.filter(s => s.brand === 'shunqi').length
-    ],
-    type: 'bar',
-    itemStyle: { color: '#6366f1' },
-    barWidth: '40%'
-  }]
-}))
+const chartOption = computed(() => {
+  const labels = sitesStore.list.map(site => site.name)
+  const counts = siteVehicleCounts.value
+  const values = sitesStore.list.map(site => counts.get(site.id) ?? 0)
+
+  return {
+    grid: { top: 20, right: 20, bottom: 20, left: 40 },
+    xAxis: {
+      type: 'category',
+      data: labels,
+      axisLine: { show: false },
+      axisTick: { show: false }
+    },
+    yAxis: {
+      type: 'value',
+      axisLine: { show: false },
+      axisTick: { show: false },
+      splitLine: { lineStyle: { color: '#f3f4f6' } }
+    },
+    series: [{
+      data: values,
+      type: 'bar',
+      itemStyle: { color: '#6366f1' },
+      barWidth: '40%'
+    }]
+  }
+})
 
 // 工具函式
 function getStatusBadgeClass(status: string): string {
@@ -1014,10 +1137,6 @@ function getStatusText(status: string): string {
   return texts[status as keyof typeof texts] || status
 }
 
-function getBrandText(brand: string): string {
-  return brand === 'huali' ? '華麗轉身' : '順騎自然'
-}
-
 function getAlertColor(severity: string): string {
   const colors = {
     info: 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300',
@@ -1038,13 +1157,6 @@ function formatTime(dateString: string): string {
   return new Date(dateString).toLocaleString('zh-TW')
 }
 
-async function handleDomainChange(): Promise<void> {
-  // 根據選擇的場域篩選資料
-  console.log('場域切換至:', selectedDomain.value)
-  // TODO: 根據場域更新地圖上的車輛標記
-  await loadVehiclesByDomain()
-}
-
 async function handleDisplayModeChange(): Promise<void> {
   console.log('顯示模式切換至:', displayMode.value)
   if (displayMode.value === 'history') {
@@ -1053,16 +1165,6 @@ async function handleDisplayModeChange(): Promise<void> {
   } else {
     // 載入即時位置資料
     await loadRealtimePositions()
-  }
-}
-
-async function loadVehiclesByDomain(): Promise<void> {
-  // 根據選擇的場域載入車輛資料
-  try {
-    console.log(`載入場域 ${selectedDomain.value} 的車輛資料`)
-    // TODO: 呼叫 API 載入特定場域的車輛資料
-  } catch (error) {
-    console.error('載入車輛資料失敗:', error)
   }
 }
 
@@ -1088,7 +1190,9 @@ async function loadHistoryTrajectories(): Promise<void> {
     const params = new URLSearchParams({ limit: '20' })
     if (effectiveStart) params.set('created_at__gte', effectiveStart)
     if (effectiveEnd) params.set('created_at__lte', effectiveEnd)
-    if (selectedDomain.value) params.set('domain', selectedDomain.value)
+    if (selectedSite.value) {
+      params.set('site_id', selectedSite.value.id)
+    }
 
     const query = params.toString()
     const response: any = await http.get(`/api/statistic/routes/${query ? `?${query}` : ''}`)
@@ -1176,10 +1280,108 @@ async function loadHistoryTrajectories(): Promise<void> {
   }
 }
 
+function mapRealtimeStatus(status: string | null | undefined): string {
+  switch ((status ?? '').toLowerCase()) {
+    case 'idle':
+      return 'available'
+    case 'rented':
+      return 'in-use'
+    case 'maintenance':
+      return 'maintenance'
+    case 'error':
+      return 'offline'
+    default:
+      return status ?? 'available'
+  }
+}
+
+function toDecimalCoordinate(raw: any, fallback?: any): number | null {
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw !== 0) {
+    return raw
+  }
+  if (typeof fallback === 'number' && Number.isFinite(fallback) && fallback !== 0) {
+    return fallback / 1_000_000
+  }
+  return null
+}
+
+function findNearestSite(lat: number | null, lng: number | null) {
+  if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return null
+  let nearest: Site | null = null
+  let best = Number.POSITIVE_INFINITY
+  for (const site of sitesStore.list) {
+    const dLat = lat - site.location.lat
+    const dLng = lng - site.location.lng
+    const dist = dLat * dLat + dLng * dLng
+    if (dist < best) {
+      best = dist
+      nearest = site
+    }
+  }
+  return nearest
+}
+
+function mapRealtimeVehicle(entry: any, index: number): any | null {
+  if (!entry) return null
+  const bike = entry?.bike ?? {}
+  const id = bike?.bike_id ?? `realtime-${index}`
+  const lat = toDecimalCoordinate(entry?.lat_decimal, entry?.latitude)
+  const lon = toDecimalCoordinate(entry?.lng_decimal, entry?.longitude)
+  const nearest = findNearestSite(lat, lon)
+
+  const member = entry?.current_member ?? null
+  const memberInfo = member
+    ? {
+        id: member?.id ?? null,
+        name: member?.full_name ?? member?.username ?? '',
+        phone: member?.phone ?? ''
+      }
+    : null
+
+  const location = lat != null && lon != null ? { lat, lng: lon } : null
+
+  return {
+    id,
+    name: bike?.bike_name ?? bike?.bike_id ?? `車輛 ${index + 1}`,
+    model: bike?.bike_model ?? '',
+    speedKph: Number(entry?.speed_kph ?? entry?.vehicle_speed ?? 0) || 0,
+    vehicleSpeed: Number(entry?.speed_kph ?? entry?.vehicle_speed ?? 0) || 0,
+    batteryPct: Number(entry?.soc ?? 0) || 0,
+    batteryLevel: Number(entry?.soc ?? 0) || 0,
+    status: mapRealtimeStatus(entry?.status),
+    originalStatus: entry?.status ?? '',
+    lastSeen: entry?.last_seen ?? entry?.updated_at ?? null,
+    lat,
+    lon,
+    location,
+    siteId: nearest?.id,
+    siteName: nearest?.name,
+    siteBrand: nearest?.brand,
+    brand: nearest?.brand,
+    currentMember: memberInfo,
+    raw: entry
+  }
+}
+
 async function loadRealtimePositions(): Promise<void> {
   try {
-    const { data } = await vehiclesStore.fetchVehiclesPaged({ limit: 200, offset: 0 })
-    realtimeVehicles.value = data
+    const searchParams = new URLSearchParams()
+    searchParams.set('limit', '200')
+    searchParams.set('offset', '0')
+
+    const response: any = await http.get(`/api/bike/realtime-status/?${searchParams.toString()}`)
+    const payload = response?.data ?? response
+    const results: any[] = Array.isArray(payload?.results)
+      ? payload.results
+      : Array.isArray(payload)
+        ? payload
+        : []
+
+    const mapped = results
+      .map((entry, index) => mapRealtimeVehicle(entry, index))
+      .filter((item): item is any => Boolean(item))
+
+    realtimeVehicles.value = mapped
   } catch (error) {
     console.error('載入即時位置失敗:', error)
     realtimeVehicles.value = []
@@ -1197,8 +1399,8 @@ function handleMapSelect(id: string): void {
     // 選擇站點
     const site = sitesStore.list.find(s => s.id === id)
     if (site) {
-      sitesStore.selected = site
-      selectedItem.value = site
+      sitesStore.selectSite(site)
+      selectedSiteId.value = site.id
     }
   }
 }
@@ -1324,19 +1526,18 @@ async function onReturnSuccess(returnRecord: any): Promise<void> {
   if (sitesStore.selected) {
     await Promise.all([
       sitesStore.fetchSites(),
-      vehiclesStore.fetchBySite(sitesStore.selected.id),
       returnsStore.fetchReturns({ siteId: sitesStore.selected.id, limit: 5 })
     ])
+    await loadRealtimePositions()
   }
 }
 
 // 生命週期
 onMounted(async () => {
-  await Promise.all([
-    sitesStore.fetchSites(),
-    bikeMeta.fetchBikeStatusOptions(),
-    loadRealtimePositions()
-  ])
+  await sitesStore.fetchSites()
+
+  await loadRealtimePositions()
+  await bikeMeta.fetchBikeStatusOptions()
 
   // 設置自動重新整理即時資料 (每30秒)
   const refreshInterval = setInterval(async () => {
@@ -1355,12 +1556,13 @@ onMounted(async () => {
 // 監聽選中站點變化
 watch(() => sitesStore.selected, async (newSite) => {
   if (newSite) {
-    const [vehicles, alerts, returns] = await Promise.all([
-      vehiclesStore.fetchBySite(newSite.id),
+    const [alerts, returns] = await Promise.all([
       alertsStore.fetchBySiteSince(newSite.id),
       returnsStore.fetchRecentReturns(newSite.id, 5)
     ])
     recentReturns.value = returns
+  } else {
+    recentReturns.value = []
   }
 })
 </script>
