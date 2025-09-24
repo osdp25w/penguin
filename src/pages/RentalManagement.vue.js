@@ -132,43 +132,61 @@ const toggleSort = (field) => {
         sortConfig.order = 'asc';
     }
 };
-// 清除篩選
-const clearFilters = () => {
-    filters.search = '';
-    filters.status = '';
-    refresh();
-};
-const refresh = async () => {
+const buildQuerySignature = () => JSON.stringify({ search: filters.search.trim(), status: filters.status });
+const activeRequest = ref(null);
+const lastQuerySignature = ref('');
+const refresh = async ({ force = false } = {}) => {
+    const signature = buildQuerySignature();
+    if (!force && signature === lastQuerySignature.value) {
+        return;
+    }
+    if (activeRequest.value) {
+        activeRequest.value.abort();
+        activeRequest.value = null;
+    }
+    const controller = new AbortController();
+    activeRequest.value = controller;
     loading.value = true;
     error.value = '';
     try {
         if (!canAccess.value) {
             rentals.value = [];
+            lastQuerySignature.value = signature;
             return;
         }
-        const { data } = await rentalsStore.fetchStaffRentals({ status: filters.status || undefined });
-        // 如果有選擇狀態篩選，在前端也進行過濾（以防後端沒有正確過濾）
-        let filteredData = data;
-        if (filters.status) {
-            filteredData = data.filter((rental) => {
-                const rentalStatus = rental.rental_status || rental.status;
-                return rentalStatus === filters.status;
-            });
-        }
-        rentals.value = filteredData;
+        const { data } = await rentalsStore.fetchStaffRentals({
+            rentalStatus: filters.status ? filters.status : undefined,
+            search: filters.search.trim() || undefined,
+            signal: controller.signal
+        });
+        rentals.value = data;
         if (selectedRental.value) {
-            const match = filteredData.find(r => r.id === selectedRental.value.id);
+            const match = data.find(r => r.id === selectedRental.value.id);
             if (!match) {
                 selectedRental.value = null;
             }
         }
+        lastQuerySignature.value = signature;
     }
     catch (err) {
+        if ((err === null || err === void 0 ? void 0 : err.name) === 'AbortError') {
+            return;
+        }
         error.value = (err === null || err === void 0 ? void 0 : err.message) || '載入租借紀錄失敗';
     }
     finally {
-        loading.value = false;
+        if (activeRequest.value === controller) {
+            activeRequest.value = null;
+            loading.value = false;
+        }
     }
+};
+const manualRefresh = () => refresh({ force: true });
+// 清除篩選
+const clearFilters = () => {
+    filters.search = '';
+    filters.status = '';
+    manualRefresh();
 };
 const openDetail = async (rental) => {
     selectedRental.value = rental;
@@ -186,8 +204,8 @@ const openDetail = async (rental) => {
         detailLoading.value = false;
     }
 };
-watch(() => filters.status, refresh);
-onMounted(refresh);
+watch(() => filters.status, () => refresh());
+onMounted(() => refresh({ force: true }));
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
 let __VLS_components;

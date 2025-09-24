@@ -313,14 +313,23 @@ export const useRentals = defineStore('rentals', () => {
     memberRentalsLoading.value = false
   }
 
-  async function fetchStaffRentals(params?: { limit?: number; offset?: number; status?: string }): Promise<{ data: any[]; total: number }> {
+  async function fetchStaffRentals(params?: { limit?: number; offset?: number; rentalStatus?: string | string[]; search?: string; signal?: AbortSignal }): Promise<{ data: any[]; total: number }> {
     try {
       const limit = params?.limit ?? 50
       const offset = params?.offset ?? 0
       const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) })
-      if (params?.status) qs.set('status', params.status)
+      const rentalStatus = params?.rentalStatus
+      if (Array.isArray(rentalStatus) && rentalStatus.length > 0) {
+        qs.set('rental_status', rentalStatus.join(','))
+      } else if (typeof rentalStatus === 'string' && rentalStatus.trim() !== '') {
+        qs.set('rental_status', rentalStatus)
+      }
+      if (params?.search) {
+        qs.set('search', params.search)
+      }
+
       const path = qs.toString() ? `/api/rental/staff/rentals/?${qs}` : '/api/rental/staff/rentals/'
-      const res: any = await http.get(path)
+      const res: any = await http.get(path, params?.signal ? { signal: params.signal } : undefined)
 
       let rows: any[] = []
       let total = 0
