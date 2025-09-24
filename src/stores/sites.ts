@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import type { Site, SiteRegion } from '@/types/site'
 import { SiteSchema } from '@/types/site'
 import { z } from 'zod'
+import { http } from '@/lib/api'
 
 interface SiteFilters {
   region: SiteRegion
@@ -12,6 +13,55 @@ interface SiteFilters {
 }
 
 const SiteListSchema = z.array(SiteSchema)
+
+interface KoalaLocationPayload {
+  id?: string | number
+  name?: string
+  description?: string | null
+  latitude?: string | number | null
+  longitude?: string | number | null
+  created_at?: string
+  updated_at?: string
+}
+
+function mapKoalaLocationToSite(raw: KoalaLocationPayload | undefined, index: number): Site | null {
+  if (!raw) return null
+
+  const toNumber = (value: unknown): number | null => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string' && value.trim() !== '') {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) return parsed
+    }
+    return null
+  }
+
+  const lat = toNumber(raw.latitude)
+  const lng = toNumber(raw.longitude)
+  if (lat == null || lng == null) return null
+
+  const candidate = {
+    id: String(raw.id ?? `location-${index}`),
+    name: String(raw.name ?? `場域 ${index + 1}`),
+    region: lat <= 23.5 ? 'taitung' : 'hualien',
+    location: { lat, lng },
+    status: 'active' as const,
+    brand: index % 2 === 0 ? 'huali' : 'shunqi',
+    vehicleCount: 0,
+    availableCount: 0,
+    batteryLevels: { high: 0, medium: 0, low: 0 },
+    createdAt: String(raw.created_at ?? new Date().toISOString()),
+    updatedAt: String(raw.updated_at ?? raw.created_at ?? new Date().toISOString())
+  }
+
+  const parsed = SiteSchema.safeParse(candidate)
+  if (!parsed.success) {
+    console.warn('[Sites] Skipping invalid location payload', parsed.error.format())
+    return null
+  }
+
+  return parsed.data
+}
 
 export const useSites = defineStore('sites', () => {
   const list = ref<Site[]>([])
@@ -45,17 +95,43 @@ export const useSites = defineStore('sites', () => {
     error.value = null
 
     try {
-      // 目前使用假資料，未來可擴展為真實 API
-      console.log('[Sites] Loading demo sites for region:', filters.value.region)
-      const mod = await import('@/mocks/handlers/sites')
-      const sites = mod?.getDemoSites ? mod.getDemoSites(filters.value.region) : []
-      list.value = sites
+      console.log('[Sites] Fetching active locations from Koala API')
+      const response: any = await http.get('/api/location/locations/')
+      const rawList = Array.isArray(response?.data)
+        ? response.data
+        : Array.isArray(response?.results)
+          ? response.results
+          : Array.isArray(response)
+            ? response
+            : []
 
-      console.log('[Sites] Loaded', sites.length, 'sites successfully')
+      const mapped = rawList
+        .map((item, index) => mapKoalaLocationToSite(item, index))
+        .filter((site): site is Site => Boolean(site))
+
+      if (mapped.length === 0) {
+        throw new Error('No active locations returned from Koala API')
+      }
+
+      list.value = mapped
+      if (!selected.value && mapped.length > 0) {
+        selected.value = mapped[0]
+      }
+      console.log('[Sites] Loaded', mapped.length, 'locations from API')
     } catch (err: any) {
-      console.error('[Sites] Failed to load demo sites:', err)
-      error.value = '站點載入失敗（假資料）'
-      list.value = []
+      console.warn('[Sites] Falling back to demo sites due to error:', err)
+      try {
+        const mod = await import('@/mocks/handlers/sites')
+        const sites = mod?.getDemoSites ? mod.getDemoSites(filters.value.region) : []
+        list.value = sites
+        if (!selected.value && sites.length > 0) {
+          selected.value = sites[0]
+        }
+      } catch (mockErr: any) {
+        console.error('[Sites] Failed to load demo sites:', mockErr)
+        error.value = '站點載入失敗'
+        list.value = []
+      }
     } finally {
       loading.value = false
     }
@@ -63,6 +139,20 @@ export const useSites = defineStore('sites', () => {
 
   function selectSite(site: Site | undefined): void {
     selected.value = site
+  }
+
+  function setBrandFilter(brands: string[]): void {
+    filters.value = {
+      ...filters.value,
+      brands
+    }
+  }
+
+  function setRegion(region: SiteRegion): void {
+    filters.value = {
+      ...filters.value,
+      region
+    }
   }
 
   // 通用分頁（本地假資料或未來 API）
@@ -75,32 +165,11 @@ export const useSites = defineStore('sites', () => {
     console.log('[Sites] Fetching paged sites:', { limit, offset, keyword: params?.keyword })
 
     try {
-      // 假資料生成（擴充到多筆供測試）
-      if (list.value.length < 50) {
-        console.log('[Sites] Generating expanded demo data...')
-        const mod = await import('@/mocks/handlers/sites')
-        const base = mod?.getDemoSites ? mod.getDemoSites(filters.value.region) : []
-
-        if (base.length === 0) {
-          console.warn('[Sites] No base demo sites found')
-          return { data: [], total: 0 }
-        }
-
-        // 複製放大供分頁測試
-        const big: Site[] = []
-        for (let i = 0; i < 4; i++) {
-          big.push(...base.map((s, idx) => ({
-            ...s,
-            id: `${s.id}-${i}-${idx}`,
-            name: `${s.name} 站點 ${i + 1}-${idx + 1}`,
-            updatedAt: new Date().toISOString()
-          })))
-        }
-        list.value = big
-        console.log('[Sites] Generated', big.length, 'demo sites for testing')
+      if (list.value.length === 0) {
+        await fetchSites()
       }
 
-      let all = list.value
+      let all = [...list.value]
       if (params?.keyword) {
         const kw = params.keyword.toLowerCase()
         all = all.filter(s => s.name.toLowerCase().includes(kw))
@@ -110,7 +179,6 @@ export const useSites = defineStore('sites', () => {
       const total = all.length
       const data = all.slice(offset, offset + limit)
 
-      console.log('[Sites] Returning paged results:', { total, returned: data.length, page: Math.floor(offset / limit) + 1 })
       return { data, total }
     } catch (e: any) {
       console.error('[Sites] Failed to fetch paged sites:', e)
@@ -124,33 +192,32 @@ export const useSites = defineStore('sites', () => {
   // 基本 CRUD（暫用本地狀態，未來可接 API）
   async function createSite(payload: { name: string; lat: number; lon: number }) {
     try {
-      console.log('[Sites] Creating new site:', payload)
-
-      const id = `site-${Math.random().toString(36).slice(2, 8)}`
-      const now = new Date().toISOString()
-
-      const site: Site = {
-        id,
+      console.log('[Sites] Creating new site via API:', payload)
+      const body = {
         name: payload.name,
-        region: filters.value.region,
+        latitude: payload.lat,
+        longitude: payload.lon,
+      }
+
+      const response: any = await http.post('/api/location/locations/', body)
+      const raw = response?.data ?? response
+      const mapped = mapKoalaLocationToSite(raw, list.value.length) ?? {
+        id: String(raw?.id ?? `location-${Date.now()}`),
+        name: payload.name,
+        region: payload.lat <= 23.5 ? 'taitung' : 'hualien',
         location: { lat: payload.lat, lng: payload.lon },
         status: 'active',
         brand: 'huali',
         vehicleCount: 0,
-        batteryLevels: { high: 0, medium: 0, low: 0 },
-        availableSpots: 10, // 預設停車位
-        totalSpots: 10,
         availableCount: 0,
-        createdAt: now,
-        updatedAt: now,
-        // 兼容舊格式
-        lat: payload.lat,
-        lon: payload.lon
-      } as Site
+        batteryLevels: { high: 0, medium: 0, low: 0 },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
 
-      list.value = [site, ...list.value]
-      console.log('[Sites] Site created successfully:', id)
-      return site
+      list.value = [mapped, ...list.value]
+      console.log('[Sites] Site created successfully:', mapped.id)
+      return mapped
     } catch (e: any) {
       console.error('[Sites] Failed to create site:', e)
       throw new Error('新增場域失敗')
@@ -166,9 +233,19 @@ export const useSites = defineStore('sites', () => {
         throw new Error(`Site with ID ${id} not found`)
       }
 
+      const payload: Record<string, unknown> = {}
+      if (patch.name != null) payload.name = patch.name
+      if (typeof patch.location?.lat === 'number') payload.latitude = patch.location.lat
+      if (typeof patch.location?.lng === 'number') payload.longitude = patch.location.lng
+
+      if (Object.keys(payload).length > 0) {
+        await http.patch(`/api/location/locations/${encodeURIComponent(id)}/`, payload)
+      }
+
       const updatedSite = {
         ...list.value[idx],
         ...patch,
+        location: patch.location ?? list.value[idx].location,
         updatedAt: new Date().toISOString()
       }
 
@@ -185,11 +262,14 @@ export const useSites = defineStore('sites', () => {
     try {
       console.log('[Sites] Deleting site:', id)
 
+      await http.del(`/api/location/locations/${encodeURIComponent(id)}/`)
+
       const originalLength = list.value.length
       list.value = list.value.filter(s => s.id !== id)
 
       if (list.value.length === originalLength) {
-        throw new Error(`Site with ID ${id} not found`)
+        console.warn('[Sites] Deleted via API but local cache did not contain site, refreshing list')
+        await fetchSites()
       }
 
       console.log('[Sites] Site deleted successfully:', id)
@@ -199,5 +279,20 @@ export const useSites = defineStore('sites', () => {
     }
   }
 
-  return { list, selected, loading, error, filters, filteredSites, fetchSites, selectSite, fetchSitesPaged, createSite, updateSite, deleteSite }
+  return {
+    list,
+    selected,
+    loading,
+    error,
+    filters,
+    filteredSites,
+    fetchSites,
+    selectSite,
+    setBrandFilter,
+    setRegion,
+    fetchSitesPaged,
+    createSite,
+    updateSite,
+    deleteSite,
+  }
 })

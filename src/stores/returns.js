@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { z } from 'zod';
+import { http } from '@/lib/api';
 // Zod Schemas
 export const ReturnPayloadSchema = z.object({
     vehicleId: z.string().min(1),
@@ -16,6 +17,74 @@ export const ReturnRecordSchema = ReturnPayloadSchema.extend({
     by: z.string().optional(),
     createdAt: z.string(), // ISO string
 });
+const KoalaRentalSchema = z.object({
+    id: z.union([z.number(), z.string()]),
+    bike: z
+        .object({
+        bike_id: z.string(),
+        bike_name: z.string().optional().nullable(),
+        bike_model: z.string().optional().nullable(),
+    })
+        .optional()
+        .nullable(),
+    member: z
+        .object({
+        id: z.union([z.number(), z.string()]).optional(),
+        full_name: z.string().optional().nullable(),
+        phone: z.string().optional().nullable(),
+    })
+        .optional()
+        .nullable(),
+    start_time: z.string().optional().nullable(),
+    end_time: z.string().optional().nullable(),
+    rental_status: z.string(),
+    pickup_location: z.string().optional().nullable(),
+    return_location: z.string().optional().nullable(),
+    total_fee: z.string().optional().nullable(),
+    created_at: z.string().optional().nullable(),
+    updated_at: z.string().optional().nullable(),
+});
+const KoalaRentalListSchema = z.object({
+    count: z.number().optional(),
+    next: z.unknown().optional(),
+    previous: z.unknown().optional(),
+    results: z.array(KoalaRentalSchema).optional(),
+});
+const extractKoalaRentals = (payload) => {
+    const parsed = KoalaRentalListSchema.safeParse(payload);
+    if (parsed.success) {
+        return parsed.data.results ?? [];
+    }
+    if (Array.isArray(payload))
+        return payload;
+    if (Array.isArray(payload === null || payload === void 0 ? void 0 : payload.results))
+        return payload.results;
+    return [];
+};
+const normalizeRentalToReturnRecord = (rental, siteId) => {
+    try {
+        var _a, _b, _c, _d, _e, _f, _g;
+        const base = ReturnRecordSchema.parse({
+            id: String(((_a = rental.id) !== null && _a !== void 0 ? _a : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now()))),
+            vehicleId: ((_b = rental.bike) === null || _b === void 0 ? void 0 : _b.bike_id) ?? 'unknown',
+            siteId: siteId ?? ((_c = rental.return_location) !== null && _c !== void 0 ? _c : 'unknown'),
+            odometer: 0,
+            battery: 0,
+            issues: undefined,
+            photos: undefined,
+            fromSiteId: undefined,
+            by: ((_d = rental.member) === null || _d === void 0 ? void 0 : _d.full_name) ?? '',
+            createdAt: ((_g = (_f = (_e = rental.end_time) !== null && _e !== void 0 ? _e : rental.updated_at) !== null && _f !== void 0 ? _f : rental.created_at) !== null && _g !== void 0 ? _g : new Date().toISOString()),
+        });
+        const member = rental.member ?? {};
+        const bike = rental.bike ?? {};
+        return Object.assign(Object.assign({}, base), { memberName: (member === null || member === void 0 ? void 0 : member.full_name) ?? '', memberPhone: (member === null || member === void 0 ? void 0 : member.phone) ?? '', returnLocation: rental.return_location ?? undefined, bikeName: (bike === null || bike === void 0 ? void 0 : bike.bike_name) ?? undefined, bikeModel: (bike === null || bike === void 0 ? void 0 : bike.bike_model) ?? undefined });
+    }
+    catch (error) {
+        console.warn('[Returns] Failed to normalize rental record:', error);
+        return null;
+    }
+};
 export const useReturns = defineStore('returns', () => {
     const list = ref([]);
     const isLoading = ref(false);
@@ -66,18 +135,17 @@ export const useReturns = defineStore('returns', () => {
         isLoading.value = true;
         try {
             const searchParams = new URLSearchParams();
-            if (params === null || params === void 0 ? void 0 : params.siteId)
-                searchParams.set('siteId', params.siteId);
-            if (params === null || params === void 0 ? void 0 : params.limit)
-                searchParams.set('limit', params.limit.toString());
-            const response = await fetch(`/api/v1/returns?${searchParams}`);
-            if (!response.ok) {
-                throw new Error(`Fetch returns failed: ${response.statusText}`);
-            }
-            const data = await response.json();
-            const returns = z.array(ReturnRecordSchema).parse(data);
-            list.value = returns;
-            return returns;
+            searchParams.set('limit', String((params === null || params === void 0 ? void 0 : params.limit) ?? 20));
+            searchParams.set('offset', '0');
+            searchParams.set('rental_status', 'completed');
+            const response = await http.get(`/api/rental/staff/rentals/?${searchParams.toString()}`);
+            const payload = (response === null || response === void 0 ? void 0 : response.data) ?? response;
+            const rentals = extractKoalaRentals(payload);
+            const mapped = rentals
+                .map((item) => normalizeRentalToReturnRecord(item, params === null || params === void 0 ? void 0 : params.siteId))
+                .filter((item) => Boolean(item));
+            list.value = mapped;
+            return mapped;
         }
         catch (error) {
             console.error('Fetch returns error:', error);
@@ -92,12 +160,35 @@ export const useReturns = defineStore('returns', () => {
      */
     const fetchRecentReturns = async (siteId, limit = 5) => {
         try {
-            const response = await fetch(`/api/v1/returns?siteId=${siteId}&limit=${limit}`);
-            if (!response.ok) {
-                throw new Error(`Fetch recent returns failed: ${response.statusText}`);
+            const searchParams = new URLSearchParams();
+            searchParams.set('limit', String(Math.max(limit * 2, 10)));
+            searchParams.set('offset', '0');
+            searchParams.set('rental_status', 'completed');
+            const response = await http.get(`/api/rental/staff/rentals/?${searchParams.toString()}`);
+            const payload = (response === null || response === void 0 ? void 0 : response.data) ?? response;
+            const rentals = extractKoalaRentals(payload);
+            const mapped = rentals
+                .map((item) => normalizeRentalToReturnRecord(item, siteId))
+                .filter((item) => Boolean(item));
+            if (mapped.length <= limit) {
+                return mapped;
             }
-            const data = await response.json();
-            return z.array(ReturnRecordSchema).parse(data);
+            try {
+                const { useSites } = await import('./sites');
+                const sitesStore = useSites();
+                const targetSite = sitesStore.list.find((s) => s.id === siteId);
+                if (targetSite) {
+                    const keyword = targetSite.name.toLowerCase();
+                    const filtered = mapped.filter((record) => { var _a, _b; return ((_b = (_a = record.returnLocation) === null || _a === void 0 ? void 0 : _a.toLowerCase()) === null || _b === void 0 ? void 0 : _b.includes(keyword)); });
+                    if (filtered.length > 0) {
+                        return filtered.slice(0, limit);
+                    }
+                }
+            }
+            catch (err) {
+                console.warn('[Returns] Unable to refine recent returns by site:', err);
+            }
+            return mapped.slice(0, limit);
         }
         catch (error) {
             console.error('Fetch recent returns error:', error);

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { z } from 'zod'
+import { http } from '@/lib/api'
 
 // Zod Schemas
 export const ReturnPayloadSchema = z.object({
@@ -22,8 +23,100 @@ export const ReturnRecordSchema = ReturnPayloadSchema.extend({
 export type ReturnPayload = z.infer<typeof ReturnPayloadSchema>
 export type ReturnRecord = z.infer<typeof ReturnRecordSchema>
 
+type ReturnRecordWithMeta = ReturnRecord & {
+  memberName?: string
+  memberPhone?: string
+  returnLocation?: string
+  bikeName?: string
+  bikeModel?: string
+}
+
+const KoalaRentalSchema = z.object({
+  id: z.union([z.number(), z.string()]),
+  bike: z
+    .object({
+      bike_id: z.string(),
+      bike_name: z.string().optional().nullable(),
+      bike_model: z.string().optional().nullable()
+    })
+    .optional()
+    .nullable(),
+  member: z
+    .object({
+      id: z.union([z.number(), z.string()]).optional(),
+      full_name: z.string().optional().nullable(),
+      phone: z.string().optional().nullable()
+    })
+    .optional()
+    .nullable(),
+  start_time: z.string().optional().nullable(),
+  end_time: z.string().optional().nullable(),
+  rental_status: z.string(),
+  pickup_location: z.string().optional().nullable(),
+  return_location: z.string().optional().nullable(),
+  total_fee: z.string().optional().nullable(),
+  created_at: z.string().optional().nullable(),
+  updated_at: z.string().optional().nullable()
+})
+
+const KoalaRentalListSchema = z.object({
+  count: z.number().optional(),
+  next: z.unknown().optional(),
+  previous: z.unknown().optional(),
+  results: z.array(KoalaRentalSchema).optional()
+})
+
+function extractKoalaRentals(payload: any) {
+  const parsed = KoalaRentalListSchema.safeParse(payload)
+  if (parsed.success) {
+    return parsed.data.results ?? []
+  }
+  if (Array.isArray(payload)) return payload
+  if (Array.isArray(payload?.results)) return payload.results
+  return []
+}
+
+function normalizeRentalToReturnRecord(
+  rental: z.infer<typeof KoalaRentalSchema>,
+  siteId?: string
+): ReturnRecordWithMeta | null {
+  try {
+    const base = ReturnRecordSchema.parse({
+      id: String(rental.id ?? crypto.randomUUID?.() ?? Date.now()),
+      vehicleId: rental.bike?.bike_id ?? 'unknown',
+      siteId: siteId ?? rental.return_location ?? 'unknown',
+      odometer: 0,
+      battery: 0,
+      issues: undefined,
+      photos: undefined,
+      fromSiteId: undefined,
+      by: rental.member?.full_name ?? '',
+      createdAt:
+        rental.end_time ??
+        rental.updated_at ??
+        rental.created_at ??
+        new Date().toISOString()
+    })
+
+    const member = rental.member ?? {}
+    const bike = rental.bike ?? {}
+
+    return {
+      ...base,
+      memberName: member?.full_name ?? '',
+      memberPhone: member?.phone ?? '',
+      returnLocation: rental.return_location ?? undefined,
+      bikeName: bike?.bike_name ?? undefined,
+      bikeModel: bike?.bike_model ?? undefined
+    }
+  } catch (error) {
+    console.warn('[Returns] Failed to normalize rental record:', error)
+    return null
+  }
+}
+
 export const useReturns = defineStore('returns', () => {
-  const list = ref<ReturnRecord[]>([])
+const list = ref<ReturnRecordWithMeta[]>([])
   const isLoading = ref(false)
 
   /**
@@ -76,24 +169,26 @@ export const useReturns = defineStore('returns', () => {
   /**
    * 獲取歸還記錄
    */
-  const fetchReturns = async (params?: { siteId?: string; limit?: number }) => {
+const fetchReturns = async (params?: { siteId?: string; limit?: number }) => {
     isLoading.value = true
 
     try {
       const searchParams = new URLSearchParams()
-      if (params?.siteId) searchParams.set('siteId', params.siteId)
-      if (params?.limit) searchParams.set('limit', params.limit.toString())
+      searchParams.set('limit', String(params?.limit ?? 20))
+      searchParams.set('offset', '0')
+      searchParams.set('rental_status', 'completed')
 
-      const response = await fetch(`/api/v1/returns?${searchParams}`)
-      if (!response.ok) {
-        throw new Error(`Fetch returns failed: ${response.statusText}`)
-      }
+      const response: any = await http.get(
+        `/api/rental/staff/rentals/?${searchParams.toString()}`
+      )
+      const payload = response?.data ?? response
+      const rentals = extractKoalaRentals(payload)
+      const mapped = rentals
+        .map((item) => normalizeRentalToReturnRecord(item, params?.siteId))
+        .filter((item): item is ReturnRecordWithMeta => Boolean(item))
 
-      const data = await response.json()
-      const returns = z.array(ReturnRecordSchema).parse(data)
-      
-      list.value = returns
-      return returns
+      list.value = mapped
+      return mapped
     } catch (error) {
       console.error('Fetch returns error:', error)
       throw error
@@ -105,15 +200,46 @@ export const useReturns = defineStore('returns', () => {
   /**
    * 獲取特定站點的最近歸還記錄
    */
-  const fetchRecentReturns = async (siteId: string, limit = 5): Promise<ReturnRecord[]> => {
+const fetchRecentReturns = async (siteId: string, limit = 5): Promise<ReturnRecordWithMeta[]> => {
     try {
-      const response = await fetch(`/api/v1/returns?siteId=${siteId}&limit=${limit}`)
-      if (!response.ok) {
-        throw new Error(`Fetch recent returns failed: ${response.statusText}`)
+      const searchParams = new URLSearchParams()
+      searchParams.set('limit', String(Math.max(limit * 2, 10)))
+      searchParams.set('offset', '0')
+      searchParams.set('rental_status', 'completed')
+
+      const response: any = await http.get(
+        `/api/rental/staff/rentals/?${searchParams.toString()}`
+      )
+      const payload = response?.data ?? response
+      const rentals = extractKoalaRentals(payload)
+
+      const mapped = rentals
+        .map((item) => normalizeRentalToReturnRecord(item, siteId))
+        .filter((item): item is ReturnRecordWithMeta => Boolean(item))
+
+      if (mapped.length <= limit) {
+        return mapped
       }
 
-      const data = await response.json()
-      return z.array(ReturnRecordSchema).parse(data)
+      // 嘗試依照場域名稱做模糊匹配
+      try {
+        const { useSites } = await import('./sites')
+        const sitesStore = useSites()
+        const targetSite = sitesStore.list.find((s) => s.id === siteId)
+        if (targetSite) {
+          const keyword = targetSite.name.toLowerCase()
+          const filtered = mapped.filter((record) =>
+            record.returnLocation?.toLowerCase().includes(keyword)
+          )
+          if (filtered.length > 0) {
+            return filtered.slice(0, limit)
+          }
+        }
+      } catch (err) {
+        console.warn('[Returns] Unable to refine recent returns by site:', err)
+      }
+
+      return mapped.slice(0, limit)
     } catch (error) {
       console.error('Fetch recent returns error:', error)
       return []

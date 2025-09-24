@@ -62,6 +62,7 @@ const error = ref<string | null>(null)
 let map: maplibregl.Map | null = null
 let popup: maplibregl.Popup | null = null
 let activeTraceIds: string[] = []
+let selectedSiteMarker: maplibregl.Marker | null = null
 
 // 環境變數
 const defaultMapCenter = import.meta.env.VITE_MAP_CENTER?.split(',').map(Number) || [23.8, 121.6]
@@ -286,6 +287,44 @@ function addVehiclesLayer(): void {
       'text-halo-width': 1.5
     }
   })
+}
+
+function updateSelectedSiteMarker(site: any | null): void {
+  if (!map) return
+  if (selectedSiteMarker) {
+    selectedSiteMarker.remove()
+    selectedSiteMarker = null
+  }
+
+  if (!site) return
+
+  if (site?.type !== 'site') {
+    return
+  }
+
+  const lat = typeof site?.lat === 'number'
+    ? site.lat
+    : typeof site?.location?.lat === 'number'
+      ? site.location.lat
+      : typeof site?.center?.lat === 'number'
+        ? site.center.lat
+        : null
+  const lng = typeof site?.lon === 'number'
+    ? site.lon
+    : typeof site?.location?.lng === 'number'
+      ? site.location.lng
+      : typeof site?.center?.lng === 'number'
+        ? site.center.lng
+        : null
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+
+  const el = document.createElement('div')
+  el.className = 'selected-site-marker'
+
+  selectedSiteMarker = new maplibregl.Marker({ element: el })
+    .setLngLat([lng as number, lat as number])
+    .addTo(map)
 }
 
 function bindSiteEvents(): void {
@@ -519,6 +558,8 @@ watch(() => props.vehicleTraces, () => {
 // 監聽選中項目變化，自動移動地圖到該位置
 watch(() => props.selected, (selectedItem) => {
   if (!map || !selectedItem) return
+
+  updateSelectedSiteMarker(selectedItem)
 
   // 如果選中的是軌跡（從 focusTrace 函數傳來）
   if ('type' in selectedItem && selectedItem.type === 'trace' && 'center' in selectedItem) {
@@ -985,7 +1026,22 @@ onUnmounted(() => {
     popup.remove()
     popup = null
   }
+  if (selectedSiteMarker) {
+    selectedSiteMarker.remove()
+    selectedSiteMarker = null
+  }
   map?.remove()
   map = null
 })
 </script>
+
+<style scoped>
+.selected-site-marker {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background-color: #ef4444;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+}
+</style>
