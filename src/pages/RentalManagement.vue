@@ -7,7 +7,7 @@
           <h1 class="text-2xl font-bold text-gray-900">租借管理</h1>
           <p class="mt-1 text-sm text-gray-600">掌握全站租借狀態，協助會員處理租借與歸還。</p>
         </div>
-        <Button variant="outline" size="sm" @click="refresh" :disabled="loading">
+        <Button variant="outline" size="sm" @click="manualRefresh" :disabled="loading">
           <i class="i-ph-arrow-clockwise w-4 h-4 mr-2"></i>
           重新整理
         </Button>
@@ -24,7 +24,7 @@
               v-model="filters.search"
               placeholder="搜尋租借編號、車輛 ID、會員名稱..."
               class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-              @keyup.enter="refresh"
+              @keyup.enter="manualRefresh"
             />
           </div>
 
@@ -34,7 +34,6 @@
             <select
               v-model="filters.status"
               class="rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              @change="refresh"
             >
               <option value="">所有狀態</option>
               <option value="active">🔵 進行中</option>
@@ -80,7 +79,7 @@
     <div v-else-if="error" class="flex flex-col items-center justify-center py-10 text-rose-500 gap-3">
       <i class="i-ph-warning-circle w-10 h-10"></i>
       <p>{{ error }}</p>
-      <Button variant="outline" size="sm" @click="refresh">重試</Button>
+        <Button variant="outline" size="sm" @click="manualRefresh">重試</Button>
     </div>
 
     <div v-else-if="rentals.length === 0" class="flex flex-col items-center justify-center py-10 text-gray-500 gap-2">
@@ -359,43 +358,69 @@ const toggleSort = (field: string) => {
 }
 
 // 清除篩選
-const clearFilters = () => {
-  filters.search = ''
-  filters.status = ''
-  refresh()
-}
+const buildQuerySignature = () => JSON.stringify({
+  search: filters.search.trim(),
+  status: filters.status
+})
 
-const refresh = async () => {
+const activeRequest = ref<AbortController | null>(null)
+const lastQuerySignature = ref<string>('')
+
+const refresh = async ({ force = false }: { force?: boolean } = {}) => {
+  const signature = buildQuerySignature()
+  if (!force && signature === lastQuerySignature.value) {
+    return
+  }
+
+  if (activeRequest.value) {
+    activeRequest.value.abort()
+    activeRequest.value = null
+  }
+
+  const controller = new AbortController()
+  activeRequest.value = controller
+
   loading.value = true
   error.value = ''
   try {
     if (!canAccess.value) {
       rentals.value = []
+      lastQuerySignature.value = signature
       return
     }
-    const { data } = await rentalsStore.fetchStaffRentals({ status: filters.status || undefined })
+    const { data } = await rentalsStore.fetchStaffRentals({
+      rentalStatus: filters.status ? filters.status : undefined,
+      search: filters.search.trim() || undefined,
+      signal: controller.signal
+    })
 
-    // 如果有選擇狀態篩選，在前端也進行過濾（以防後端沒有正確過濾）
-    let filteredData = data
-    if (filters.status) {
-      filteredData = data.filter((rental: any) => {
-        const rentalStatus = rental.rental_status || rental.status
-        return rentalStatus === filters.status
-      })
-    }
-
-    rentals.value = filteredData
+    rentals.value = data
     if (selectedRental.value) {
-      const match = filteredData.find(r => r.id === selectedRental.value.id)
+      const match = data.find(r => r.id === selectedRental.value.id)
       if (!match) {
         selectedRental.value = null
       }
     }
+    lastQuerySignature.value = signature
   } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      return
+    }
     error.value = err?.message || '載入租借紀錄失敗'
   } finally {
-    loading.value = false
+    if (activeRequest.value === controller) {
+      activeRequest.value = null
+      loading.value = false
+    }
   }
+}
+
+const manualRefresh = () => refresh({ force: true })
+
+const clearFilters = () => {
+  filters.search = ''
+  filters.status = ''
+  manualRefresh()
 }
 
 const openDetail = async (rental: any) => {
@@ -413,7 +438,7 @@ const openDetail = async (rental: any) => {
   }
 }
 
-watch(() => filters.status, refresh)
+watch(() => filters.status, () => refresh())
 
-onMounted(refresh)
+onMounted(() => refresh({ force: true }))
 </script>

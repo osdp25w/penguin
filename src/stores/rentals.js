@@ -313,15 +313,24 @@ export const useRentals = defineStore('rentals', () => {
         memberRentalsLoading.value = false;
     }
     async function fetchStaffRentals(params) {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d, _e, _f, _g;
         try {
             const limit = (_a = params === null || params === void 0 ? void 0 : params.limit) !== null && _a !== void 0 ? _a : 50;
             const offset = (_b = params === null || params === void 0 ? void 0 : params.offset) !== null && _b !== void 0 ? _b : 0;
             const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
-            if (params === null || params === void 0 ? void 0 : params.status)
-                qs.set('status', params.status);
+            const rentalStatus = params === null || params === void 0 ? void 0 : params.rentalStatus;
+            if (Array.isArray(rentalStatus) && rentalStatus.length > 0) {
+                qs.set('rental_status', rentalStatus.join(','));
+            }
+            else if (typeof rentalStatus === 'string' && rentalStatus.trim() !== '') {
+                qs.set('rental_status', rentalStatus);
+            }
+            if (params === null || params === void 0 ? void 0 : params.search) {
+                qs.set('search', params.search);
+            }
             const path = qs.toString() ? `/api/rental/staff/rentals/?${qs}` : '/api/rental/staff/rentals/';
-            const res = await http.get(path);
+            const init = (params === null || params === void 0 ? void 0 : params.signal) ? { signal: params.signal } : undefined;
+            const res = await http.get(path, init);
             let rows = [];
             let total = 0;
             if ((res === null || res === void 0 ? void 0 : res.code) === 2000 && (res === null || res === void 0 ? void 0 : res.data)) {
@@ -341,7 +350,7 @@ export const useRentals = defineStore('rentals', () => {
             }
             if (!rows.length) {
                 rows = Array.isArray(res === null || res === void 0 ? void 0 : res.data) ? res.data : Array.isArray(res) ? res : (res === null || res === void 0 ? void 0 : res.results) || (res === null || res === void 0 ? void 0 : res.rentals) || [];
-                total = (_f = (_e = res === null || res === void 0 ? void 0 : res.count) !== null && _e !== void 0 ? _e : res === null || res === void 0 ? void 0 : res.total) !== null && _f !== void 0 ? _f : rows.length;
+                total = (_g = (_f = res === null || res === void 0 ? void 0 : res.count) !== null && _f !== void 0 ? _f : res === null || res === void 0 ? void 0 : res.total) !== null && _g !== void 0 ? _g : rows.length;
             }
             return { data: rows, total };
         }
