@@ -12,6 +12,7 @@ const error = ref(null);
 let map = null;
 let popup = null;
 let activeTraceIds = [];
+let selectedSiteMarker = null;
 // 環境變數
 const defaultMapCenter = ((_a = import.meta.env.VITE_MAP_CENTER) === null || _a === void 0 ? void 0 : _a.split(',').map(Number)) || [23.8, 121.6];
 const defaultMapZoom = Number(import.meta.env.VITE_MAP_ZOOM) || 10;
@@ -221,6 +222,41 @@ function addVehiclesLayer() {
             'text-halo-width': 1.5
         }
     });
+}
+function updateSelectedSiteMarker(site) {
+    var _a, _b, _c, _d;
+    if (!map)
+        return;
+    if (selectedSiteMarker) {
+        selectedSiteMarker.remove();
+        selectedSiteMarker = null;
+    }
+    if (!site)
+        return;
+    if ((site === null || site === void 0 ? void 0 : site.type) !== 'site') {
+        return;
+    }
+    const lat = typeof (site === null || site === void 0 ? void 0 : site.lat) === 'number'
+        ? site.lat
+        : typeof ((_a = site === null || site === void 0 ? void 0 : site.location) === null || _a === void 0 ? void 0 : _a.lat) === 'number'
+            ? site.location.lat
+            : typeof ((_b = site === null || site === void 0 ? void 0 : site.center) === null || _b === void 0 ? void 0 : _b.lat) === 'number'
+                ? site.center.lat
+                : null;
+    const lng = typeof (site === null || site === void 0 ? void 0 : site.lon) === 'number'
+        ? site.lon
+        : typeof ((_c = site === null || site === void 0 ? void 0 : site.location) === null || _c === void 0 ? void 0 : _c.lng) === 'number'
+            ? site.location.lng
+            : typeof ((_d = site === null || site === void 0 ? void 0 : site.center) === null || _d === void 0 ? void 0 : _d.lng) === 'number'
+                ? site.center.lng
+                : null;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng))
+        return;
+    const el = document.createElement('div');
+    el.className = 'selected-site-marker';
+    selectedSiteMarker = new maplibregl.Marker({ element: el })
+        .setLngLat([lng, lat])
+        .addTo(map);
 }
 function bindSiteEvents() {
     if (!map)
@@ -447,6 +483,7 @@ watch(() => props.vehicleTraces, () => {
 watch(() => props.selected, (selectedItem) => {
     if (!map || !selectedItem)
         return;
+    updateSelectedSiteMarker(selectedItem);
     // 如果選中的是軌跡（從 focusTrace 函數傳來）
     if ('type' in selectedItem && selectedItem.type === 'trace' && 'center' in selectedItem) {
         map.flyTo({
@@ -876,6 +913,10 @@ onUnmounted(() => {
         popup.remove();
         popup = null;
     }
+    if (selectedSiteMarker) {
+        selectedSiteMarker.remove();
+        selectedSiteMarker = null;
+    }
     map === null || map === void 0 ? void 0 : map.remove();
     map = null;
 });
@@ -883,6 +924,8 @@ debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
 let __VLS_components;
 let __VLS_directives;
+// CSS variable injection 
+// CSS variable injection end 
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ref: "mapContainer",
     ...{ class: "w-full h-full relative" },

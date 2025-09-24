@@ -119,6 +119,40 @@
       />
     </div>
 
+    <!-- Display Mode Toggle for Hourly -->
+    <div v-if="granularity === 'hour' && daysDiff > 0" class="flex items-center justify-end gap-4 bg-gray-50 px-4 py-3 rounded-lg">
+      <label class="text-sm font-medium text-gray-700">顯示方式：</label>
+      <div class="flex gap-2">
+        <button
+          @click="hourlyDisplayMode = 'timeline'"
+          :class="[
+            'px-3 py-1.5 text-sm rounded-md transition-colors',
+            hourlyDisplayMode === 'timeline'
+              ? 'bg-blue-500 text-white'
+              : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+          ]"
+        >
+          <i class="i-ph-chart-line w-4 h-4 inline-block mr-1" />
+          時間序列
+        </button>
+        <button
+          @click="hourlyDisplayMode = 'average'"
+          :class="[
+            'px-3 py-1.5 text-sm rounded-md transition-colors',
+            hourlyDisplayMode === 'average'
+              ? 'bg-blue-500 text-white'
+              : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+          ]"
+        >
+          <i class="i-ph-chart-bar w-4 h-4 inline-block mr-1" />
+          小時平均
+        </button>
+      </div>
+      <div v-if="hourlyDisplayMode === 'average'" class="text-sm text-gray-600">
+        平均於 {{ startDate }} 至 {{ endDate }} (共 {{ daysDiff + 1 }} 天)
+      </div>
+    </div>
+
     <!-- Charts Section -->
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <!-- SoC Trend Chart -->
@@ -175,7 +209,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, computed, watch } from 'vue'
 import { Button, Card, KpiCard, EmptyState } from '@/design/components'
 import SocTrend from '@/components/charts/SocTrend.vue'
 import CarbonBar from '@/components/charts/CarbonBar.vue'
@@ -189,6 +223,14 @@ const endDate = ref(getDefaultEndDate())
 const isLoading = ref(false)
 const socLoading = ref(false)
 const carbonLoading = ref(false)
+const hourlyDisplayMode = ref<'timeline' | 'average'>('timeline')
+
+// Computed properties
+const daysDiff = computed(() => {
+  const start = new Date(startDate.value)
+  const end = new Date(endDate.value)
+  return Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+})
 
 // Helper functions for default dates
 function getDefaultStartDate(): string {
@@ -471,8 +513,14 @@ async function fetchDailyOverviewWithComparison(start: string, end: string) {
 async function fetchTrendData(start: string, end: string, granularityType: 'hour' | 'day' | 'month' | 'year') {
   try {
     if (granularityType === 'hour') {
-      // 每小時：只顯示單日的 SOC 趨勢
-      await fetchHourlyTrendData(end || start)
+      // 每小時模式
+      if (hourlyDisplayMode.value === 'timeline') {
+        // 時間序列模式
+        await fetchHourlyTimelineTrend(start, end)
+      } else {
+        // 小時平均模式
+        await fetchHourlyAverageTrend(start, end)
+      }
     } else {
       // 每日/月/年：同時獲取 SOC 和減碳趨勢
       await Promise.all([
@@ -485,28 +533,21 @@ async function fetchTrendData(start: string, end: string, granularityType: 'hour
   }
 }
 
-// 每小時 SOC 趨勢數據
-async function fetchHourlyTrendData(day: string) {
-  if (!day) return
+// 模式 A: 時間序列 - 顯示區間內每個小時的實際數據
+async function fetchHourlyTimelineTrend(start: string, end: string) {
+  if (!start || !end) return
   try {
-    const url = `/api/statistic/hourly-overview/?collected_time__date=${encodeURIComponent(day)}`
+    // 構建查詢參數
+    const params = new URLSearchParams()
+    params.set('collected_time__gte', start + 'T00:00:00')
+    params.set('collected_time__lte', end + 'T23:59:59')
+    params.set('ordering', 'collected_time')
+
+    const url = `/api/statistic/hourly-overview/?${params.toString()}`
     const response = await http.get<any>(url)
 
     const data = response?.data || response
     const arr = Array.isArray(data) ? data : (data?.results || [])
-
-    const parseHour = (v: any): number | null => {
-      if (v == null) return null
-      if (typeof v === 'number') return v
-      const s = String(v)
-      if (s.includes('T') && s.includes(':')) {
-        const match = s.match(/T(\d{2}):\d{2}/)
-        if (match) return Number(match[1])
-      }
-      if (/^\d{2}:\d{2}:?/.test(s)) return Number(s.slice(0,2))
-      const n = Number(s)
-      return isNaN(n) ? null : n
-    }
 
     const pickNum = (o: any, keys: string[], def = 0) => {
       for (const k of keys) {
@@ -516,24 +557,133 @@ async function fetchHourlyTrendData(day: string) {
       return def
     }
 
-    const items = arr.map((it: any) => ({
-      hour: parseHour(it?.hour ?? it?.collected_time ?? it?.timestamp),
-      soc: pickNum(it, ['average_soc','avg_soc','soc_avg','mean_soc','soc'], 0),
-      carbon: pickNum(it, ['carbon_reduction_kg','carbon','carbon_saved','co2','co2_kg'], 0)
-    })).filter((x: any) => x.hour != null)
+    // 處理數據並格式化標籤
+    const items = arr.map((it: any) => {
+      const time = it?.collected_time || it?.timestamp || ''
+      return {
+        time,
+        soc: pickNum(it, ['average_soc','avg_soc','soc_avg','mean_soc','soc'], 0),
+        carbon: pickNum(it, ['carbon_reduction_kg','carbon','carbon_saved','co2','co2_kg'], 0)
+      }
+    }).filter((x: any) => x.time)
 
-    items.sort((a: any, b: any) => (a.hour as number) - (b.hour as number))
+    // 排序
+    items.sort((a: any, b: any) => new Date(a.time).getTime() - new Date(b.time).getTime())
 
-    socLabels.splice(0, socLabels.length, ...items.map((x: any) => String(x.hour).padStart(2,'0') + 'h'))
+    // 格式化 X 軸標籤
+    const labels = items.map((item: any) => {
+      const date = new Date(item.time)
+      if (daysDiff.value <= 1) {
+        // 單天或以內：只顯示小時
+        return String(date.getHours()).padStart(2, '0') + 'h'
+      } else {
+        // 多天：顯示 MM/DD HH
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        const hour = String(date.getHours()).padStart(2, '0')
+        return `${month}/${day} ${hour}h`
+      }
+    })
+
+    // 更新圖表數據
+    socLabels.splice(0, socLabels.length, ...labels)
     socValues.splice(0, socValues.length, ...items.map((x: any) => x.soc))
-
-    // 每小時模式下也更新減碳數據
-    carbonLabels.splice(0, carbonLabels.length, ...items.map((x: any) => String(x.hour).padStart(2,'0') + 'h'))
+    carbonLabels.splice(0, carbonLabels.length, ...labels)
     carbonValues.splice(0, carbonValues.length, ...items.map((x: any) => x.carbon))
 
-    console.log('Hourly trend data updated:', { labels: socLabels.length, socAvg: socValues.reduce((a,b) => a+b, 0) / socValues.length })
+    console.log('Hourly timeline trend updated:', {
+      mode: 'timeline',
+      count: items.length,
+      range: `${start} to ${end}`
+    })
   } catch (e) {
-    console.warn('fetchHourlyTrendData failed:', e)
+    console.warn('fetchHourlyTimelineTrend failed:', e)
+  }
+}
+
+// 模式 B: 小時平均 - 顯示一天中各小時的平均值
+async function fetchHourlyAverageTrend(start: string, end: string) {
+  if (!start || !end) return
+  try {
+    // 獲取區間內所有小時數據
+    const params = new URLSearchParams()
+    params.set('collected_time__gte', start + 'T00:00:00')
+    params.set('collected_time__lte', end + 'T23:59:59')
+    params.set('ordering', 'collected_time')
+
+    const url = `/api/statistic/hourly-overview/?${params.toString()}`
+    const response = await http.get<any>(url)
+
+    const data = response?.data || response
+    const arr = Array.isArray(data) ? data : (data?.results || [])
+
+    const pickNum = (o: any, keys: string[], def = 0) => {
+      for (const k of keys) {
+        const v = o?.[k]
+        if (v != null && !isNaN(Number(v))) return Number(v)
+      }
+      return def
+    }
+
+    // 初始化 24 小時的桶
+    const hourlyBuckets: { soc: number[], carbon: number[] }[] = Array(24).fill(null).map(() => ({
+      soc: [],
+      carbon: []
+    }))
+
+    // 將數據分配到對應的小時桶
+    arr.forEach((it: any) => {
+      const time = it?.collected_time || it?.timestamp
+      if (!time) return
+
+      const hour = new Date(time).getHours()
+      const soc = pickNum(it, ['average_soc','avg_soc','soc_avg','mean_soc','soc'], 0)
+      const carbon = pickNum(it, ['carbon_reduction_kg','carbon','carbon_saved','co2','co2_kg'], 0)
+
+      if (soc > 0) hourlyBuckets[hour].soc.push(soc)
+      if (carbon > 0) hourlyBuckets[hour].carbon.push(carbon)
+    })
+
+    // 計算每個小時的平均值
+    const labels: string[] = []
+    const socAvgValues: number[] = []
+    const carbonAvgValues: number[] = []
+
+    for (let hour = 0; hour < 24; hour++) {
+      const bucket = hourlyBuckets[hour]
+
+      // 只顯示有數據的小時
+      if (bucket.soc.length > 0 || bucket.carbon.length > 0) {
+        labels.push(String(hour).padStart(2, '0') + 'h')
+
+        // 計算 SOC 平均值
+        const socAvg = bucket.soc.length > 0
+          ? bucket.soc.reduce((a, b) => a + b, 0) / bucket.soc.length
+          : 0
+        socAvgValues.push(Number(socAvg.toFixed(1)))
+
+        // 計算減碳平均值
+        const carbonAvg = bucket.carbon.length > 0
+          ? bucket.carbon.reduce((a, b) => a + b, 0) / bucket.carbon.length
+          : 0
+        carbonAvgValues.push(Number(carbonAvg.toFixed(2)))
+      }
+    }
+
+    // 更新圖表數據
+    socLabels.splice(0, socLabels.length, ...labels)
+    socValues.splice(0, socValues.length, ...socAvgValues)
+    carbonLabels.splice(0, carbonLabels.length, ...labels)
+    carbonValues.splice(0, carbonValues.length, ...carbonAvgValues)
+
+    console.log('Hourly average trend updated:', {
+      mode: 'average',
+      hours: labels.length,
+      dateRange: `${start} to ${end}`,
+      days: daysDiff.value + 1
+    })
+  } catch (e) {
+    console.warn('fetchHourlyAverageTrend failed:', e)
   }
 }
 
@@ -791,6 +941,13 @@ const downloadCSV = (content: string, filename: string) => {
 }
 
 // Cleanup: Removed unused helper methods for disabled alert and status sections
+
+// Watch for display mode changes
+watch(hourlyDisplayMode, () => {
+  if (granularity.value === 'hour') {
+    refreshData()
+  }
+})
 
 onMounted(() => {
   // 初始化預設粒度和日期範圍

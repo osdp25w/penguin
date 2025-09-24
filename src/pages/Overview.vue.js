@@ -1,5 +1,5 @@
 var _a, _b, _c, _d, _e, _f, _g, _h;
-import { reactive, ref, onMounted } from 'vue';
+import { reactive, ref, onMounted, computed, watch } from 'vue';
 import { Button, Card, KpiCard } from '@/design/components';
 import SocTrend from '@/components/charts/SocTrend.vue';
 import CarbonBar from '@/components/charts/CarbonBar.vue';
@@ -12,6 +12,13 @@ const endDate = ref(getDefaultEndDate());
 const isLoading = ref(false);
 const socLoading = ref(false);
 const carbonLoading = ref(false);
+const hourlyDisplayMode = ref('timeline');
+// Computed properties
+const daysDiff = computed(() => {
+    const start = new Date(startDate.value);
+    const end = new Date(endDate.value);
+    return Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+});
 // Helper functions for default dates
 function getDefaultStartDate() {
     const today = new Date();
@@ -266,8 +273,15 @@ async function fetchDailyOverviewWithComparison(start, end) {
 async function fetchTrendData(start, end, granularityType) {
     try {
         if (granularityType === 'hour') {
-            // 每小時：只顯示單日的 SOC 趨勢
-            await fetchHourlyTrendData(end || start);
+            // 每小時模式
+            if (hourlyDisplayMode.value === 'timeline') {
+                // 時間序列模式
+                await fetchHourlyTimelineTrend(start, end);
+            }
+            else {
+                // 小時平均模式
+                await fetchHourlyAverageTrend(start, end);
+            }
         }
         else {
             // 每日/月/年：同時獲取 SOC 和減碳趨勢
@@ -281,31 +295,20 @@ async function fetchTrendData(start, end, granularityType) {
         console.warn('fetchTrendData failed:', e);
     }
 }
-// 每小時 SOC 趨勢數據
-async function fetchHourlyTrendData(day) {
-    if (!day)
+// 模式 A: 時間序列 - 顯示區間內每個小時的實際數據
+async function fetchHourlyTimelineTrend(start, end) {
+    if (!start || !end)
         return;
     try {
-        const url = `/api/statistic/hourly-overview/?collected_time__date=${encodeURIComponent(day)}`;
+        // 構建查詢參數
+        const params = new URLSearchParams();
+        params.set('collected_time__gte', start + 'T00:00:00');
+        params.set('collected_time__lte', end + 'T23:59:59');
+        params.set('ordering', 'collected_time');
+        const url = `/api/statistic/hourly-overview/?${params.toString()}`;
         const response = await http.get(url);
         const data = (response === null || response === void 0 ? void 0 : response.data) || response;
         const arr = Array.isArray(data) ? data : ((data === null || data === void 0 ? void 0 : data.results) || []);
-        const parseHour = (v) => {
-            if (v == null)
-                return null;
-            if (typeof v === 'number')
-                return v;
-            const s = String(v);
-            if (s.includes('T') && s.includes(':')) {
-                const match = s.match(/T(\d{2}):\d{2}/);
-                if (match)
-                    return Number(match[1]);
-            }
-            if (/^\d{2}:\d{2}:?/.test(s))
-                return Number(s.slice(0, 2));
-            const n = Number(s);
-            return isNaN(n) ? null : n;
-        };
         const pickNum = (o, keys, def = 0) => {
             for (const k of keys) {
                 const v = o === null || o === void 0 ? void 0 : o[k];
@@ -314,24 +317,122 @@ async function fetchHourlyTrendData(day) {
             }
             return def;
         };
+        // 處理數據並格式化標籤
         const items = arr.map((it) => {
-            var _a, _b;
-            return ({
-                hour: parseHour((_b = (_a = it === null || it === void 0 ? void 0 : it.hour) !== null && _a !== void 0 ? _a : it === null || it === void 0 ? void 0 : it.collected_time) !== null && _b !== void 0 ? _b : it === null || it === void 0 ? void 0 : it.timestamp),
+            const time = (it === null || it === void 0 ? void 0 : it.collected_time) || (it === null || it === void 0 ? void 0 : it.timestamp) || '';
+            return {
+                time,
                 soc: pickNum(it, ['average_soc', 'avg_soc', 'soc_avg', 'mean_soc', 'soc'], 0),
                 carbon: pickNum(it, ['carbon_reduction_kg', 'carbon', 'carbon_saved', 'co2', 'co2_kg'], 0)
-            });
-        }).filter((x) => x.hour != null);
-        items.sort((a, b) => a.hour - b.hour);
-        socLabels.splice(0, socLabels.length, ...items.map((x) => String(x.hour).padStart(2, '0') + 'h'));
+            };
+        }).filter((x) => x.time);
+        // 排序
+        items.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+        // 格式化 X 軸標籤
+        const labels = items.map((item) => {
+            const date = new Date(item.time);
+            if (daysDiff.value <= 1) {
+                // 單天或以內：只顯示小時
+                return String(date.getHours()).padStart(2, '0') + 'h';
+            }
+            else {
+                // 多天：顯示 MM/DD HH
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const hour = String(date.getHours()).padStart(2, '0');
+                return `${month}/${day} ${hour}h`;
+            }
+        });
+        // 更新圖表數據
+        socLabels.splice(0, socLabels.length, ...labels);
         socValues.splice(0, socValues.length, ...items.map((x) => x.soc));
-        // 每小時模式下也更新減碳數據
-        carbonLabels.splice(0, carbonLabels.length, ...items.map((x) => String(x.hour).padStart(2, '0') + 'h'));
+        carbonLabels.splice(0, carbonLabels.length, ...labels);
         carbonValues.splice(0, carbonValues.length, ...items.map((x) => x.carbon));
-        console.log('Hourly trend data updated:', { labels: socLabels.length, socAvg: socValues.reduce((a, b) => a + b, 0) / socValues.length });
+        console.log('Hourly timeline trend updated:', {
+            mode: 'timeline',
+            count: items.length,
+            range: `${start} to ${end}`
+        });
     }
     catch (e) {
-        console.warn('fetchHourlyTrendData failed:', e);
+        console.warn('fetchHourlyTimelineTrend failed:', e);
+    }
+}
+// 模式 B: 小時平均 - 顯示一天中各小時的平均值
+async function fetchHourlyAverageTrend(start, end) {
+    if (!start || !end)
+        return;
+    try {
+        // 獲取區間內所有小時數據
+        const params = new URLSearchParams();
+        params.set('collected_time__gte', start + 'T00:00:00');
+        params.set('collected_time__lte', end + 'T23:59:59');
+        params.set('ordering', 'collected_time');
+        const url = `/api/statistic/hourly-overview/?${params.toString()}`;
+        const response = await http.get(url);
+        const data = (response === null || response === void 0 ? void 0 : response.data) || response;
+        const arr = Array.isArray(data) ? data : ((data === null || data === void 0 ? void 0 : data.results) || []);
+        const pickNum = (o, keys, def = 0) => {
+            for (const k of keys) {
+                const v = o === null || o === void 0 ? void 0 : o[k];
+                if (v != null && !isNaN(Number(v)))
+                    return Number(v);
+            }
+            return def;
+        };
+        // 初始化 24 小時的桶
+        const hourlyBuckets = Array(24).fill(null).map(() => ({
+            soc: [],
+            carbon: []
+        }));
+        // 將數據分配到對應的小時桶
+        arr.forEach((it) => {
+            const time = (it === null || it === void 0 ? void 0 : it.collected_time) || (it === null || it === void 0 ? void 0 : it.timestamp);
+            if (!time)
+                return;
+            const hour = new Date(time).getHours();
+            const soc = pickNum(it, ['average_soc', 'avg_soc', 'soc_avg', 'mean_soc', 'soc'], 0);
+            const carbon = pickNum(it, ['carbon_reduction_kg', 'carbon', 'carbon_saved', 'co2', 'co2_kg'], 0);
+            if (soc > 0)
+                hourlyBuckets[hour].soc.push(soc);
+            if (carbon > 0)
+                hourlyBuckets[hour].carbon.push(carbon);
+        });
+        // 計算每個小時的平均值
+        const labels = [];
+        const socAvgValues = [];
+        const carbonAvgValues = [];
+        for (let hour = 0; hour < 24; hour++) {
+            const bucket = hourlyBuckets[hour];
+            // 只顯示有數據的小時
+            if (bucket.soc.length > 0 || bucket.carbon.length > 0) {
+                labels.push(String(hour).padStart(2, '0') + 'h');
+                // 計算 SOC 平均值
+                const socAvg = bucket.soc.length > 0
+                    ? bucket.soc.reduce((a, b) => a + b, 0) / bucket.soc.length
+                    : 0;
+                socAvgValues.push(Number(socAvg.toFixed(1)));
+                // 計算減碳平均值
+                const carbonAvg = bucket.carbon.length > 0
+                    ? bucket.carbon.reduce((a, b) => a + b, 0) / bucket.carbon.length
+                    : 0;
+                carbonAvgValues.push(Number(carbonAvg.toFixed(2)));
+            }
+        }
+        // 更新圖表數據
+        socLabels.splice(0, socLabels.length, ...labels);
+        socValues.splice(0, socValues.length, ...socAvgValues);
+        carbonLabels.splice(0, carbonLabels.length, ...labels);
+        carbonValues.splice(0, carbonValues.length, ...carbonAvgValues);
+        console.log('Hourly average trend updated:', {
+            mode: 'average',
+            hours: labels.length,
+            dateRange: `${start} to ${end}`,
+            days: daysDiff.value + 1
+        });
+    }
+    catch (e) {
+        console.warn('fetchHourlyAverageTrend failed:', e);
     }
 }
 // 按粒度獲取 SOC 趨勢
@@ -557,6 +658,12 @@ const downloadCSV = (content, filename) => {
     }
 };
 // Cleanup: Removed unused helper methods for disabled alert and status sections
+// Watch for display mode changes
+watch(hourlyDisplayMode, () => {
+    if (granularity.value === 'hour') {
+        refreshData();
+    }
+});
 onMounted(() => {
     // 初始化預設粒度和日期範圍
     autoAdjustDateRange();
@@ -789,6 +896,57 @@ const __VLS_30 = __VLS_29({
     period: "昨日",
     trend: "up",
 }, ...__VLS_functionalComponentArgsRest(__VLS_29));
+if (__VLS_ctx.granularity === 'hour' && __VLS_ctx.daysDiff > 0) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "flex items-center justify-end gap-4 bg-gray-50 px-4 py-3 rounded-lg" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements.label)({
+        ...{ class: "text-sm font-medium text-gray-700" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "flex gap-2" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+        ...{ onClick: (...[$event]) => {
+                if (!(__VLS_ctx.granularity === 'hour' && __VLS_ctx.daysDiff > 0))
+                    return;
+                __VLS_ctx.hourlyDisplayMode = 'timeline';
+            } },
+        ...{ class: ([
+                'px-3 py-1.5 text-sm rounded-md transition-colors',
+                __VLS_ctx.hourlyDisplayMode === 'timeline'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+            ]) },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i)({
+        ...{ class: "i-ph-chart-line w-4 h-4 inline-block mr-1" },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
+        ...{ onClick: (...[$event]) => {
+                if (!(__VLS_ctx.granularity === 'hour' && __VLS_ctx.daysDiff > 0))
+                    return;
+                __VLS_ctx.hourlyDisplayMode = 'average';
+            } },
+        ...{ class: ([
+                'px-3 py-1.5 text-sm rounded-md transition-colors',
+                __VLS_ctx.hourlyDisplayMode === 'average'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+            ]) },
+    });
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.i)({
+        ...{ class: "i-ph-chart-bar w-4 h-4 inline-block mr-1" },
+    });
+    if (__VLS_ctx.hourlyDisplayMode === 'average') {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "text-sm text-gray-600" },
+        });
+        (__VLS_ctx.startDate);
+        (__VLS_ctx.endDate);
+        (__VLS_ctx.daysDiff + 1);
+    }
+}
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "grid grid-cols-1 xl:grid-cols-2 gap-6" },
 });
@@ -940,6 +1098,41 @@ var __VLS_42;
 /** @type {__VLS_StyleScopedClasses['md:grid-cols-2']} */ ;
 /** @type {__VLS_StyleScopedClasses['xl:grid-cols-4']} */ ;
 /** @type {__VLS_StyleScopedClasses['gap-6']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['items-center']} */ ;
+/** @type {__VLS_StyleScopedClasses['justify-end']} */ ;
+/** @type {__VLS_StyleScopedClasses['gap-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['bg-gray-50']} */ ;
+/** @type {__VLS_StyleScopedClasses['px-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['py-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-lg']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['font-medium']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-700']} */ ;
+/** @type {__VLS_StyleScopedClasses['flex']} */ ;
+/** @type {__VLS_StyleScopedClasses['gap-2']} */ ;
+/** @type {__VLS_StyleScopedClasses['px-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['py-1.5']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-md']} */ ;
+/** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
+/** @type {__VLS_StyleScopedClasses['i-ph-chart-line']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['inline-block']} */ ;
+/** @type {__VLS_StyleScopedClasses['mr-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['px-3']} */ ;
+/** @type {__VLS_StyleScopedClasses['py-1.5']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['rounded-md']} */ ;
+/** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
+/** @type {__VLS_StyleScopedClasses['i-ph-chart-bar']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-4']} */ ;
+/** @type {__VLS_StyleScopedClasses['inline-block']} */ ;
+/** @type {__VLS_StyleScopedClasses['mr-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-sm']} */ ;
+/** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
 /** @type {__VLS_StyleScopedClasses['grid']} */ ;
 /** @type {__VLS_StyleScopedClasses['grid-cols-1']} */ ;
 /** @type {__VLS_StyleScopedClasses['xl:grid-cols-2']} */ ;
@@ -1002,6 +1195,8 @@ const __VLS_self = (await import('vue')).defineComponent({
             isLoading: isLoading,
             socLoading: socLoading,
             carbonLoading: carbonLoading,
+            hourlyDisplayMode: hourlyDisplayMode,
+            daysDiff: daysDiff,
             summary: summary,
             socLabels: socLabels,
             socValues: socValues,
