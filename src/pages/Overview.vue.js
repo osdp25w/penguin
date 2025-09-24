@@ -1,8 +1,10 @@
+var _a, _b, _c, _d, _e, _f, _g, _h;
 import { reactive, ref, onMounted } from 'vue';
 import { Button, Card, KpiCard } from '@/design/components';
 import SocTrend from '@/components/charts/SocTrend.vue';
 import CarbonBar from '@/components/charts/CarbonBar.vue';
 import { http } from '@/lib/api';
+import { computeDailyOverviewMetrics } from '@/utils/dailyOverview';
 // Reactive data
 const granularity = ref('hour');
 const startDate = ref(getDefaultStartDate());
@@ -22,15 +24,18 @@ function getDefaultEndDate() {
     return today.toISOString().split('T')[0];
 }
 const summary = reactive({
-    online: 42,
-    offline: 8,
-    distance: 128.5,
-    carbon: 9.6,
-    // 與昨日比較的變化量
-    onlineChange: 0,
-    offlineChange: 0,
-    distanceChange: 0,
-    carbonChange: 0
+    online: '—',
+    offline: '—',
+    distance: '—',
+    carbon: '—',
+    onlineChange: null,
+    offlineChange: null,
+    distanceChange: null,
+    carbonChange: null,
+    onlineChangeLabel: '—',
+    offlineChangeLabel: '—',
+    distanceChangeLabel: '—',
+    carbonChangeLabel: '—'
 });
 // Chart data (reactive arrays)
 const socLabels = reactive(['00h', '02h', '04h', '06h', '08h', '10h', '12h', '14h', '16h', '18h', '20h', '22h']);
@@ -170,57 +175,91 @@ const updateData = () => {
         refreshData();
     }
 };
+function extractDailyRecords(source) {
+    var _a;
+    const data = (_a = source === null || source === void 0 ? void 0 : source.data) !== null && _a !== void 0 ? _a : source;
+    if (Array.isArray(data))
+        return data;
+    if (Array.isArray(data === null || data === void 0 ? void 0 : data.results))
+        return data.results;
+    return [];
+}
 // 取得每日總覽統計並與昨日比較
 async function fetchDailyOverviewWithComparison(start, end) {
+    var _a, _b, _c, _d;
     try {
-        const today = end || start;
-        const yesterday = new Date(today);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
-        // 並行獲取今日和昨日資料
-        const [todayResponse, yesterdayResponse] = await Promise.all([
-            http.get(`/api/statistic/daily-overview/?collected_time=${encodeURIComponent(today)}`).catch(() => null),
-            http.get(`/api/statistic/daily-overview/?collected_time=${encodeURIComponent(yesterdayStr)}`).catch(() => null)
-        ]);
-        const num = (obj, candidates, def = 0) => {
-            for (const k of candidates) {
-                if (obj && obj[k] != null && !isNaN(Number(obj[k])))
-                    return Number(obj[k]);
+        // 使用與原始程式碼相同的 API 參數格式
+        const targetDate = end || start || new Date().toISOString().split('T')[0];
+        // 建立參數
+        const params = new URLSearchParams();
+        params.set('limit', '14');
+        params.set('ordering', '-collected_time');
+        params.set('collected_time__lte', targetDate);
+        // 取得資料
+        const response = await http.get(`/api/statistic/daily-overview/?${params.toString()}`).catch(() => null);
+        // 提取資料
+        const records = extractDailyRecords(response);
+        // 如果資料不足，嘗試取得更大範圍
+        if (records.length < 2) {
+            const params2 = new URLSearchParams();
+            params2.set('limit', '30');
+            params2.set('ordering', '-collected_time');
+            const response2 = await http.get(`/api/statistic/daily-overview/?${params2.toString()}`).catch(() => null);
+            const moreRecords = extractDailyRecords(response2);
+            if (moreRecords.length > records.length) {
+                records.splice(0, records.length, ...moreRecords);
             }
-            return def;
-        };
-        // 處理今日資料
-        const todayData = (todayResponse === null || todayResponse === void 0 ? void 0 : todayResponse.data) || todayResponse;
-        const todayRec = Array.isArray(todayData) ? (todayData[0] || {}) : (todayData || {});
-        const todayOnline = num(todayRec, ['online_bikes_count', 'online', 'online_vehicles', 'online_count'], summary.online);
-        const todayOffline = num(todayRec, ['offline_bikes_count', 'offline', 'offline_vehicles', 'offline_count'], summary.offline);
-        const todayDistance = num(todayRec, ['total_distance_km', 'distance', 'total_distance', 'km', 'mileage'], summary.distance);
-        const todayCarbon = num(todayRec, ['carbon_reduction_kg', 'carbon', 'carbon_saved', 'co2', 'co2_kg'], summary.carbon);
-        // 處理昨日資料
-        const yesterdayData = (yesterdayResponse === null || yesterdayResponse === void 0 ? void 0 : yesterdayResponse.data) || yesterdayResponse;
-        const yesterdayRec = Array.isArray(yesterdayData) ? (yesterdayData[0] || {}) : (yesterdayData || {});
-        const yesterdayOnline = num(yesterdayRec, ['online_bikes_count', 'online', 'online_vehicles', 'online_count'], 0);
-        const yesterdayOffline = num(yesterdayRec, ['offline_bikes_count', 'offline', 'offline_vehicles', 'offline_count'], 0);
-        const yesterdayDistance = num(yesterdayRec, ['total_distance_km', 'distance', 'total_distance', 'km', 'mileage'], 0);
-        const yesterdayCarbon = num(yesterdayRec, ['carbon_reduction_kg', 'carbon', 'carbon_saved', 'co2', 'co2_kg'], 0);
-        // 更新當前值
-        summary.online = todayOnline;
-        summary.offline = todayOffline;
-        summary.distance = todayDistance;
-        summary.carbon = todayCarbon;
-        // 計算變化量
-        summary.onlineChange = todayOnline - yesterdayOnline;
-        summary.offlineChange = todayOffline - yesterdayOffline;
-        summary.distanceChange = Number((todayDistance - yesterdayDistance).toFixed(1));
-        summary.carbonChange = Number((todayCarbon - yesterdayCarbon).toFixed(1));
+        }
+        console.log('Daily overview records:', records.length, 'items');
+        if (records.length > 0) {
+            console.log('First record:', records[0]);
+        }
+        const metrics = computeDailyOverviewMetrics(records);
+        const onlineMetric = metrics.online;
+        summary.online = (_a = onlineMetric.value) !== null && _a !== void 0 ? _a : '—';
+        summary.onlineChange = onlineMetric.delta;
+        summary.onlineChangeLabel = onlineMetric.deltaLabel;
+        const offlineMetric = metrics.offline;
+        summary.offline = (_b = offlineMetric.value) !== null && _b !== void 0 ? _b : '—';
+        summary.offlineChange = offlineMetric.delta;
+        summary.offlineChangeLabel = offlineMetric.deltaLabel;
+        const distanceMetric = metrics.distance;
+        summary.distance = (_c = distanceMetric.value) !== null && _c !== void 0 ? _c : '—';
+        summary.distanceChange = distanceMetric.delta;
+        summary.distanceChangeLabel = distanceMetric.deltaLabel;
+        const carbonMetric = metrics.carbon;
+        summary.carbon = (_d = carbonMetric.value) !== null && _d !== void 0 ? _d : '—';
+        summary.carbonChange = carbonMetric.delta;
+        summary.carbonChangeLabel = carbonMetric.deltaLabel;
         console.log('Daily overview with comparison updated:', {
-            today: { online: todayOnline, offline: todayOffline, distance: todayDistance, carbon: todayCarbon },
-            yesterday: { online: yesterdayOnline, offline: yesterdayOffline, distance: yesterdayDistance, carbon: yesterdayCarbon },
-            changes: { online: summary.onlineChange, offline: summary.offlineChange, distance: summary.distanceChange, carbon: summary.carbonChange }
+            today: {
+                online: onlineMetric.value,
+                offline: offlineMetric.value,
+                distance: distanceMetric.value,
+                carbon: carbonMetric.value
+            },
+            changes: {
+                online: summary.onlineChange,
+                offline: summary.offlineChange,
+                distance: summary.distanceChange,
+                carbon: summary.carbonChange
+            }
         });
     }
     catch (e) {
         console.warn('fetchDailyOverviewWithComparison failed:', e);
+        summary.online = '—';
+        summary.offline = '—';
+        summary.distance = '—';
+        summary.carbon = '—';
+        summary.onlineChange = null;
+        summary.offlineChange = null;
+        summary.distanceChange = null;
+        summary.carbonChange = null;
+        summary.onlineChangeLabel = '—';
+        summary.offlineChangeLabel = '—';
+        summary.distanceChangeLabel = '—';
+        summary.carbonChangeLabel = '—';
     }
 }
 // 統一的趨勢圖資料獲取函數
@@ -651,7 +690,8 @@ const __VLS_17 = __VLS_asFunctionalComponent(__VLS_16, new __VLS_16({
     unit: "台",
     icon: "i-ph-bicycle",
     color: "green",
-    change: (__VLS_ctx.summary.onlineChange),
+    change: ((_a = __VLS_ctx.summary.onlineChange) !== null && _a !== void 0 ? _a : undefined),
+    changeLabel: (__VLS_ctx.summary.onlineChangeLabel),
     period: "昨日",
     trend: "up",
 }));
@@ -661,7 +701,8 @@ const __VLS_18 = __VLS_17({
     unit: "台",
     icon: "i-ph-bicycle",
     color: "green",
-    change: (__VLS_ctx.summary.onlineChange),
+    change: ((_b = __VLS_ctx.summary.onlineChange) !== null && _b !== void 0 ? _b : undefined),
+    changeLabel: (__VLS_ctx.summary.onlineChangeLabel),
     period: "昨日",
     trend: "up",
 }, ...__VLS_functionalComponentArgsRest(__VLS_17));
@@ -674,7 +715,8 @@ const __VLS_21 = __VLS_asFunctionalComponent(__VLS_20, new __VLS_20({
     unit: "台",
     icon: "i-ph-warning-circle",
     color: "red",
-    change: (__VLS_ctx.summary.offlineChange),
+    change: ((_c = __VLS_ctx.summary.offlineChange) !== null && _c !== void 0 ? _c : undefined),
+    changeLabel: (__VLS_ctx.summary.offlineChangeLabel),
     period: "昨日",
     trend: "down",
 }));
@@ -684,7 +726,8 @@ const __VLS_22 = __VLS_21({
     unit: "台",
     icon: "i-ph-warning-circle",
     color: "red",
-    change: (__VLS_ctx.summary.offlineChange),
+    change: ((_d = __VLS_ctx.summary.offlineChange) !== null && _d !== void 0 ? _d : undefined),
+    changeLabel: (__VLS_ctx.summary.offlineChangeLabel),
     period: "昨日",
     trend: "down",
 }, ...__VLS_functionalComponentArgsRest(__VLS_21));
@@ -699,7 +742,8 @@ const __VLS_25 = __VLS_asFunctionalComponent(__VLS_24, new __VLS_24({
     color: "blue",
     format: "number",
     precision: (1),
-    change: (__VLS_ctx.summary.distanceChange),
+    change: ((_e = __VLS_ctx.summary.distanceChange) !== null && _e !== void 0 ? _e : undefined),
+    changeLabel: (__VLS_ctx.summary.distanceChangeLabel),
     period: "昨日",
     trend: "up",
 }));
@@ -711,7 +755,8 @@ const __VLS_26 = __VLS_25({
     color: "blue",
     format: "number",
     precision: (1),
-    change: (__VLS_ctx.summary.distanceChange),
+    change: ((_f = __VLS_ctx.summary.distanceChange) !== null && _f !== void 0 ? _f : undefined),
+    changeLabel: (__VLS_ctx.summary.distanceChangeLabel),
     period: "昨日",
     trend: "up",
 }, ...__VLS_functionalComponentArgsRest(__VLS_25));
@@ -726,7 +771,8 @@ const __VLS_29 = __VLS_asFunctionalComponent(__VLS_28, new __VLS_28({
     color: "green",
     format: "number",
     precision: (1),
-    change: (__VLS_ctx.summary.carbonChange),
+    change: ((_g = __VLS_ctx.summary.carbonChange) !== null && _g !== void 0 ? _g : undefined),
+    changeLabel: (__VLS_ctx.summary.carbonChangeLabel),
     period: "昨日",
     trend: "up",
 }));
@@ -738,7 +784,8 @@ const __VLS_30 = __VLS_29({
     color: "green",
     format: "number",
     precision: (1),
-    change: (__VLS_ctx.summary.carbonChange),
+    change: ((_h = __VLS_ctx.summary.carbonChange) !== null && _h !== void 0 ? _h : undefined),
+    changeLabel: (__VLS_ctx.summary.carbonChangeLabel),
     period: "昨日",
     trend: "up",
 }, ...__VLS_functionalComponentArgsRest(__VLS_29));

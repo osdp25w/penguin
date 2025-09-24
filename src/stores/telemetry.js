@@ -2,7 +2,13 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { http } from '@/lib/api';
-export const DEFAULT_TELEMETRY_STATUS_OPTIONS = ['available', 'in-use', 'maintenance', 'disabled', 'deployed'];
+export const DEFAULT_TELEMETRY_STATUS_OPTIONS = [
+    'available',
+    'in-use',
+    'maintenance',
+    'disabled',
+    'deployed'
+];
 export const useTelemetry = defineStore('telemetry', () => {
     const devices = ref([]);
     const available = ref([]);
@@ -171,10 +177,11 @@ export const useTelemetry = defineStore('telemetry', () => {
         }
     }
     async function fetchDeviceStatusOptions() {
+        var _a, _b;
         try {
             const res = await http.get('/api/telemetry/device-status-options/');
-            const payload = (res === null || res === void 0 ? void 0 : res.data) ?? res;
-            const rawOptions = (payload === null || payload === void 0 ? void 0 : payload.status_options) ?? payload;
+            const payload = (_a = res === null || res === void 0 ? void 0 : res.data) !== null && _a !== void 0 ? _a : res;
+            const rawOptions = (_b = payload === null || payload === void 0 ? void 0 : payload.status_options) !== null && _b !== void 0 ? _b : payload;
             if (Array.isArray(rawOptions)) {
                 const apiStatuses = rawOptions
                     .map((opt) => {
@@ -182,9 +189,9 @@ export const useTelemetry = defineStore('telemetry', () => {
                         return null;
                     if (typeof opt === 'string')
                         return opt;
-                    if (typeof (opt === null || opt === void 0 ? void 0 : opt.value) === 'string')
+                    if (typeof opt.value === 'string')
                         return opt.value;
-                    if (typeof (opt === null || opt === void 0 ? void 0 : opt.label) === 'string')
+                    if (typeof opt.label === 'string')
                         return opt.label;
                     return null;
                 })
@@ -259,5 +266,19 @@ export const useTelemetry = defineStore('telemetry', () => {
             throw e;
         }
     }
-    return { devices, available, loading, error, statusOptions, fetchDevices, fetchAvailable, fetchDevicesPaged, fetchDeviceStatusOptions, createDevice, updateDevice, deleteDevice, normalizeStatus };
+    return {
+        devices,
+        available,
+        loading,
+        error,
+        statusOptions,
+        fetchDevices,
+        fetchAvailable,
+        fetchDevicesPaged,
+        fetchDeviceStatusOptions,
+        createDevice,
+        updateDevice,
+        deleteDevice,
+        normalizeStatus
+    };
 });

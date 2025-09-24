@@ -57,8 +57,9 @@ const iconClass = computed(() => {
     };
     return `p-2 rounded-lg ${colorClasses[props.color]}`;
 });
+const showChange = computed(() => props.changeLabel !== undefined || props.change !== undefined);
 const changeIcon = computed(() => {
-    if (props.change === undefined)
+    if (typeof props.change !== 'number')
         return null;
     if (props.change > 0) {
         return props.trend === 'down' ? 'i-ph-trend-down' : 'i-ph-trend-up';
@@ -69,8 +70,8 @@ const changeIcon = computed(() => {
     return 'i-ph-minus';
 });
 const changeIconClass = computed(() => {
-    if (props.change === undefined)
-        return '';
+    if (typeof props.change !== 'number')
+        return 'text-gray-500';
     if (props.change > 0) {
         return props.trend === 'down' ? 'text-red-500' : 'text-green-500';
     }
@@ -80,8 +81,8 @@ const changeIconClass = computed(() => {
     return 'text-gray-700';
 });
 const changeTextClass = computed(() => {
-    if (props.change === undefined)
-        return '';
+    if (typeof props.change !== 'number')
+        return 'text-gray-600';
     if (props.change > 0) {
         return props.trend === 'down' ? 'text-red-600' : 'text-green-600';
     }
@@ -89,6 +90,21 @@ const changeTextClass = computed(() => {
         return props.trend === 'up' ? 'text-green-600' : 'text-red-600';
     }
     return 'text-gray-600';
+});
+const changeDisplay = computed(() => {
+    if (props.changeLabel !== undefined) {
+        return props.changeLabel;
+    }
+    if (typeof props.change === 'number') {
+        const sign = props.change > 0 ? '+' : props.change < 0 ? '-' : '±';
+        const formatted = new Intl.NumberFormat('zh-TW', {
+            minimumFractionDigits: props.precision,
+            maximumFractionDigits: props.precision,
+        }).format(Math.abs(props.change));
+        const unitLabel = props.unit ? ` ${props.unit}` : '';
+        return `${sign}${formatted}${unitLabel}`;
+    }
+    return '—';
 });
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_withDefaultsArg = (function (t) { return t; })({
@@ -152,7 +168,7 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.d
     ...{ class: "text-2xl font-bold text-gray-900" },
 });
 (__VLS_ctx.formattedValue);
-if (__VLS_ctx.change !== undefined) {
+if (__VLS_ctx.showChange) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "flex items-center gap-1" },
     });
@@ -165,8 +181,7 @@ if (__VLS_ctx.change !== undefined) {
         ...{ class: (__VLS_ctx.changeTextClass) },
         ...{ class: "text-sm font-medium" },
     });
-    (Math.abs(__VLS_ctx.change));
-    (__VLS_ctx.unit);
+    (__VLS_ctx.changeDisplay);
     __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
         ...{ class: "text-gray-700 font-normal ml-1" },
     });
@@ -228,9 +243,11 @@ const __VLS_self = (await import('vue')).defineComponent({
             formattedValue: formattedValue,
             cardClass: cardClass,
             iconClass: iconClass,
+            showChange: showChange,
             changeIcon: changeIcon,
             changeIconClass: changeIconClass,
             changeTextClass: changeTextClass,
+            changeDisplay: changeDisplay,
         };
     },
     __typeProps: {},
