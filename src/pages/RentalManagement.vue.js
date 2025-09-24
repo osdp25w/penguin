@@ -132,7 +132,11 @@ const toggleSort = (field) => {
         sortConfig.order = 'asc';
     }
 };
-const buildQuerySignature = () => JSON.stringify({ search: filters.search.trim(), status: filters.status });
+// 清除篩選
+const buildQuerySignature = () => JSON.stringify({
+    search: filters.search.trim(),
+    status: filters.status
+});
 const activeRequest = ref(null);
 const lastQuerySignature = ref('');
 const refresh = async ({ force = false } = {}) => {
@@ -182,7 +186,6 @@ const refresh = async ({ force = false } = {}) => {
     }
 };
 const manualRefresh = () => refresh({ force: true });
-// 清除篩選
 const clearFilters = () => {
     filters.search = '';
     filters.status = '';
@@ -245,7 +248,7 @@ let __VLS_4;
 let __VLS_5;
 let __VLS_6;
 const __VLS_7 = {
-    onClick: (__VLS_ctx.refresh)
+    onClick: (__VLS_ctx.manualRefresh)
 };
 __VLS_3.slots.default;
 __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)({
@@ -265,7 +268,7 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.i, __VLS_intrinsicElements.i)(
     ...{ class: "i-ph-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.input)({
-    ...{ onKeyup: (__VLS_ctx.refresh) },
+    ...{ onKeyup: (__VLS_ctx.manualRefresh) },
     type: "text",
     value: (__VLS_ctx.filters.search),
     placeholder: "搜尋租借編號、車輛 ID、會員名稱...",
@@ -278,7 +281,6 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements
     ...{ class: "text-sm font-medium text-gray-700 whitespace-nowrap" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.select, __VLS_intrinsicElements.select)({
-    ...{ onChange: (__VLS_ctx.refresh) },
     value: (__VLS_ctx.filters.status),
     ...{ class: "rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" },
 });
@@ -367,7 +369,7 @@ else if (__VLS_ctx.error) {
     let __VLS_13;
     let __VLS_14;
     const __VLS_15 = {
-        onClick: (__VLS_ctx.refresh)
+        onClick: (__VLS_ctx.manualRefresh)
     };
     __VLS_11.slots.default;
     var __VLS_11;
@@ -1095,8 +1097,8 @@ const __VLS_self = (await import('vue')).defineComponent({
             formatDistance: formatDistance,
             sortedRentals: sortedRentals,
             toggleSort: toggleSort,
+            manualRefresh: manualRefresh,
             clearFilters: clearFilters,
-            refresh: refresh,
             openDetail: openDetail,
         };
     },

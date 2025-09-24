@@ -46,7 +46,13 @@ const showReturnModal = ref(false);
 const showRentModal = ref(false);
 const recentReturns = ref([]);
 // 新的響應式狀態
-const selectedDomain = ref('huali');
+const selectedSiteId = ref('');
+const selectedSite = computed(() => {
+    var _a;
+    if (!selectedSiteId.value)
+        return null;
+    return (_a = sitesStore.list.find(site => site.id === selectedSiteId.value)) !== null && _a !== void 0 ? _a : null;
+});
 const displayMode = ref('realtime');
 const selectedItem = ref(null);
 const highlightedVehicle = ref(null);
@@ -110,6 +116,25 @@ const historyPagination = ref({
 });
 let historyRequestToken = 0;
 const seedMockEnabled = computed(() => import.meta.env.VITE_SEED_MOCK === '1');
+const SITE_RADIUS_KM = 0.5;
+function haversineDistanceKm(lat1, lon1, lat2, lon2) {
+    const toRad = (deg) => deg * Math.PI / 180;
+    const R = 6371; // Earth radius in km
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+function isVehicleNearSite(vehicle, site, radiusKm = SITE_RADIUS_KM) {
+    var _a, _b;
+    const lat = typeof (vehicle === null || vehicle === void 0 ? void 0 : vehicle.lat) === 'number' ? vehicle.lat : (_a = vehicle === null || vehicle === void 0 ? void 0 : vehicle.location) === null || _a === void 0 ? void 0 : _a.lat;
+    const lon = typeof (vehicle === null || vehicle === void 0 ? void 0 : vehicle.lon) === 'number' ? vehicle.lon : (_b = vehicle === null || vehicle === void 0 ? void 0 : vehicle.location) === null || _b === void 0 ? void 0 : _b.lng;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon))
+        return false;
+    const distance = haversineDistanceKm(lat, lon, site.location.lat, site.location.lng);
+    return distance <= radiusKm;
+}
 function formatDateToLocalHour(date) {
     const localDate = new Date(date.getTime());
     localDate.setMinutes(0, 0, 0);
@@ -300,7 +325,18 @@ const mockVehicleTraces = computed(() => ({
 }))
 */
 // 計算車輛分布的中心點和最佳縮放級別
+const DEFAULT_CENTER = { lat: 23.9739, lng: 121.6014 };
 const mapCenter = computed(() => {
+    if (displayMode.value === 'realtime') {
+        const site = selectedSite.value;
+        if (site) {
+            return {
+                lat: site.location.lat,
+                lng: site.location.lng,
+                zoom: 15
+            };
+        }
+    }
     if (displayMode.value === 'history') {
         const tracesData = filteredVehicleTraces.value || {};
         const traces = selectedTraceVehicles.value.length
@@ -333,12 +369,27 @@ const mapCenter = computed(() => {
             return { lat: centerLat, lng: centerLng, zoom };
         }
     }
+    const site = selectedSite.value;
+    if (displayMode.value === 'realtime' && site) {
+        return {
+            lat: site.location.lat,
+            lng: site.location.lng,
+            zoom: 15
+        };
+    }
     const vehicles = realtimeVehicles.value;
     if (vehicles.length === 0) {
-        return { lat: 23.9739, lng: 121.6014, zoom: 12 };
+        return { ...DEFAULT_CENTER, zoom: 12 };
     }
-    const lats = vehicles.map((v) => { var _a; return v.lat || ((_a = v.location) === null || _a === void 0 ? void 0 : _a.lat); }).filter(Boolean);
-    const lngs = vehicles.map((v) => { var _a; return v.lon || ((_a = v.location) === null || _a === void 0 ? void 0 : _a.lng); }).filter(Boolean);
+    const lats = vehicles
+        .map((v) => { var _a; return typeof v.lat === 'number' ? v.lat : (_a = v.location) === null || _a === void 0 ? void 0 : _a.lat; })
+        .filter((value) => Number.isFinite(value));
+    const lngs = vehicles
+        .map((v) => { var _a; return typeof v.lon === 'number' ? v.lon : (_a = v.location) === null || _a === void 0 ? void 0 : _a.lng; })
+        .filter((value) => Number.isFinite(value));
+    if (lats.length === 0 || lngs.length === 0) {
+        return { ...DEFAULT_CENTER, zoom: 12 };
+    }
     const minLat = Math.min(...lats);
     const maxLat = Math.max(...lats);
     const minLng = Math.min(...lngs);
@@ -418,6 +469,14 @@ const historyRoutes = computed(() => {
 const filteredRealtimeVehicles = computed(() => {
     var _a, _b, _c, _d;
     let list = realtimeVehicles.value;
+    const brandFilters = sitesStore.filters.brands;
+    if (brandFilters.length > 0) {
+        // 後端尚未提供車輛與場域直接關聯，暫不依品牌過濾
+    }
+    const site = selectedSite.value;
+    if (site) {
+        list = list.filter(vehicle => isVehicleNearSite(vehicle, site));
+    }
     // 權限濾除：member 不顯示使用中
     const role = (_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId;
     if (role !== 'admin' && role !== 'staff') {
@@ -458,6 +517,14 @@ const filteredRealtimeVehicles = computed(() => {
 const availableVehiclesForFilter = computed(() => {
     var _a, _b, _c, _d;
     let list = realtimeVehicles.value;
+    const brandFilters = sitesStore.filters.brands;
+    if (brandFilters.length > 0) {
+        // 後端尚未提供車輛與場域直接關聯，暫不依品牌過濾
+    }
+    const site = selectedSite.value;
+    if (site) {
+        list = list.filter(vehicle => isVehicleNearSite(vehicle, site));
+    }
     // 角色限制：member 不顯示使用中（但保留自己的租借中車輛）
     const role = (_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId;
     if (role !== 'admin' && role !== 'staff') {
@@ -493,9 +560,32 @@ watch(timeRange, () => {
         loadHistoryTrajectories();
     }
 }, { deep: true });
-watch(selectedDomain, () => {
+watch(selectedSite, (site) => {
+    if (site) {
+        sitesStore.selectSite(site);
+        selectedItem.value = {
+            ...site,
+            type: 'site',
+            center: {
+                lat: site.location.lat,
+                lng: site.location.lng,
+                zoom: 15
+            },
+            lat: site.location.lat,
+            lon: site.location.lng
+        };
+        selectionApplied.value = false;
+    }
+    else {
+        sitesStore.selectSite(undefined);
+        selectedItem.value = null;
+        selectionApplied.value = false;
+    }
     if (displayMode.value === 'history') {
         loadHistoryTrajectories();
+    }
+    else {
+        loadRealtimePositions();
     }
 });
 // 計算屬性
@@ -511,6 +601,22 @@ const availableVehicles = computed(() => {
     }
     return sitesStore.filteredSites.reduce((sum, site) => sum + site.availableCount, 0);
 });
+const siteVehicleCounts = computed(() => {
+    const counts = new Map();
+    sitesStore.list.forEach(site => counts.set(site.id, 0));
+    realtimeVehicles.value.forEach(vehicle => {
+        var _a, _b, _c;
+        const lat = typeof (vehicle === null || vehicle === void 0 ? void 0 : vehicle.lat) === 'number' ? vehicle.lat : (_a = vehicle === null || vehicle === void 0 ? void 0 : vehicle.location) === null || _a === void 0 ? void 0 : _a.lat;
+        const lon = typeof (vehicle === null || vehicle === void 0 ? void 0 : vehicle.lon) === 'number' ? vehicle.lon : (_b = vehicle === null || vehicle === void 0 ? void 0 : vehicle.location) === null || _b === void 0 ? void 0 : _b.lng;
+        if (!Number.isFinite(lat) || !Number.isFinite(lon))
+            return;
+        const nearest = findNearestSite(lat, lon);
+        if (nearest) {
+            counts.set(nearest.id, ((_c = counts.get(nearest.id)) !== null && _c !== void 0 ? _c : 0) + 1);
+        }
+    });
+    return counts;
+});
 const siteVehicles = computed(() => {
     if (!sitesStore.selected)
         return [];
@@ -523,30 +629,32 @@ const recentAlerts = computed(() => {
 });
 // 圖表配置
 const chartTheme = 'light';
-const chartOption = computed(() => ({
-    grid: { top: 20, right: 20, bottom: 20, left: 40 },
-    xAxis: {
-        type: 'category',
-        data: ['華麗轉身', '順其自然'],
-        axisLine: { show: false },
-        axisTick: { show: false }
-    },
-    yAxis: {
-        type: 'value',
-        axisLine: { show: false },
-        axisTick: { show: false },
-        splitLine: { lineStyle: { color: '#f3f4f6' } }
-    },
-    series: [{
-            data: [
-                sitesStore.filteredSites.filter(s => s.brand === 'huali').length,
-                sitesStore.filteredSites.filter(s => s.brand === 'shunqi').length
-            ],
-            type: 'bar',
-            itemStyle: { color: '#6366f1' },
-            barWidth: '40%'
-        }]
-}));
+const chartOption = computed(() => {
+    const labels = sitesStore.list.map(site => site.name);
+    const counts = siteVehicleCounts.value;
+    const values = sitesStore.list.map(site => { var _a; return (_a = counts.get(site.id)) !== null && _a !== void 0 ? _a : 0; });
+    return {
+        grid: { top: 20, right: 20, bottom: 20, left: 40 },
+        xAxis: {
+            type: 'category',
+            data: labels,
+            axisLine: { show: false },
+            axisTick: { show: false }
+        },
+        yAxis: {
+            type: 'value',
+            axisLine: { show: false },
+            axisTick: { show: false },
+            splitLine: { lineStyle: { color: '#f3f4f6' } }
+        },
+        series: [{
+                data: values,
+                type: 'bar',
+                itemStyle: { color: '#6366f1' },
+                barWidth: '40%'
+            }]
+    };
+});
 // 工具函式
 function getStatusBadgeClass(status) {
     const statusClasses = {
@@ -655,9 +763,6 @@ function getStatusText(status) {
     };
     return texts[status] || status;
 }
-function getBrandText(brand) {
-    return brand === 'huali' ? '華麗轉身' : '順騎自然';
-}
 function getAlertColor(severity) {
     const colors = {
         info: 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300',
@@ -677,12 +782,6 @@ function getBatteryColor(level) {
 function formatTime(dateString) {
     return new Date(dateString).toLocaleString('zh-TW');
 }
-async function handleDomainChange() {
-    // 根據選擇的場域篩選資料
-    console.log('場域切換至:', selectedDomain.value);
-    // TODO: 根據場域更新地圖上的車輛標記
-    await loadVehiclesByDomain();
-}
 async function handleDisplayModeChange() {
     console.log('顯示模式切換至:', displayMode.value);
     if (displayMode.value === 'history') {
@@ -692,16 +791,6 @@ async function handleDisplayModeChange() {
     else {
         // 載入即時位置資料
         await loadRealtimePositions();
-    }
-}
-async function loadVehiclesByDomain() {
-    // 根據選擇的場域載入車輛資料
-    try {
-        console.log(`載入場域 ${selectedDomain.value} 的車輛資料`);
-        // TODO: 呼叫 API 載入特定場域的車輛資料
-    }
-    catch (error) {
-        console.error('載入車輛資料失敗:', error);
     }
 }
 async function loadHistoryTrajectories() {
@@ -727,8 +816,9 @@ async function loadHistoryTrajectories() {
             params.set('created_at__gte', effectiveStart);
         if (effectiveEnd)
             params.set('created_at__lte', effectiveEnd);
-        if (selectedDomain.value)
-            params.set('domain', selectedDomain.value);
+        if (selectedSite.value) {
+            params.set('site_id', selectedSite.value.id);
+        }
         const query = params.toString();
         const response = await http.get(`/api/statistic/routes/${query ? `?${query}` : ''}`);
         const dataSection = (_a = response === null || response === void 0 ? void 0 : response.data) !== null && _a !== void 0 ? _a : {};
@@ -813,10 +903,102 @@ async function loadHistoryTrajectories() {
         }
     }
 }
+function mapRealtimeStatus(status) {
+    switch ((status !== null && status !== void 0 ? status : '').toLowerCase()) {
+        case 'idle':
+            return 'available';
+        case 'rented':
+            return 'in-use';
+        case 'maintenance':
+            return 'maintenance';
+        case 'error':
+            return 'offline';
+        default:
+            return status !== null && status !== void 0 ? status : 'available';
+    }
+}
+function toDecimalCoordinate(raw, fallback) {
+    if (typeof raw === 'number' && Number.isFinite(raw) && raw !== 0) {
+        return raw;
+    }
+    if (typeof fallback === 'number' && Number.isFinite(fallback) && fallback !== 0) {
+        return fallback / 1000000;
+    }
+    return null;
+}
+function findNearestSite(lat, lng) {
+    if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng))
+        return null;
+    let nearest = null;
+    let best = Number.POSITIVE_INFINITY;
+    for (const site of sitesStore.list) {
+        const dLat = lat - site.location.lat;
+        const dLng = lng - site.location.lng;
+        const dist = dLat * dLat + dLng * dLng;
+        if (dist < best) {
+            best = dist;
+            nearest = site;
+        }
+    }
+    return nearest;
+}
+function mapRealtimeVehicle(entry, index) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u;
+    if (!entry)
+        return null;
+    const bike = (_a = entry === null || entry === void 0 ? void 0 : entry.bike) !== null && _a !== void 0 ? _a : {};
+    const id = (_b = bike === null || bike === void 0 ? void 0 : bike.bike_id) !== null && _b !== void 0 ? _b : `realtime-${index}`;
+    const lat = toDecimalCoordinate(entry === null || entry === void 0 ? void 0 : entry.lat_decimal, entry === null || entry === void 0 ? void 0 : entry.latitude);
+    const lon = toDecimalCoordinate(entry === null || entry === void 0 ? void 0 : entry.lng_decimal, entry === null || entry === void 0 ? void 0 : entry.longitude);
+    const nearest = findNearestSite(lat, lon);
+    const member = (_c = entry === null || entry === void 0 ? void 0 : entry.current_member) !== null && _c !== void 0 ? _c : null;
+    const memberInfo = member
+        ? {
+            id: (_d = member === null || member === void 0 ? void 0 : member.id) !== null && _d !== void 0 ? _d : null,
+            name: (_f = (_e = member === null || member === void 0 ? void 0 : member.full_name) !== null && _e !== void 0 ? _e : member === null || member === void 0 ? void 0 : member.username) !== null && _f !== void 0 ? _f : '',
+            phone: (_g = member === null || member === void 0 ? void 0 : member.phone) !== null && _g !== void 0 ? _g : ''
+        }
+        : null;
+    const location = lat != null && lon != null ? { lat, lng: lon } : null;
+    return {
+        id,
+        name: (_j = (_h = bike === null || bike === void 0 ? void 0 : bike.bike_name) !== null && _h !== void 0 ? _h : bike === null || bike === void 0 ? void 0 : bike.bike_id) !== null && _j !== void 0 ? _j : `車輛 ${index + 1}`,
+        model: (_k = bike === null || bike === void 0 ? void 0 : bike.bike_model) !== null && _k !== void 0 ? _k : '',
+        speedKph: Number((_m = (_l = entry === null || entry === void 0 ? void 0 : entry.speed_kph) !== null && _l !== void 0 ? _l : entry === null || entry === void 0 ? void 0 : entry.vehicle_speed) !== null && _m !== void 0 ? _m : 0) || 0,
+        vehicleSpeed: Number((_p = (_o = entry === null || entry === void 0 ? void 0 : entry.speed_kph) !== null && _o !== void 0 ? _o : entry === null || entry === void 0 ? void 0 : entry.vehicle_speed) !== null && _p !== void 0 ? _p : 0) || 0,
+        batteryPct: Number((_q = entry === null || entry === void 0 ? void 0 : entry.soc) !== null && _q !== void 0 ? _q : 0) || 0,
+        batteryLevel: Number((_r = entry === null || entry === void 0 ? void 0 : entry.soc) !== null && _r !== void 0 ? _r : 0) || 0,
+        status: mapRealtimeStatus(entry === null || entry === void 0 ? void 0 : entry.status),
+        originalStatus: (_s = entry === null || entry === void 0 ? void 0 : entry.status) !== null && _s !== void 0 ? _s : '',
+        lastSeen: (_u = (_t = entry === null || entry === void 0 ? void 0 : entry.last_seen) !== null && _t !== void 0 ? _t : entry === null || entry === void 0 ? void 0 : entry.updated_at) !== null && _u !== void 0 ? _u : null,
+        lat,
+        lon,
+        location,
+        siteId: nearest === null || nearest === void 0 ? void 0 : nearest.id,
+        siteName: nearest === null || nearest === void 0 ? void 0 : nearest.name,
+        siteBrand: nearest === null || nearest === void 0 ? void 0 : nearest.brand,
+        brand: nearest === null || nearest === void 0 ? void 0 : nearest.brand,
+        currentMember: memberInfo,
+        raw: entry
+    };
+}
 async function loadRealtimePositions() {
+    var _a;
     try {
-        const { data } = await vehiclesStore.fetchVehiclesPaged({ limit: 200, offset: 0 });
-        realtimeVehicles.value = data;
+        const searchParams = new URLSearchParams();
+        searchParams.set('limit', '200');
+        searchParams.set('offset', '0');
+        const response = await http.get(`/api/bike/realtime-status/?${searchParams.toString()}`);
+        const payload = (_a = response === null || response === void 0 ? void 0 : response.data) !== null && _a !== void 0 ? _a : response;
+        const results = Array.isArray(payload === null || payload === void 0 ? void 0 : payload.results)
+            ? payload.results
+            : Array.isArray(payload)
+                ? payload
+                : [];
+        const mapped = results
+            .map((entry, index) => mapRealtimeVehicle(entry, index))
+            .filter((item) => Boolean(item));
+        realtimeVehicles.value = mapped;
     }
     catch (error) {
         console.error('載入即時位置失敗:', error);
@@ -835,8 +1017,8 @@ function handleMapSelect(id) {
         // 選擇站點
         const site = sitesStore.list.find(s => s.id === id);
         if (site) {
-            sitesStore.selected = site;
-            selectedItem.value = site;
+            sitesStore.selectSite(site);
+            selectedSiteId.value = site.id;
         }
     }
 }
@@ -947,18 +1129,16 @@ async function onReturnSuccess(returnRecord) {
     if (sitesStore.selected) {
         await Promise.all([
             sitesStore.fetchSites(),
-            vehiclesStore.fetchBySite(sitesStore.selected.id),
             returnsStore.fetchReturns({ siteId: sitesStore.selected.id, limit: 5 })
         ]);
+        await loadRealtimePositions();
     }
 }
 // 生命週期
 onMounted(async () => {
-    await Promise.all([
-        sitesStore.fetchSites(),
-        bikeMeta.fetchBikeStatusOptions(),
-        loadRealtimePositions()
-    ]);
+    await sitesStore.fetchSites();
+    await loadRealtimePositions();
+    await bikeMeta.fetchBikeStatusOptions();
     // 設置自動重新整理即時資料 (每30秒)
     const refreshInterval = setInterval(async () => {
         if (displayMode.value === 'realtime') {
@@ -974,12 +1154,14 @@ onMounted(async () => {
 // 監聽選中站點變化
 watch(() => sitesStore.selected, async (newSite) => {
     if (newSite) {
-        const [vehicles, alerts, returns] = await Promise.all([
-            vehiclesStore.fetchBySite(newSite.id),
+        const [alerts, returns] = await Promise.all([
             alertsStore.fetchBySiteSince(newSite.id),
             returnsStore.fetchRecentReturns(newSite.id, 5)
         ]);
         recentReturns.value = returns;
+    }
+    else {
+        recentReturns.value = [];
     }
 });
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
@@ -1010,16 +1192,19 @@ __VLS_asFunctionalElement(__VLS_intrinsicElements.label, __VLS_intrinsicElements
     ...{ class: "text-sm font-medium text-gray-700" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.select, __VLS_intrinsicElements.select)({
-    ...{ onChange: (__VLS_ctx.handleDomainChange) },
-    value: (__VLS_ctx.selectedDomain),
+    value: (__VLS_ctx.selectedSiteId),
     ...{ class: "px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" },
 });
 __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
-    value: "huali",
+    value: "",
 });
-__VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
-    value: "shunqi",
-});
+for (const [site] of __VLS_getVForSourceType((__VLS_ctx.sitesStore.list))) {
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.option, __VLS_intrinsicElements.option)({
+        key: (site.id),
+        value: (site.id),
+    });
+    (site.name);
+}
 __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
     ...{ class: "flex items-center space-x-2" },
 });
@@ -1340,8 +1525,8 @@ else {
             ...{ class: "i-ph-map-pin w-4 h-4" },
         });
         __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({});
-        (vehicle.lat.toFixed(6));
-        (vehicle.lon.toFixed(6));
+        (typeof vehicle.lat === 'number' ? vehicle.lat.toFixed(6) : '—');
+        (typeof vehicle.lon === 'number' ? vehicle.lon.toFixed(6) : '—');
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
             ...{ class: "flex items-center space-x-1" },
         });
@@ -1912,7 +2097,7 @@ const __VLS_self = (await import('vue')).defineComponent({
             VehicleFilter: VehicleFilter,
             sitesStore: sitesStore,
             canViewHistory: canViewHistory,
-            selectedDomain: selectedDomain,
+            selectedSiteId: selectedSiteId,
             displayMode: displayMode,
             selectedItem: selectedItem,
             highlightedVehicle: highlightedVehicle,
@@ -1949,7 +2134,6 @@ const __VLS_self = (await import('vue')).defineComponent({
             selectVehicle: selectVehicle,
             focusTrace: focusTrace,
             getStatusText: getStatusText,
-            handleDomainChange: handleDomainChange,
             handleDisplayModeChange: handleDisplayModeChange,
             handleMapSelect: handleMapSelect,
             handleRentSuccess: handleRentSuccess,

@@ -23,7 +23,7 @@ const KoalaRentalSchema = z.object({
         .object({
         bike_id: z.string(),
         bike_name: z.string().optional().nullable(),
-        bike_model: z.string().optional().nullable(),
+        bike_model: z.string().optional().nullable()
     })
         .optional()
         .nullable(),
@@ -31,7 +31,7 @@ const KoalaRentalSchema = z.object({
         .object({
         id: z.union([z.number(), z.string()]).optional(),
         full_name: z.string().optional().nullable(),
-        phone: z.string().optional().nullable(),
+        phone: z.string().optional().nullable()
     })
         .optional()
         .nullable(),
@@ -42,49 +42,57 @@ const KoalaRentalSchema = z.object({
     return_location: z.string().optional().nullable(),
     total_fee: z.string().optional().nullable(),
     created_at: z.string().optional().nullable(),
-    updated_at: z.string().optional().nullable(),
+    updated_at: z.string().optional().nullable()
 });
 const KoalaRentalListSchema = z.object({
     count: z.number().optional(),
     next: z.unknown().optional(),
     previous: z.unknown().optional(),
-    results: z.array(KoalaRentalSchema).optional(),
+    results: z.array(KoalaRentalSchema).optional()
 });
-const extractKoalaRentals = (payload) => {
+function extractKoalaRentals(payload) {
+    var _a;
     const parsed = KoalaRentalListSchema.safeParse(payload);
     if (parsed.success) {
-        return parsed.data.results ?? [];
+        return (_a = parsed.data.results) !== null && _a !== void 0 ? _a : [];
     }
     if (Array.isArray(payload))
         return payload;
     if (Array.isArray(payload === null || payload === void 0 ? void 0 : payload.results))
         return payload.results;
     return [];
-};
-const normalizeRentalToReturnRecord = (rental, siteId) => {
+}
+function normalizeRentalToReturnRecord(rental, siteId) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t;
     try {
-        var _a, _b, _c, _d, _e, _f, _g;
         const base = ReturnRecordSchema.parse({
-            id: String(((_a = rental.id) !== null && _a !== void 0 ? _a : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now()))),
-            vehicleId: ((_b = rental.bike) === null || _b === void 0 ? void 0 : _b.bike_id) ?? 'unknown',
-            siteId: siteId ?? ((_c = rental.return_location) !== null && _c !== void 0 ? _c : 'unknown'),
+            id: String((_c = (_a = rental.id) !== null && _a !== void 0 ? _a : (_b = crypto.randomUUID) === null || _b === void 0 ? void 0 : _b.call(crypto)) !== null && _c !== void 0 ? _c : Date.now()),
+            vehicleId: (_e = (_d = rental.bike) === null || _d === void 0 ? void 0 : _d.bike_id) !== null && _e !== void 0 ? _e : 'unknown',
+            siteId: (_f = siteId !== null && siteId !== void 0 ? siteId : rental.return_location) !== null && _f !== void 0 ? _f : 'unknown',
             odometer: 0,
             battery: 0,
             issues: undefined,
             photos: undefined,
             fromSiteId: undefined,
-            by: ((_d = rental.member) === null || _d === void 0 ? void 0 : _d.full_name) ?? '',
-            createdAt: ((_g = (_f = (_e = rental.end_time) !== null && _e !== void 0 ? _e : rental.updated_at) !== null && _f !== void 0 ? _f : rental.created_at) !== null && _g !== void 0 ? _g : new Date().toISOString()),
+            by: (_h = (_g = rental.member) === null || _g === void 0 ? void 0 : _g.full_name) !== null && _h !== void 0 ? _h : '',
+            createdAt: (_l = (_k = (_j = rental.end_time) !== null && _j !== void 0 ? _j : rental.updated_at) !== null && _k !== void 0 ? _k : rental.created_at) !== null && _l !== void 0 ? _l : new Date().toISOString()
         });
-        const member = rental.member ?? {};
-        const bike = rental.bike ?? {};
-        return Object.assign(Object.assign({}, base), { memberName: (member === null || member === void 0 ? void 0 : member.full_name) ?? '', memberPhone: (member === null || member === void 0 ? void 0 : member.phone) ?? '', returnLocation: rental.return_location ?? undefined, bikeName: (bike === null || bike === void 0 ? void 0 : bike.bike_name) ?? undefined, bikeModel: (bike === null || bike === void 0 ? void 0 : bike.bike_model) ?? undefined });
+        const member = (_m = rental.member) !== null && _m !== void 0 ? _m : {};
+        const bike = (_o = rental.bike) !== null && _o !== void 0 ? _o : {};
+        return {
+            ...base,
+            memberName: (_p = member === null || member === void 0 ? void 0 : member.full_name) !== null && _p !== void 0 ? _p : '',
+            memberPhone: (_q = member === null || member === void 0 ? void 0 : member.phone) !== null && _q !== void 0 ? _q : '',
+            returnLocation: (_r = rental.return_location) !== null && _r !== void 0 ? _r : undefined,
+            bikeName: (_s = bike === null || bike === void 0 ? void 0 : bike.bike_name) !== null && _s !== void 0 ? _s : undefined,
+            bikeModel: (_t = bike === null || bike === void 0 ? void 0 : bike.bike_model) !== null && _t !== void 0 ? _t : undefined
+        };
     }
     catch (error) {
         console.warn('[Returns] Failed to normalize rental record:', error);
         return null;
     }
-};
+}
 export const useReturns = defineStore('returns', () => {
     const list = ref([]);
     const isLoading = ref(false);
@@ -132,14 +140,15 @@ export const useReturns = defineStore('returns', () => {
      * 獲取歸還記錄
      */
     const fetchReturns = async (params) => {
+        var _a, _b;
         isLoading.value = true;
         try {
             const searchParams = new URLSearchParams();
-            searchParams.set('limit', String((params === null || params === void 0 ? void 0 : params.limit) ?? 20));
+            searchParams.set('limit', String((_a = params === null || params === void 0 ? void 0 : params.limit) !== null && _a !== void 0 ? _a : 20));
             searchParams.set('offset', '0');
             searchParams.set('rental_status', 'completed');
             const response = await http.get(`/api/rental/staff/rentals/?${searchParams.toString()}`);
-            const payload = (response === null || response === void 0 ? void 0 : response.data) ?? response;
+            const payload = (_b = response === null || response === void 0 ? void 0 : response.data) !== null && _b !== void 0 ? _b : response;
             const rentals = extractKoalaRentals(payload);
             const mapped = rentals
                 .map((item) => normalizeRentalToReturnRecord(item, params === null || params === void 0 ? void 0 : params.siteId))
@@ -159,13 +168,14 @@ export const useReturns = defineStore('returns', () => {
      * 獲取特定站點的最近歸還記錄
      */
     const fetchRecentReturns = async (siteId, limit = 5) => {
+        var _a;
         try {
             const searchParams = new URLSearchParams();
             searchParams.set('limit', String(Math.max(limit * 2, 10)));
             searchParams.set('offset', '0');
             searchParams.set('rental_status', 'completed');
             const response = await http.get(`/api/rental/staff/rentals/?${searchParams.toString()}`);
-            const payload = (response === null || response === void 0 ? void 0 : response.data) ?? response;
+            const payload = (_a = response === null || response === void 0 ? void 0 : response.data) !== null && _a !== void 0 ? _a : response;
             const rentals = extractKoalaRentals(payload);
             const mapped = rentals
                 .map((item) => normalizeRentalToReturnRecord(item, siteId))
@@ -173,13 +183,14 @@ export const useReturns = defineStore('returns', () => {
             if (mapped.length <= limit) {
                 return mapped;
             }
+            // 嘗試依照場域名稱做模糊匹配
             try {
                 const { useSites } = await import('./sites');
                 const sitesStore = useSites();
                 const targetSite = sitesStore.list.find((s) => s.id === siteId);
                 if (targetSite) {
                     const keyword = targetSite.name.toLowerCase();
-                    const filtered = mapped.filter((record) => { var _a, _b; return ((_b = (_a = record.returnLocation) === null || _a === void 0 ? void 0 : _a.toLowerCase()) === null || _b === void 0 ? void 0 : _b.includes(keyword)); });
+                    const filtered = mapped.filter((record) => { var _a; return (_a = record.returnLocation) === null || _a === void 0 ? void 0 : _a.toLowerCase().includes(keyword); });
                     if (filtered.length > 0) {
                         return filtered.slice(0, limit);
                     }
