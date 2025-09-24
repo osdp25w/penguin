@@ -335,6 +335,8 @@ import VehicleFilter from '@/components/filters/VehicleFilter.vue'
 import type { Site } from '@/types/site'
 import { useAuth } from '@/stores/auth'
 import { http } from '@/lib/api'
+import { subscribeRealtimeStatus, setRealtimeStatusConnectionCallback } from '@/services/koala_realtime_ws'
+import type { BikeRealtimeStatusUpdate } from '@/services/koala_realtime_ws'
 
 interface RouteTraceMeta {
   label: string
@@ -418,6 +420,9 @@ const endHour = computed({
   }
 })
 const selectedVehicle = ref<any>(null)
+const realtimeWsConnected = ref(false)
+
+let realtimeWsUnsubscribe: (() => void) | null = null
 
 // 軌跡過濾相關狀態
 const selectedTraceVehicles = ref<string[]>([])
@@ -1363,6 +1368,86 @@ function mapRealtimeVehicle(entry: any, index: number): any | null {
   }
 }
 
+function applyRealtimeUpdates(batch: BikeRealtimeStatusUpdate[]): void {
+  if (!Array.isArray(batch) || batch.length === 0) return
+
+  const current = realtimeVehicles.value
+  const nextMap = new Map<string, any>()
+  current.forEach((item) => {
+    if (item?.id) nextMap.set(item.id, item)
+  })
+
+  let shouldUpdate = false
+
+  for (const update of batch) {
+    const bikeId = update?.bike_id
+    if (!bikeId) continue
+
+    const lat = typeof update.lat_decimal === 'number' ? update.lat_decimal : null
+    const lon = typeof update.lng_decimal === 'number' ? update.lng_decimal : null
+    const speedValue = Number(update.vehicle_speed ?? NaN)
+    const batteryValue = Number(update.soc ?? NaN)
+    const lastSeen = update.last_seen ?? null
+
+    const existing = nextMap.get(bikeId)
+
+    if (existing) {
+      const patched = { ...existing }
+
+      if (Number.isFinite(speedValue)) {
+        patched.vehicleSpeed = speedValue
+        patched.speedKph = speedValue
+      }
+
+      if (Number.isFinite(batteryValue)) {
+        patched.batteryPct = batteryValue
+        patched.batteryLevel = batteryValue
+      }
+
+      if (lat != null && lon != null) {
+        patched.lat = lat
+        patched.lon = lon
+        patched.location = { lat, lng: lon }
+        const nearest = findNearestSite(lat, lon)
+        if (nearest) {
+          patched.siteId = nearest.id
+          patched.siteName = nearest.name
+          patched.siteBrand = nearest.brand
+          patched.brand = nearest.brand
+        }
+      }
+
+      if (lastSeen) {
+        patched.lastSeen = lastSeen
+      }
+
+      nextMap.set(bikeId, patched)
+      shouldUpdate = true
+    } else {
+      const mapped = mapRealtimeVehicle(
+        {
+          bike: { bike_id: bikeId },
+          lat_decimal: update.lat_decimal ?? null,
+          lng_decimal: update.lng_decimal ?? null,
+          soc: update.soc ?? null,
+          vehicle_speed: update.vehicle_speed ?? null,
+          last_seen: update.last_seen ?? null
+        },
+        nextMap.size
+      )
+
+      if (mapped) {
+        nextMap.set(mapped.id, mapped)
+        shouldUpdate = true
+      }
+    }
+  }
+
+  if (shouldUpdate) {
+    realtimeVehicles.value = Array.from(nextMap.values())
+  }
+}
+
 async function loadRealtimePositions(): Promise<void> {
   try {
     const searchParams = new URLSearchParams()
@@ -1534,6 +1619,14 @@ async function onReturnSuccess(returnRecord: any): Promise<void> {
 
 // 生命週期
 onMounted(async () => {
+  setRealtimeStatusConnectionCallback((connected) => {
+    realtimeWsConnected.value = connected
+  })
+
+  if (!realtimeWsUnsubscribe) {
+    realtimeWsUnsubscribe = subscribeRealtimeStatus(applyRealtimeUpdates)
+  }
+
   await sitesStore.fetchSites()
 
   await loadRealtimePositions()
@@ -1542,8 +1635,12 @@ onMounted(async () => {
   // 設置自動重新整理即時資料 (每30秒)
   const refreshInterval = setInterval(async () => {
     if (displayMode.value === 'realtime') {
-      await loadRealtimePositions()
-      console.log('[SiteMap] Auto-refreshed realtime vehicle data')
+      if (!realtimeWsConnected.value) {
+        await loadRealtimePositions()
+        console.log('[SiteMap] Auto-refreshed realtime vehicle data (fallback poll)')
+      } else {
+        console.debug('[SiteMap] Realtime WS active, skip fallback poll')
+      }
     }
   }, 30000)
 
@@ -1551,6 +1648,13 @@ onMounted(async () => {
   onBeforeUnmount(() => {
     clearInterval(refreshInterval)
   })
+})
+
+onBeforeUnmount(() => {
+  if (realtimeWsUnsubscribe) {
+    realtimeWsUnsubscribe()
+    realtimeWsUnsubscribe = null
+  }
 })
 
 // 監聽選中站點變化

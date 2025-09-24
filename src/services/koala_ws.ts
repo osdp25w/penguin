@@ -1,6 +1,7 @@
 import { useAuth } from '@/stores/auth'
 import { useToasts } from '@/stores/toasts'
 import { useAlerts } from '@/stores/alerts'
+import { getKoalaBaseUrl, toWsUrl } from './koala_ws_common'
 
 let socket: WebSocket | null = null
 let connecting = false
@@ -9,24 +10,6 @@ let connectionStatusCallback: ((connected: boolean) => void) | null = null
 
 export function setConnectionStatusCallback(cb: (connected: boolean) => void) {
   connectionStatusCallback = cb
-}
-
-function runtime(): any {
-  try { return (globalThis as any)?.CONFIG || {} } catch { return {} }
-}
-
-function baseUrl(): string {
-  const rt = runtime()
-  const envBase = (import.meta as any)?.env?.VITE_KOALA_BASE_URL || (import.meta as any)?.env?.VITE_API_BASE
-  const base = (rt.API_BASE ?? envBase ?? 'https://koala.osdp25w.xyz').replace(/\/$/, '')
-  return base
-}
-
-function toWs(u: string): string {
-  if (u.startsWith('ws://') || u.startsWith('wss://')) return u
-  if (u.startsWith('https://')) return 'wss://' + u.slice('https://'.length)
-  if (u.startsWith('http://')) return 'ws://' + u.slice('http://'.length)
-  return 'wss://' + u
 }
 
 export async function ensureKoalaWsConnected(): Promise<void> {
@@ -56,7 +39,7 @@ export async function ensureKoalaWsConnected(): Promise<void> {
       connecting = false
       return
     }
-    const wsUrl = `${toWs(baseUrl())}/ws/bike/error-logs/?token=${encodeURIComponent(token)}`
+    const wsUrl = `${toWsUrl(getKoalaBaseUrl())}/ws/bike/error-logs/?token=${encodeURIComponent(token)}`
     const ws = new WebSocket(wsUrl)
     socket = ws
 

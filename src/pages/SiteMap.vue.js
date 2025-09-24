@@ -17,6 +17,7 @@ import VehicleTraceFilter from '@/components/filters/VehicleTraceFilter.vue';
 import VehicleFilter from '@/components/filters/VehicleFilter.vue';
 import { useAuth } from '@/stores/auth';
 import { http } from '@/lib/api';
+import { subscribeRealtimeStatus, setRealtimeStatusConnectionCallback } from '@/services/koala_realtime_ws';
 // ECharts 註冊
 use([BarChart, GridComponent, TooltipComponent, CanvasRenderer]);
 // Stores
@@ -89,6 +90,8 @@ const endHour = computed({
     }
 });
 const selectedVehicle = ref(null);
+const realtimeWsConnected = ref(false);
+let realtimeWsUnsubscribe = null;
 // 軌跡過濾相關狀態
 const selectedTraceVehicles = ref([]);
 const filteredVehicleTraces = ref({});
@@ -982,6 +985,74 @@ function mapRealtimeVehicle(entry, index) {
         raw: entry
     };
 }
+function applyRealtimeUpdates(batch) {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    if (!Array.isArray(batch) || batch.length === 0)
+        return;
+    const current = realtimeVehicles.value;
+    const nextMap = new Map();
+    current.forEach((item) => {
+        if (item === null || item === void 0 ? void 0 : item.id)
+            nextMap.set(item.id, item);
+    });
+    let shouldUpdate = false;
+    for (const update of batch) {
+        const bikeId = update === null || update === void 0 ? void 0 : update.bike_id;
+        if (!bikeId)
+            continue;
+        const lat = typeof update.lat_decimal === 'number' ? update.lat_decimal : null;
+        const lon = typeof update.lng_decimal === 'number' ? update.lng_decimal : null;
+        const speedValue = Number((_a = update.vehicle_speed) !== null && _a !== void 0 ? _a : NaN);
+        const batteryValue = Number((_b = update.soc) !== null && _b !== void 0 ? _b : NaN);
+        const lastSeen = (_c = update.last_seen) !== null && _c !== void 0 ? _c : null;
+        const existing = nextMap.get(bikeId);
+        if (existing) {
+            const patched = { ...existing };
+            if (Number.isFinite(speedValue)) {
+                patched.vehicleSpeed = speedValue;
+                patched.speedKph = speedValue;
+            }
+            if (Number.isFinite(batteryValue)) {
+                patched.batteryPct = batteryValue;
+                patched.batteryLevel = batteryValue;
+            }
+            if (lat != null && lon != null) {
+                patched.lat = lat;
+                patched.lon = lon;
+                patched.location = { lat, lng: lon };
+                const nearest = findNearestSite(lat, lon);
+                if (nearest) {
+                    patched.siteId = nearest.id;
+                    patched.siteName = nearest.name;
+                    patched.siteBrand = nearest.brand;
+                    patched.brand = nearest.brand;
+                }
+            }
+            if (lastSeen) {
+                patched.lastSeen = lastSeen;
+            }
+            nextMap.set(bikeId, patched);
+            shouldUpdate = true;
+        }
+        else {
+            const mapped = mapRealtimeVehicle({
+                bike: { bike_id: bikeId },
+                lat_decimal: (_d = update.lat_decimal) !== null && _d !== void 0 ? _d : null,
+                lng_decimal: (_e = update.lng_decimal) !== null && _e !== void 0 ? _e : null,
+                soc: (_f = update.soc) !== null && _f !== void 0 ? _f : null,
+                vehicle_speed: (_g = update.vehicle_speed) !== null && _g !== void 0 ? _g : null,
+                last_seen: (_h = update.last_seen) !== null && _h !== void 0 ? _h : null
+            }, nextMap.size);
+            if (mapped) {
+                nextMap.set(mapped.id, mapped);
+                shouldUpdate = true;
+            }
+        }
+    }
+    if (shouldUpdate) {
+        realtimeVehicles.value = Array.from(nextMap.values());
+    }
+}
 async function loadRealtimePositions() {
     var _a;
     try {
@@ -1136,20 +1207,37 @@ async function onReturnSuccess(returnRecord) {
 }
 // 生命週期
 onMounted(async () => {
+    setRealtimeStatusConnectionCallback((connected) => {
+        realtimeWsConnected.value = connected;
+    });
+    if (!realtimeWsUnsubscribe) {
+        realtimeWsUnsubscribe = subscribeRealtimeStatus(applyRealtimeUpdates);
+    }
     await sitesStore.fetchSites();
     await loadRealtimePositions();
     await bikeMeta.fetchBikeStatusOptions();
     // 設置自動重新整理即時資料 (每30秒)
     const refreshInterval = setInterval(async () => {
         if (displayMode.value === 'realtime') {
-            await loadRealtimePositions();
-            console.log('[SiteMap] Auto-refreshed realtime vehicle data');
+            if (!realtimeWsConnected.value) {
+                await loadRealtimePositions();
+                console.log('[SiteMap] Auto-refreshed realtime vehicle data (fallback poll)');
+            }
+            else {
+                console.debug('[SiteMap] Realtime WS active, skip fallback poll');
+            }
         }
     }, 30000);
     // 頁面卸載時清除定時器
     onBeforeUnmount(() => {
         clearInterval(refreshInterval);
     });
+});
+onBeforeUnmount(() => {
+    if (realtimeWsUnsubscribe) {
+        realtimeWsUnsubscribe();
+        realtimeWsUnsubscribe = null;
+    }
 });
 // 監聽選中站點變化
 watch(() => sitesStore.selected, async (newSite) => {
