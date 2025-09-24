@@ -14,13 +14,13 @@
             {{ formattedValue }}
           </div>
           
-          <div v-if="change !== undefined" class="flex items-center gap-1">
+          <div v-if="showChange" class="flex items-center gap-1">
             <i
               v-if="changeIcon"
               :class="[changeIcon, changeIconClass, 'w-4 h-4']"
             />
             <span :class="changeTextClass" class="text-sm font-medium">
-              {{ Math.abs(change) }}{{ unit }}
+              {{ changeDisplay }}
               <span class="text-gray-700 font-normal ml-1">vs {{ period }}</span>
             </span>
           </div>
@@ -46,7 +46,8 @@ interface Props {
   title: string
   value: number | string
   unit?: string
-  change?: number
+  change?: number | null
+  changeLabel?: string
   period?: string
   trend?: 'up' | 'down' | 'neutral'
   icon?: string
@@ -121,9 +122,11 @@ const iconClass = computed(() => {
   return `p-2 rounded-lg ${colorClasses[props.color]}`
 })
 
+const showChange = computed(() => props.changeLabel !== undefined || props.change !== undefined)
+
 const changeIcon = computed(() => {
-  if (props.change === undefined) return null
-  
+  if (typeof props.change !== 'number') return null
+
   if (props.change > 0) {
     return props.trend === 'down' ? 'i-ph-trend-down' : 'i-ph-trend-up'
   } else if (props.change < 0) {
@@ -134,7 +137,7 @@ const changeIcon = computed(() => {
 })
 
 const changeIconClass = computed(() => {
-  if (props.change === undefined) return ''
+  if (typeof props.change !== 'number') return 'text-gray-500'
   
   if (props.change > 0) {
     return props.trend === 'down' ? 'text-red-500' : 'text-green-500'
@@ -146,7 +149,7 @@ const changeIconClass = computed(() => {
 })
 
 const changeTextClass = computed(() => {
-  if (props.change === undefined) return ''
+  if (typeof props.change !== 'number') return 'text-gray-600'
   
   if (props.change > 0) {
     return props.trend === 'down' ? 'text-red-600' : 'text-green-600'
@@ -155,5 +158,23 @@ const changeTextClass = computed(() => {
   }
   
   return 'text-gray-600'
+})
+
+const changeDisplay = computed(() => {
+  if (props.changeLabel !== undefined) {
+    return props.changeLabel
+  }
+
+  if (typeof props.change === 'number') {
+    const sign = props.change > 0 ? '+' : props.change < 0 ? '-' : '±'
+    const formatted = new Intl.NumberFormat('zh-TW', {
+      minimumFractionDigits: props.precision,
+      maximumFractionDigits: props.precision,
+    }).format(Math.abs(props.change))
+    const unitLabel = props.unit ? ` ${props.unit}` : ''
+    return `${sign}${formatted}${unitLabel}`
+  }
+
+  return '—'
 })
 </script>

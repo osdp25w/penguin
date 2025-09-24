@@ -8,7 +8,7 @@ const submitting = ref(false);
 const isEdit = computed(() => !!props.device);
 const statusOptions = computed(() => {
     const options = props.statusOptions;
-    return (options === null || options === void 0 ? void 0 : options.length) > 0 ? options : DEFAULT_TELEMETRY_STATUS_OPTIONS;
+    return options && options.length > 0 ? options : DEFAULT_TELEMETRY_STATUS_OPTIONS;
 });
 function statusLabel(status) {
     const labelMap = {

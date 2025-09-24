@@ -72,7 +72,8 @@
         unit="台"
         icon="i-ph-bicycle"
         color="green"
-        :change="summary.onlineChange"
+        :change="summary.onlineChange ?? undefined"
+        :change-label="summary.onlineChangeLabel"
         period="昨日"
         trend="up"
       />
@@ -83,7 +84,8 @@
         unit="台"
         icon="i-ph-warning-circle"
         color="red"
-        :change="summary.offlineChange"
+        :change="summary.offlineChange ?? undefined"
+        :change-label="summary.offlineChangeLabel"
         period="昨日"
         trend="down"
       />
@@ -96,7 +98,8 @@
         color="blue"
         format="number"
         :precision="1"
-        :change="summary.distanceChange"
+        :change="summary.distanceChange ?? undefined"
+        :change-label="summary.distanceChangeLabel"
         period="昨日"
         trend="up"
       />
@@ -109,7 +112,8 @@
         color="green"
         format="number"
         :precision="1"
-        :change="summary.carbonChange"
+        :change="summary.carbonChange ?? undefined"
+        :change-label="summary.carbonChangeLabel"
         period="昨日"
         trend="up"
       />
@@ -176,6 +180,7 @@ import { Button, Card, KpiCard, EmptyState } from '@/design/components'
 import SocTrend from '@/components/charts/SocTrend.vue'
 import CarbonBar from '@/components/charts/CarbonBar.vue'
 import { http } from '@/lib/api'
+import { computeDailyOverviewMetrics } from '@/utils/dailyOverview'
 
 // Reactive data
 const granularity = ref<'hour' | 'day' | 'month' | 'year'>('hour')
@@ -199,15 +204,18 @@ function getDefaultEndDate(): string {
 }
 
 const summary = reactive({
-  online: 42,
-  offline: 8,
-  distance: 128.5,
-  carbon: 9.6,
-  // 與昨日比較的變化量
-  onlineChange: 0,
-  offlineChange: 0,
-  distanceChange: 0,
-  carbonChange: 0
+  online: '—' as number | string,
+  offline: '—' as number | string,
+  distance: '—' as number | string,
+  carbon: '—' as number | string,
+  onlineChange: null as number | null,
+  offlineChange: null as number | null,
+  distanceChange: null as number | null,
+  carbonChange: null as number | null,
+  onlineChangeLabel: '—',
+  offlineChangeLabel: '—',
+  distanceChangeLabel: '—',
+  carbonChangeLabel: '—'
 })
 
 // Chart data (reactive arrays)
@@ -362,64 +370,100 @@ const updateData = () => {
   }
 }
 
+function extractDailyRecords(source: any): any[] {
+  const data = source?.data ?? source
+  if (Array.isArray(data)) return data
+  if (Array.isArray(data?.results)) return data.results
+  return []
+}
+
 // 取得每日總覽統計並與昨日比較
 async function fetchDailyOverviewWithComparison(start: string, end: string) {
   try {
-    const today = end || start
-    const yesterday = new Date(today)
-    yesterday.setDate(yesterday.getDate() - 1)
-    const yesterdayStr = yesterday.toISOString().split('T')[0]
+    // 使用與原始程式碼相同的 API 參數格式
+    const targetDate = end || start || new Date().toISOString().split('T')[0]
 
-    // 並行獲取今日和昨日資料
-    const [todayResponse, yesterdayResponse] = await Promise.all([
-      http.get<any>(`/api/statistic/daily-overview/?collected_time=${encodeURIComponent(today)}`).catch(() => null),
-      http.get<any>(`/api/statistic/daily-overview/?collected_time=${encodeURIComponent(yesterdayStr)}`).catch(() => null)
-    ])
+    // 建立參數
+    const params = new URLSearchParams()
+    params.set('limit', '14')
+    params.set('ordering', '-collected_time')
+    params.set('collected_time__lte', targetDate)
 
-    const num = (obj: any, candidates: string[], def = 0) => {
-      for (const k of candidates) {
-        if (obj && obj[k] != null && !isNaN(Number(obj[k]))) return Number(obj[k])
+    // 取得資料
+    const response = await http.get<any>(`/api/statistic/daily-overview/?${params.toString()}`).catch(() => null)
+
+    // 提取資料
+    const records = extractDailyRecords(response)
+
+    // 如果資料不足，嘗試取得更大範圍
+    if (records.length < 2) {
+      const params2 = new URLSearchParams()
+      params2.set('limit', '30')
+      params2.set('ordering', '-collected_time')
+
+      const response2 = await http.get<any>(`/api/statistic/daily-overview/?${params2.toString()}`).catch(() => null)
+      const moreRecords = extractDailyRecords(response2)
+
+      if (moreRecords.length > records.length) {
+        records.splice(0, records.length, ...moreRecords)
       }
-      return def
     }
 
-    // 處理今日資料
-    const todayData = todayResponse?.data || todayResponse
-    const todayRec = Array.isArray(todayData) ? (todayData[0] || {}) : (todayData || {})
+    console.log('Daily overview records:', records.length, 'items')
+    if (records.length > 0) {
+      console.log('First record:', records[0])
+    }
 
-    const todayOnline = num(todayRec, ['online_bikes_count', 'online', 'online_vehicles', 'online_count'], summary.online)
-    const todayOffline = num(todayRec, ['offline_bikes_count', 'offline', 'offline_vehicles', 'offline_count'], summary.offline)
-    const todayDistance = num(todayRec, ['total_distance_km', 'distance', 'total_distance', 'km', 'mileage'], summary.distance)
-    const todayCarbon = num(todayRec, ['carbon_reduction_kg', 'carbon', 'carbon_saved', 'co2', 'co2_kg'], summary.carbon)
+    const metrics = computeDailyOverviewMetrics(records)
 
-    // 處理昨日資料
-    const yesterdayData = yesterdayResponse?.data || yesterdayResponse
-    const yesterdayRec = Array.isArray(yesterdayData) ? (yesterdayData[0] || {}) : (yesterdayData || {})
+    const onlineMetric = metrics.online
+    summary.online = onlineMetric.value ?? '—'
+    summary.onlineChange = onlineMetric.delta
+    summary.onlineChangeLabel = onlineMetric.deltaLabel
 
-    const yesterdayOnline = num(yesterdayRec, ['online_bikes_count', 'online', 'online_vehicles', 'online_count'], 0)
-    const yesterdayOffline = num(yesterdayRec, ['offline_bikes_count', 'offline', 'offline_vehicles', 'offline_count'], 0)
-    const yesterdayDistance = num(yesterdayRec, ['total_distance_km', 'distance', 'total_distance', 'km', 'mileage'], 0)
-    const yesterdayCarbon = num(yesterdayRec, ['carbon_reduction_kg', 'carbon', 'carbon_saved', 'co2', 'co2_kg'], 0)
+    const offlineMetric = metrics.offline
+    summary.offline = offlineMetric.value ?? '—'
+    summary.offlineChange = offlineMetric.delta
+    summary.offlineChangeLabel = offlineMetric.deltaLabel
 
-    // 更新當前值
-    summary.online = todayOnline
-    summary.offline = todayOffline
-    summary.distance = todayDistance
-    summary.carbon = todayCarbon
+    const distanceMetric = metrics.distance
+    summary.distance = distanceMetric.value ?? '—'
+    summary.distanceChange = distanceMetric.delta
+    summary.distanceChangeLabel = distanceMetric.deltaLabel
 
-    // 計算變化量
-    summary.onlineChange = todayOnline - yesterdayOnline
-    summary.offlineChange = todayOffline - yesterdayOffline
-    summary.distanceChange = Number((todayDistance - yesterdayDistance).toFixed(1))
-    summary.carbonChange = Number((todayCarbon - yesterdayCarbon).toFixed(1))
+    const carbonMetric = metrics.carbon
+    summary.carbon = carbonMetric.value ?? '—'
+    summary.carbonChange = carbonMetric.delta
+    summary.carbonChangeLabel = carbonMetric.deltaLabel
 
     console.log('Daily overview with comparison updated:', {
-      today: { online: todayOnline, offline: todayOffline, distance: todayDistance, carbon: todayCarbon },
-      yesterday: { online: yesterdayOnline, offline: yesterdayOffline, distance: yesterdayDistance, carbon: yesterdayCarbon },
-      changes: { online: summary.onlineChange, offline: summary.offlineChange, distance: summary.distanceChange, carbon: summary.carbonChange }
+      today: {
+        online: onlineMetric.value,
+        offline: offlineMetric.value,
+        distance: distanceMetric.value,
+        carbon: carbonMetric.value
+      },
+      changes: {
+        online: summary.onlineChange,
+        offline: summary.offlineChange,
+        distance: summary.distanceChange,
+        carbon: summary.carbonChange
+      }
     })
   } catch (e) {
     console.warn('fetchDailyOverviewWithComparison failed:', e)
+    summary.online = '—'
+    summary.offline = '—'
+    summary.distance = '—'
+    summary.carbon = '—'
+    summary.onlineChange = null
+    summary.offlineChange = null
+    summary.distanceChange = null
+    summary.carbonChange = null
+    summary.onlineChangeLabel = '—'
+    summary.offlineChangeLabel = '—'
+    summary.distanceChangeLabel = '—'
+    summary.carbonChangeLabel = '—'
   }
 }
 

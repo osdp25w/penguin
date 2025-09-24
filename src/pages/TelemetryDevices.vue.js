@@ -20,8 +20,6 @@ const telemetry = useTelemetry();
 const toasts = useToasts();
 const route = useRoute();
 const router = useRouter();
-const filters = ref({ status: '', model: '', imei: '' });
-const deletingMap = ref({});
 const LOCALE_MESSAGES = {
     'zh-TW': {
         'telemetry.delete.confirm': '確定要刪除設備 {imei} 嗎？',
@@ -49,20 +47,24 @@ const LOCALE_MESSAGES = {
     }
 };
 function resolveLocale() {
+    var _a;
     if (typeof navigator === 'undefined')
         return 'en';
-    const lang = navigator.language || (navigator.languages && navigator.languages[0]) || 'en';
+    const lang = navigator.language || ((_a = navigator.languages) === null || _a === void 0 ? void 0 : _a[0]) || 'en';
     return lang.toLowerCase().includes('zh') ? 'zh-TW' : 'en';
 }
 const currentLocale = resolveLocale();
 function translate(key, params) {
-    const table = LOCALE_MESSAGES[currentLocale] || LOCALE_MESSAGES.en;
+    var _a, _b, _c;
+    const table = (_a = LOCALE_MESSAGES[currentLocale]) !== null && _a !== void 0 ? _a : LOCALE_MESSAGES.en;
     const fallback = LOCALE_MESSAGES.en;
-    const template = (table === null || table === void 0 ? void 0 : table[key]) || fallback[key] || key;
+    const template = (_c = (_b = table[key]) !== null && _b !== void 0 ? _b : fallback[key]) !== null && _c !== void 0 ? _c : key;
     if (!params)
         return template;
-    return template.replace(/\{(\w+)\}/g, (_, token) => String(params[token] !== undefined ? params[token] : `{${token}}`));
+    return template.replace(/\{(\w+)\}/g, (_, token) => { var _a; return String((_a = params[token]) !== null && _a !== void 0 ? _a : `{${token}}`); });
 }
+const filters = ref({ status: '', model: '', imei: '' });
+const deletingMap = ref({});
 // Sorting configuration
 const sortConfig = ref({
     field: '',
@@ -70,27 +72,26 @@ const sortConfig = ref({
 });
 const statusOptions = computed(() => {
     const options = telemetry.statusOptions;
-    return (options === null || options === void 0 ? void 0 : options.length) > 0 ? options : DEFAULT_TELEMETRY_STATUS_OPTIONS;
+    return options && options.length > 0 ? options : DEFAULT_TELEMETRY_STATUS_OPTIONS;
 });
 function setDeleting(imei, value) {
     if (value) {
-        deletingMap.value = Object.assign(Object.assign({}, deletingMap.value), { [imei]: true });
+        deletingMap.value = { ...deletingMap.value, [imei]: true };
     }
     else {
-        const map = Object.assign({}, deletingMap.value);
-        delete map[imei];
-        deletingMap.value = map;
+        const { [imei]: _removed, ...rest } = deletingMap.value;
+        deletingMap.value = rest;
     }
 }
 function isDeleting(imei) {
-    var _a;
-    return Boolean((_a = deletingMap.value) === null || _a === void 0 ? void 0 : _a[imei]);
+    return Boolean(deletingMap.value[imei]);
 }
 function deviceLabel(device) {
+    var _a;
     const name = typeof (device === null || device === void 0 ? void 0 : device.name) === 'string' ? device.name.trim() : '';
     if (name)
         return name;
-    return String((device === null || device === void 0 ? void 0 : device.IMEI) || '');
+    return String((_a = device === null || device === void 0 ? void 0 : device.IMEI) !== null && _a !== void 0 ? _a : '');
 }
 function parseKoalaError(error) {
     if (!error)
@@ -283,9 +284,11 @@ watch(() => [filters.value.status, filters.value.model, filters.value.imei], () 
     }
 }, { deep: true });
 async function confirmDelete(d) {
+    var _a;
     if (isDeleting(d.IMEI))
         return;
-    if (!confirm(translate('telemetry.delete.confirm', { imei: d.IMEI })))
+    const confirmed = confirm(translate('telemetry.delete.confirm', { imei: d.IMEI }));
+    if (!confirmed)
         return;
     setDeleting(d.IMEI, true);
     try {
@@ -298,10 +301,10 @@ async function confirmDelete(d) {
     }
     catch (error) {
         const payload = parseKoalaError(error);
-    const associationMessage = payload && payload.details && typeof payload.details.bike_association === 'string'
-        ? payload.details.bike_association
-        : undefined;
-        if (payload && payload.code === 4000 && associationMessage) {
+        const associationMessage = typeof ((_a = payload === null || payload === void 0 ? void 0 : payload.details) === null || _a === void 0 ? void 0 : _a.bike_association) === 'string'
+            ? payload.details.bike_association
+            : undefined;
+        if ((payload === null || payload === void 0 ? void 0 : payload.code) === 4000 && associationMessage) {
             const match = /bike\s+([A-Za-z0-9_-]+)/i.exec(associationMessage);
             const bikeId = (match === null || match === void 0 ? void 0 : match[1]) || '-';
             const message = translate('telemetry.delete.error.association', { bike: bikeId });
@@ -638,10 +641,10 @@ for (const [d] of __VLS_getVForSourceType((__VLS_ctx.rows))) {
         ...{ class: "i-ph-pencil-simple w-3.5 h-3.5 mr-1" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.button, __VLS_intrinsicElements.button)({
-        ...{ 'data-testid': "telemetry-delete-btn" },
         ...{ onClick: (...[$event]) => {
                 __VLS_ctx.confirmDelete(d);
             } },
+        'data-testid': "telemetry-delete-btn",
         disabled: (__VLS_ctx.isDeleting(d.IMEI)),
         'aria-busy': (__VLS_ctx.isDeleting(d.IMEI)),
         ...{ class: "inline-flex items-center px-3 py-1.5 border border-red-300 text-xs font-medium rounded-md text-red-700 bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-red-500" },
@@ -935,16 +938,20 @@ if (__VLS_ctx.showModal) {
 /** @type {__VLS_StyleScopedClasses['rounded-md']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-red-700']} */ ;
 /** @type {__VLS_StyleScopedClasses['bg-white']} */ ;
-/** @type {__VLS_StyleScopedClasses['hover:bg-red-50']} */ ;
+/** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
 /** @type {__VLS_StyleScopedClasses['focus:outline-none']} */ ;
 /** @type {__VLS_StyleScopedClasses['focus:ring-2']} */ ;
 /** @type {__VLS_StyleScopedClasses['focus:ring-offset-0']} */ ;
 /** @type {__VLS_StyleScopedClasses['focus:ring-red-500']} */ ;
-/** @type {__VLS_StyleScopedClasses['transition-colors']} */ ;
 /** @type {__VLS_StyleScopedClasses['i-ph-trash']} */ ;
 /** @type {__VLS_StyleScopedClasses['w-3.5']} */ ;
 /** @type {__VLS_StyleScopedClasses['h-3.5']} */ ;
 /** @type {__VLS_StyleScopedClasses['mr-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['i-ph-spinner']} */ ;
+/** @type {__VLS_StyleScopedClasses['w-3.5']} */ ;
+/** @type {__VLS_StyleScopedClasses['h-3.5']} */ ;
+/** @type {__VLS_StyleScopedClasses['mr-1']} */ ;
+/** @type {__VLS_StyleScopedClasses['animate-spin']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-center']} */ ;
 /** @type {__VLS_StyleScopedClasses['py-8']} */ ;
 /** @type {__VLS_StyleScopedClasses['text-gray-600']} */ ;
@@ -962,16 +969,16 @@ const __VLS_self = (await import('vue')).defineComponent({
             Button: Button,
             PaginationBar: PaginationBar,
             TelemetryDeviceModal: TelemetryDeviceModal,
+            translate: translate,
             filters: filters,
             sortConfig: sortConfig,
             statusOptions: statusOptions,
+            isDeleting: isDeleting,
             paging: paging,
             rows: rows,
             handleSort: handleSort,
             statusLabel: statusLabel,
             statusClass: statusClass,
-            translate: translate,
-            isDeleting: isDeleting,
             refreshData: refreshData,
             applyFilters: applyFilters,
             showModal: showModal,

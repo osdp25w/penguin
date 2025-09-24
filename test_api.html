@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test API</title>
+</head>
+<body>
+    <h1>API Test</h1>
+    <div id="result"></div>
+    <script>
+        const email = 'pony@admin1.com';
+        const password = '2m8N625cvmf0';
+
+        async function testAPI() {
+            try {
+                // 先登入
+                const loginResponse = await fetch('https://koala.osdp25w.xyz/api/auth/login/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const loginData = await loginResponse.json();
+                console.log('Login response:', loginData);
+
+                const token = loginData.token || loginData.access;
+
+                // 測試不同的 API 端點
+                const endpoints = [
+                    '/api/statistic/daily-overview/',
+                    '/api/statistic/daily-overview/?limit=5',
+                    '/api/statistic/daily-overview/?collected_time=2025-01-24',
+                    '/api/statistic/daily-overview/?date=2025-01-24',
+                    '/api/statistics/daily-overview/',
+                    '/api/daily-overview/',
+                    '/api/summary/daily/',
+                    '/api/overview/daily/',
+                ];
+
+                document.getElementById('result').innerHTML = '<h2>Testing endpoints...</h2>';
+
+                for (const endpoint of endpoints) {
+                    try {
+                        const response = await fetch('https://koala.osdp25w.xyz' + endpoint, {
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json',
+                            },
+                        });
+
+                        const data = await response.json();
+                        console.log(`Endpoint ${endpoint}:`, data);
+                        document.getElementById('result').innerHTML += `
+                            <div style="border: 1px solid #ccc; padding: 10px; margin: 10px 0;">
+                                <h3>${endpoint}</h3>
+                                <pre>${JSON.stringify(data, null, 2)}</pre>
+                            </div>
+                        `;
+                    } catch (err) {
+                        console.error(`Failed ${endpoint}:`, err);
+                        document.getElementById('result').innerHTML += `
+                            <div style="border: 1px solid red; padding: 10px; margin: 10px 0;">
+                                <h3>${endpoint}</h3>
+                                <pre>ERROR: ${err}</pre>
+                            </div>
+                        `;
+                    }
+                }
+
+            } catch (err) {
+                console.error('Test failed:', err);
+                document.getElementById('result').innerHTML = `<pre>Login failed: ${err}</pre>`;
+            }
+        }
+
+        testAPI();
+    </script>
+</body>
+</html>

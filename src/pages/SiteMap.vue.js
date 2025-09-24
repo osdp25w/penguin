@@ -103,6 +103,11 @@ const currentRental = ref(null);
 const routeTraceMeta = ref({});
 const historyLoading = ref(false);
 const historyError = ref(null);
+const historyPagination = ref({
+    count: 0,
+    next: null,
+    previous: null
+});
 let historyRequestToken = 0;
 const seedMockEnabled = computed(() => import.meta.env.VITE_SEED_MOCK === '1');
 function formatDateToLocalHour(date) {
@@ -700,6 +705,7 @@ async function loadVehiclesByDomain() {
     }
 }
 async function loadHistoryTrajectories() {
+    var _a;
     const requestId = ++historyRequestToken;
     historyLoading.value = true;
     historyError.value = null;
@@ -725,18 +731,30 @@ async function loadHistoryTrajectories() {
             params.set('domain', selectedDomain.value);
         const query = params.toString();
         const response = await http.get(`/api/statistic/routes/${query ? `?${query}` : ''}`);
-        const payload = Array.isArray(response === null || response === void 0 ? void 0 : response.data) ? response.data : [];
+        const dataSection = (_a = response === null || response === void 0 ? void 0 : response.data) !== null && _a !== void 0 ? _a : {};
+        let entries = [];
+        if (Array.isArray(dataSection === null || dataSection === void 0 ? void 0 : dataSection.results)) {
+            entries = dataSection.results;
+        }
+        else if (Array.isArray(dataSection)) {
+            entries = dataSection;
+        }
+        else if (Array.isArray(response === null || response === void 0 ? void 0 : response.results)) {
+            entries = response.results;
+        }
         const traces = {};
         const meta = {};
-        payload.forEach((entry, memberIndex) => {
-            var _a, _b, _c;
-            const memberName = ((_a = entry === null || entry === void 0 ? void 0 : entry.member) === null || _a === void 0 ? void 0 : _a.full_name) || `會員 #${(_c = (_b = entry === null || entry === void 0 ? void 0 : entry.member) === null || _b === void 0 ? void 0 : _b.id) !== null && _c !== void 0 ? _c : memberIndex + 1}`;
+        entries.forEach((entry, memberIndex) => {
+            var _a;
+            const member = (entry === null || entry === void 0 ? void 0 : entry.member) || {};
+            const memberId = (_a = member === null || member === void 0 ? void 0 : member.id) !== null && _a !== void 0 ? _a : memberIndex + 1;
+            const memberName = (member === null || member === void 0 ? void 0 : member.full_name) || `會員 #${memberId}`;
             const routes = Array.isArray(entry === null || entry === void 0 ? void 0 : entry.routes) ? entry.routes : [];
             routes.forEach((route, routeIndex) => {
-                var _a, _b, _c;
-                const rawId = (route === null || route === void 0 ? void 0 : route.id) != null ? String(route.id) : `${(_b = (_a = entry === null || entry === void 0 ? void 0 : entry.member) === null || _a === void 0 ? void 0 : _a.id) !== null && _b !== void 0 ? _b : memberIndex + 1}-${routeIndex + 1}`;
-                const traceId = `route-${rawId}`;
-                const coordinates = Array.isArray((_c = route === null || route === void 0 ? void 0 : route.geometry) === null || _c === void 0 ? void 0 : _c.coordinates) ? route.geometry.coordinates : [];
+                var _a;
+                const routeIdPart = (route === null || route === void 0 ? void 0 : route.id) != null ? String(route.id) : `${routeIndex + 1}`;
+                const traceId = `member-${memberId}-route-${routeIdPart}`;
+                const coordinates = Array.isArray((_a = route === null || route === void 0 ? void 0 : route.geometry) === null || _a === void 0 ? void 0 : _a.coordinates) ? route.geometry.coordinates : [];
                 const points = coordinates
                     .map((coord) => {
                     if (!Array.isArray(coord) || coord.length < 2)
@@ -755,7 +773,7 @@ async function loadHistoryTrajectories() {
                     return;
                 traces[traceId] = points;
                 meta[traceId] = {
-                    label: `${memberName} · #${rawId}`,
+                    label: `${memberName} · #${routeIdPart}`,
                     createdAt: route === null || route === void 0 ? void 0 : route.created_at,
                     distanceMeters: route === null || route === void 0 ? void 0 : route.distance_meters,
                     averageConfidence: route === null || route === void 0 ? void 0 : route.average_confidence,
@@ -764,6 +782,16 @@ async function loadHistoryTrajectories() {
             });
         });
         if (requestId === historyRequestToken) {
+            const rawCount = dataSection === null || dataSection === void 0 ? void 0 : dataSection.count;
+            const parsedCount = typeof rawCount === 'number'
+                ? rawCount
+                : (typeof rawCount === 'string' && rawCount.trim() !== '' ? Number(rawCount) : null);
+            const count = typeof parsedCount === 'number' && Number.isFinite(parsedCount)
+                ? parsedCount
+                : entries.length;
+            const next = typeof (dataSection === null || dataSection === void 0 ? void 0 : dataSection.next) === 'string' ? dataSection.next : null;
+            const previous = typeof (dataSection === null || dataSection === void 0 ? void 0 : dataSection.previous) === 'string' ? dataSection.previous : null;
+            historyPagination.value = { count, next, previous };
             filteredVehicleTraces.value = traces;
             routeTraceMeta.value = meta;
             selectedTraceVehicles.value = Object.keys(traces);
@@ -776,6 +804,7 @@ async function loadHistoryTrajectories() {
             filteredVehicleTraces.value = {};
             routeTraceMeta.value = {};
             selectedTraceVehicles.value = [];
+            historyPagination.value = { count: 0, next: null, previous: null };
         }
     }
     finally {
