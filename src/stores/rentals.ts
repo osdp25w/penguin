@@ -275,10 +275,77 @@ export const useRentals = defineStore('rentals', () => {
       const offset = params?.offset ?? 0
       const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) })
       const path = qs.toString() ? `/api/rental/member/rentals/?${qs}` : '/api/rental/member/rentals/'
+      console.log('[fetchMemberRentals] Requesting:', path)
       const res: any = await http.get(path)
+      console.log('[fetchMemberRentals] Raw response:', res)
       const payload = unwrapKoalaResponse(res)
-      const rows = Array.isArray(payload) ? payload : Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : res?.results || []
-      const total = res?.count ?? res?.total ?? rows.length
+      console.log('[fetchMemberRentals] After unwrap:', payload)
+
+      let rows: any[] = []
+      let total = 0
+
+      const ensureArray = (candidate: any) => (Array.isArray(candidate) ? candidate : [])
+
+      console.log('[fetchMemberRentals] Checking payload structure...')
+      console.log('[fetchMemberRentals] payload is Array:', Array.isArray(payload))
+      console.log('[fetchMemberRentals] payload.results is Array:', Array.isArray(payload?.results))
+      console.log('[fetchMemberRentals] payload.data is Array:', Array.isArray(payload?.data))
+      console.log('[fetchMemberRentals] payload.rentals is Array:', Array.isArray(payload?.rentals))
+
+      if (Array.isArray(payload)) {
+        console.log('[fetchMemberRentals] Using payload as array')
+        rows = payload
+        total = payload.length
+      } else if (payload && typeof payload === 'object') {
+        if (Array.isArray(payload.results)) {
+          console.log('[fetchMemberRentals] Found payload.results')
+          rows = payload.results
+          total = payload.count ?? payload.total ?? payload.results.length
+        } else if (Array.isArray(payload.data)) {
+          console.log('[fetchMemberRentals] Found payload.data')
+          rows = payload.data
+          total = payload.count ?? payload.total ?? payload.data.length
+        } else if (Array.isArray(payload.rentals)) {
+          console.log('[fetchMemberRentals] Found payload.rentals')
+          rows = payload.rentals
+          total = payload.total ?? payload.rentals.length
+        }
+      }
+
+      if (!rows.length) {
+        console.log('[fetchMemberRentals] No rows found yet, checking fallback paths...')
+        console.log('[fetchMemberRentals] res.data.results is Array:', Array.isArray(res?.data?.results))
+        console.log('[fetchMemberRentals] res.data is Array:', Array.isArray(res?.data))
+        console.log('[fetchMemberRentals] res is Array:', Array.isArray(res))
+        console.log('[fetchMemberRentals] res.results is Array:', Array.isArray(res?.results))
+
+        if (Array.isArray(res?.data?.results)) {
+          console.log('[fetchMemberRentals] Using res.data.results')
+          rows = res.data.results
+          total = res.data.count ?? res.data.total ?? rows.length
+        } else if (Array.isArray(res?.data)) {
+          console.log('[fetchMemberRentals] Using res.data')
+          rows = ensureArray(res.data)
+          total = res?.data?.length ?? rows.length
+        } else if (Array.isArray(res)) {
+          console.log('[fetchMemberRentals] Using res')
+          rows = res
+          total = rows.length
+        } else if (Array.isArray(res?.results)) {
+          console.log('[fetchMemberRentals] Using res.results')
+          rows = res.results
+          total = res?.count ?? res?.total ?? rows.length
+        }
+      }
+
+      if (!total) {
+        total = res?.data?.count ?? res?.count ?? res?.total ?? rows.length
+      }
+
+      console.log('[fetchMemberRentals] Final rows:', rows)
+      console.log('[fetchMemberRentals] Final total:', total)
+      console.log('[fetchMemberRentals] Returning:', { data: rows, total })
+
       if (opts?.updateState !== false) {
         memberRentals.value = rows
         memberRentalsTotal.value = total

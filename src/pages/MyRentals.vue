@@ -148,7 +148,13 @@ const formatDateTime = (value?: string, fallback = '—') => {
 
 
 const refresh = async () => {
+  console.log('[MyRentals] refresh() called')
+  console.log('[MyRentals] isMember.value:', isMember.value)
+  console.log('[MyRentals] userRole.value:', userRole.value)
+  console.log('[MyRentals] auth.user:', auth.user)
+
   if (!isMember.value) {
+    console.log('[MyRentals] Not a member, clearing rentals')
     rentals.value = []
     error.value = ''
     selectedRental.value = null
@@ -158,8 +164,18 @@ const refresh = async () => {
   loading.value = true
   error.value = ''
   try {
-    const { data } = await rentalsStore.fetchMemberRentals(undefined, { updateState: false })
-    rentals.value = Array.isArray(data) ? data : []
+    console.log('[MyRentals] Fetching member rentals...')
+    const response = await rentalsStore.fetchMemberRentals(undefined, { updateState: false })
+    console.log('[MyRentals] fetchMemberRentals response:', response)
+    console.log('[MyRentals] response.data:', response.data)
+    console.log('[MyRentals] response.data is Array:', Array.isArray(response.data))
+    console.log('[MyRentals] response.data length:', response.data?.length)
+
+    // response 回傳 { data: any[], total: number }
+    rentals.value = Array.isArray(response.data) ? response.data : []
+    console.log('[MyRentals] rentals.value after assignment:', rentals.value)
+    console.log('[MyRentals] rentals.value length:', rentals.value.length)
+
     if (selectedRental.value) {
       const match = rentals.value.find(r => r.id === selectedRental.value?.id)
       if (!match) selectedRental.value = null
@@ -188,19 +204,29 @@ const openDetail = async (rental: any) => {
 }
 
 onMounted(() => {
+  console.log('[MyRentals] Component mounted')
+  console.log('[MyRentals] onMounted - isMember.value:', isMember.value)
+  console.log('[MyRentals] onMounted - userRole.value:', userRole.value)
   if (isMember.value) {
+    console.log('[MyRentals] Calling refresh from onMounted')
     refresh()
+  } else {
+    console.log('[MyRentals] Not calling refresh - user is not a member')
   }
 })
 
 watch(userRole, (role, prev) => {
+  console.log('[MyRentals] userRole changed from', prev, 'to', role)
   if (role === 'member' && prev !== 'member') {
+    console.log('[MyRentals] Calling refresh from userRole watch')
     refresh()
   }
 }, { immediate: false })
 
 watch(() => auth.isLogin, (loggedIn) => {
+  console.log('[MyRentals] isLogin changed to:', loggedIn)
   if (loggedIn && isMember.value) {
+    console.log('[MyRentals] Calling refresh from isLogin watch')
     refresh()
   }
 })
