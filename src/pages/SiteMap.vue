@@ -863,8 +863,23 @@ const filteredRealtimeVehicles = computed(() => {
 
   // 搜尋過濾（上方搜尋框）
   if (searchQuery.value.trim()) {
-    const q = searchQuery.value.toLowerCase()
-    list = list.filter(v => String(v.id).toLowerCase().includes(q) || String(v.name || '').toLowerCase().includes(q))
+    const q = searchQuery.value.toLowerCase().trim()
+    list = list.filter(v => {
+      // 搜尋車輛ID (bike_id)
+      const idMatch = String(v.id || '').toLowerCase().includes(q)
+
+      // 搜尋車輛名稱，但排除與ID重複的情況
+      const vehicleName = String(v.name || '').toLowerCase()
+      const nameMatch = vehicleName && vehicleName !== String(v.id || '').toLowerCase() && vehicleName.includes(q)
+
+      // 搜尋車型
+      const modelMatch = String(v.model || '').toLowerCase().includes(q)
+
+      // 搜尋站點名稱
+      const siteMatch = String(v.siteName || '').toLowerCase().includes(q)
+
+      return idMatch || nameMatch || modelMatch || siteMatch
+    })
   }
 
   // 清單選取（右側 VehicleFilter）
