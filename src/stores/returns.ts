@@ -2,6 +2,25 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { z } from 'zod'
 import { http } from '@/lib/api'
+import { useAuth } from '@/stores/auth'
+
+function canUseStaffRentalApi(): boolean {
+  try {
+    const auth = useAuth()
+    const role =
+      auth.user?.roleId ||
+      sessionStorage.getItem('penguin.role') ||
+      localStorage.getItem('penguin.role') ||
+      null
+    const allowed = role === 'admin' || role === 'staff'
+    if (!allowed) {
+      console.info('[Returns] Skip staff rental API for role:', role)
+    }
+    return allowed
+  } catch {
+    return false
+  }
+}
 
 // Zod Schemas
 export const ReturnPayloadSchema = z.object({
@@ -173,6 +192,10 @@ const fetchReturns = async (params?: { siteId?: string; limit?: number }) => {
     isLoading.value = true
 
     try {
+      if (!canUseStaffRentalApi()) {
+        list.value = []
+        return []
+      }
       const searchParams = new URLSearchParams()
       searchParams.set('limit', String(params?.limit ?? 20))
       searchParams.set('offset', '0')
@@ -201,6 +224,9 @@ const fetchReturns = async (params?: { siteId?: string; limit?: number }) => {
    * 獲取特定站點的最近歸還記錄
    */
 const fetchRecentReturns = async (siteId: string, limit = 5): Promise<ReturnRecordWithMeta[]> => {
+    if (!canUseStaffRentalApi()) {
+      return []
+    }
     try {
       const searchParams = new URLSearchParams()
       searchParams.set('limit', String(Math.max(limit * 2, 10)))

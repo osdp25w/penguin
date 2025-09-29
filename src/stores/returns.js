@@ -143,6 +143,10 @@ export const useReturns = defineStore('returns', () => {
         var _a, _b;
         isLoading.value = true;
         try {
+            if (!canUseStaffRentalApi()) {
+                list.value = [];
+                return [];
+            }
             const searchParams = new URLSearchParams();
             searchParams.set('limit', String((_a = params === null || params === void 0 ? void 0 : params.limit) !== null && _a !== void 0 ? _a : 20));
             searchParams.set('offset', '0');
@@ -170,6 +174,9 @@ export const useReturns = defineStore('returns', () => {
     const fetchRecentReturns = async (siteId, limit = 5) => {
         var _a;
         try {
+            if (!canUseStaffRentalApi()) {
+                return [];
+            }
             const searchParams = new URLSearchParams();
             searchParams.set('limit', String(Math.max(limit * 2, 10)));
             searchParams.set('offset', '0');

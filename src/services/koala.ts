@@ -2,6 +2,30 @@
 import { http, saveUserProfile, apiStorage } from '@/lib/api'
 import { looksLikeFernet } from '@/lib/fernet'
 
+function currentRole(): string | null {
+  try {
+    return (
+      sessionStorage.getItem('penguin.role') ||
+      localStorage.getItem('penguin.role') ||
+      null
+    )
+  } catch {
+    return null
+  }
+}
+
+function ensureStaffApiAccess(action: string): void {
+  const role = currentRole()
+  const allowed = role === 'admin' || role === 'staff'
+  if (!allowed) {
+    console.warn(`[Koala] Blocked staff API "${action}" for role:`, role)
+    const err = new Error('FORBIDDEN_STAFF_API')
+    ;(err as any).status = 403
+    ;(err as any).detail = `Role "${role ?? 'unknown'}" cannot access staff API`
+    throw err
+  }
+}
+
 // Minimal types inferred from Postman examples
 export interface KoalaLoginResponse {
   code?: number
@@ -140,16 +164,20 @@ export const Koala = {
 
   // Staff
   async listStaff() {
+    ensureStaffApiAccess('listStaff')
     const res = await http.get<{code: number, data: {staff: StaffItem[], total_count: number}}>('/api/account/staff/')
     return res?.data?.staff || []
   },
   getStaff(id: string | number) {
+    ensureStaffApiAccess('getStaff')
     return http.get<StaffItem>(`/api/account/staff/${id}/`)
   },
   updateStaff(id: string | number, patch: Partial<StaffItem>) {
+    ensureStaffApiAccess('updateStaff')
     return http.patch<StaffItem>(`/api/account/staff/${id}/`, patch)
   },
   deleteStaff(id: string | number) {
+    ensureStaffApiAccess('deleteStaff')
     return http.del<void>(`/api/account/staff/${id}/`)
   }
 }

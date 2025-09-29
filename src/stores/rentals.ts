@@ -199,6 +199,13 @@ export const useRentals = defineStore('rentals', () => {
     if (!found) {
       console.log('[Rentals] Not found in active_rentals, trying full rental list...')
       try {
+        // Check if user has staff/admin privileges
+        const isPrivileged = (auth.user?.roleId === 'admin' || auth.user?.roleId === 'staff')
+        if (!isPrivileged) {
+          console.warn('[Rentals] Non-staff user attempted to access full rental list')
+          throw new Error('找不到該車輛的進行中租借')
+        }
+
         const res: any = await http.get('/api/rental/staff/rentals/')
         let rows = []
 
@@ -381,6 +388,13 @@ export const useRentals = defineStore('rentals', () => {
   }
 
   async function fetchStaffRentals(params?: { limit?: number; offset?: number; rentalStatus?: string | string[]; search?: string; signal?: AbortSignal }): Promise<{ data: any[]; total: number }> {
+    // Check if user has staff/admin privileges
+    const isPrivileged = (auth.user?.roleId === 'admin' || auth.user?.roleId === 'staff')
+    if (!isPrivileged) {
+      console.warn('[Rentals] Non-staff user attempted to access staff rentals')
+      return { data: [], total: 0 }
+    }
+
     try {
       const limit = params?.limit ?? 50
       const offset = params?.offset ?? 0
@@ -428,6 +442,14 @@ export const useRentals = defineStore('rentals', () => {
 
   async function fetchStaffRentalDetail(id: string | number): Promise<any | null> {
     if (!id && id !== 0) return null
+
+    // Check if user has staff/admin privileges
+    const isPrivileged = (auth.user?.roleId === 'admin' || auth.user?.roleId === 'staff')
+    if (!isPrivileged) {
+      console.warn('[Rentals] Non-staff user attempted to access staff rental detail')
+      return null
+    }
+
     try {
       const res: any = await http.get(`/api/rental/staff/rentals/${id}/`)
       return res?.data ?? res ?? null

@@ -201,6 +201,12 @@ export const useRentals = defineStore('rentals', () => {
         if (!found) {
             console.log('[Rentals] Not found in active_rentals, trying full rental list...');
             try {
+                // Check if user has staff/admin privileges
+                const isPrivileged = (auth.user?.roleId === 'admin' || auth.user?.roleId === 'staff');
+                if (!isPrivileged) {
+                    console.warn('[Rentals] Non-staff user attempted to access full rental list');
+                    throw new Error('找不到該車輛的進行中租借');
+                }
                 const res = await http.get('/api/rental/staff/rentals/');
                 let rows = [];
                 // 處理 Koala API 格式
@@ -378,6 +384,12 @@ export const useRentals = defineStore('rentals', () => {
     }
     async function fetchStaffRentals(params) {
         var _a, _b, _c, _d, _e, _f;
+        // Check if user has staff/admin privileges
+        const isPrivileged = (auth.user?.roleId === 'admin' || auth.user?.roleId === 'staff');
+        if (!isPrivileged) {
+            console.warn('[Rentals] Non-staff user attempted to access staff rentals');
+            return { data: [], total: 0 };
+        }
         try {
             const limit = (_a = params === null || params === void 0 ? void 0 : params.limit) !== null && _a !== void 0 ? _a : 50;
             const offset = (_b = params === null || params === void 0 ? void 0 : params.offset) !== null && _b !== void 0 ? _b : 0;
@@ -426,6 +438,12 @@ export const useRentals = defineStore('rentals', () => {
         var _a, _b;
         if (!id && id !== 0)
             return null;
+        // Check if user has staff/admin privileges
+        const isPrivileged = (auth.user?.roleId === 'admin' || auth.user?.roleId === 'staff');
+        if (!isPrivileged) {
+            console.warn('[Rentals] Non-staff user attempted to access staff rental detail');
+            return null;
+        }
         try {
             const res = await http.get(`/api/rental/staff/rentals/${id}/`);
             return (_b = (_a = res === null || res === void 0 ? void 0 : res.data) !== null && _a !== void 0 ? _a : res) !== null && _b !== void 0 ? _b : null;

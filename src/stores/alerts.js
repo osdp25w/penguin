@@ -2,6 +2,25 @@
  *  警報中心 Store（中文版，含計畫書溫度規則）
  * ---------------------------------------------------------------- */
 import { defineStore } from 'pinia';
+import { useAuth } from '@/stores/auth';
+function currentRole() {
+    var _a, _b, _c;
+    try {
+        const auth = useAuth();
+        return ((_a = auth.user) === null || _a === void 0 ? void 0 : _a.roleId) || ((_b = sessionStorage.getItem('penguin.role')) !== null && _b !== void 0 ? _b : (_c = localStorage.getItem('penguin.role')) !== null && _c !== void 0 ? _c : null);
+    }
+    catch (_d) {
+        return null;
+    }
+}
+function ensureStaffAlertAccess() {
+    const role = currentRole();
+    const allowed = role === 'admin' || role === 'staff';
+    if (!allowed) {
+        console.info('[Alerts] Skip staff alert API for role:', role);
+    }
+    return allowed;
+}
 /* === 計畫書警戒閾值 ============================================= */
 const CONTROLLER_OVERHEAT = 90; // 控制器溫度 °C
 const BATTERY_DISCHG_OVERHEAT = 60; // 電池放電溫度 °C
@@ -47,6 +66,11 @@ export const useAlerts = defineStore('alerts', {
             this.isLoading = true;
             this.errMsg = '';
             try {
+                if (!ensureStaffAlertAccess()) {
+                    this.list = [];
+                    this.usingMock = false;
+                    return;
+                }
                 // 嘗試調用真實 API
                 try {
                     const { http } = await import('@/lib/api');
@@ -122,6 +146,10 @@ export const useAlerts = defineStore('alerts', {
         /* 關閉 / 確認單筆警報 --------------------------------------- */
         async acknowledge(id) {
             try {
+                if (!ensureStaffAlertAccess()) {
+                    this.list = this.list.filter(a => a.id !== id);
+                    return;
+                }
                 // 嘗試調用真實 API 標記為已讀
                 try {
                     const { http } = await import('@/lib/api');
@@ -204,6 +232,10 @@ export const useAlerts = defineStore('alerts', {
             this.loadingBySite[siteId] = true;
             this.errorBySite[siteId] = null;
             try {
+                if (!ensureStaffAlertAccess()) {
+                    this.bySite[siteId] = [];
+                    return;
+                }
                 // 嘗試調用真實 API
                 try {
                     const { http } = await import('@/lib/api');

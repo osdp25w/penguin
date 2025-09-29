@@ -1,6 +1,26 @@
 // src/services/koala.ts
 import { http, saveUserProfile, apiStorage } from '@/lib/api';
 import { looksLikeFernet } from '@/lib/fernet';
+function currentRole() {
+    var _a, _b;
+    try {
+        return ((_a = sessionStorage.getItem('penguin.role')) !== null && _a !== void 0 ? _a : (_b = localStorage.getItem('penguin.role')) !== null && _b !== void 0 ? _b : null);
+    }
+    catch (_c) {
+        return null;
+    }
+}
+function ensureStaffApiAccess(action) {
+    const role = currentRole();
+    const allowed = role === 'admin' || role === 'staff';
+    if (!allowed) {
+        console.warn(`[Koala] Blocked staff API "${action}" for role:`, role);
+        const err = new Error('FORBIDDEN_STAFF_API');
+        err.status = 403;
+        err.detail = `Role "${(role !== null && role !== void 0 ? role : 'unknown')}" cannot access staff API`;
+        throw err;
+    }
+}
 export const Koala = {
     // Auth
     async login(email, password) {
@@ -116,16 +136,20 @@ export const Koala = {
     // Staff
     async listStaff() {
         var _a;
+        ensureStaffApiAccess('listStaff');
         const res = await http.get('/api/account/staff/');
         return ((_a = res === null || res === void 0 ? void 0 : res.data) === null || _a === void 0 ? void 0 : _a.staff) || [];
     },
     getStaff(id) {
+        ensureStaffApiAccess('getStaff');
         return http.get(`/api/account/staff/${id}/`);
     },
     updateStaff(id, patch) {
+        ensureStaffApiAccess('updateStaff');
         return http.patch(`/api/account/staff/${id}/`, patch);
     },
     deleteStaff(id) {
+        ensureStaffApiAccess('deleteStaff');
         return http.del(`/api/account/staff/${id}/`);
     }
 };
