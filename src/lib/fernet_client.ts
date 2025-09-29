@@ -14,7 +14,8 @@ function bytesToB64u(bytes: Uint8Array): string {
   let str = ''
   for (let i = 0; i < bytes.length; i++) str += String.fromCharCode(bytes[i])
   const b64 = typeof btoa !== 'undefined' ? btoa(str) : Buffer.from(str, 'binary').toString('base64')
-  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+  // 依據 Python cryptography 行為保留 '=' padding，避免後端解密失敗
+  return b64.replace(/\+/g, '-').replace(/\//g, '_')
 }
 
 function u64be(n: number): Uint8Array {
@@ -128,4 +129,3 @@ export function fernetDecrypt(token: string, base64UrlKey: string): string {
 export function looksLikeFernetToken(s: string): boolean {
   return /^[A-Za-z0-9_-]{80,}$/.test(s) && s.startsWith('gA')
 }
-

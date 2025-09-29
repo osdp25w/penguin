@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Koala 身分證加密測試</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; background: #f9fafb; color: #111827; }
+      h1 { font-size: 1.5rem; margin-bottom: 1rem; }
+      .card { max-width: 640px; margin: 0 auto; background: #fff; border-radius: 16px; box-shadow: 0 12px 30px -15px rgba(15, 23, 42, 0.45); padding: 24px; }
+      label { display: block; font-weight: 600; margin-bottom: 6px; }
+      input, textarea { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid #d1d5db; background: #f9fafb; transition: border-color 0.2s ease; }
+      input:focus, textarea:focus { border-color: #6366f1; outline: none; background: #fff; }
+      button { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 999px; border: none; background: linear-gradient(135deg, #6366f1, #4338ca); color: white; font-weight: 600; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+      button:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(99, 102, 241, 0.35); }
+      button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+      .flex { display: flex; gap: 12px; flex-wrap: wrap; }
+      .half { flex: 1 1 47%; }
+      .log { margin-top: 18px; padding: 14px; border-radius: 12px; background: #111827; color: #f9fafb; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 0.9rem; white-space: pre-wrap; word-break: break-all; }
+    </style>
+    <script>
+      // 預設 API base，可依需求覆寫
+      window.CONFIG = Object.assign({
+        API_BASE: 'https://koala.osdp25w.xyz',
+      }, window.CONFIG || {})
+    </script>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Koala 身分證加密 / 更新測試</h1>
+      <p style="margin-bottom: 1.5rem; color: #4b5563;">本頁使用前端與正式站相同的 Fernet 加密流程。輸入帳密與新身分證號後，會：<br />1) 使用 login key 加密密碼登入<br />2) 使用 sensitive key 加密身分證<br />3) PATCH /api/account/members/&lt;ID&gt;/</p>
+
+      <div class="flex">
+        <div class="half">
+          <label for="email">登入 Email</label>
+          <input id="email" type="email" placeholder="pony@real1.com" value="pony@real1.com" />
+        </div>
+        <div class="half">
+          <label for="password">登入密碼</label>
+          <input id="password" type="password" placeholder="••••••" value="2m8N625cvmf0" />
+        </div>
+      </div>
+
+      <div class="flex" style="margin-top: 16px;">
+        <div class="half">
+          <label for="memberId">目標會員 ID</label>
+          <input id="memberId" type="number" min="1" value="1" />
+        </div>
+        <div class="half">
+          <label for="nationalId">新的身分證號</label>
+          <input id="nationalId" type="text" placeholder="B123456789" />
+        </div>
+      </div>
+
+      <div style="margin-top: 16px;">
+        <label for="apiBase">API Base（必要時可修改）</label>
+        <input id="apiBase" type="text" value="https://koala.osdp25w.xyz" />
+      </div>
+
+      <details style="margin-top: 18px;">
+        <summary style="cursor: pointer; font-weight: 600; color: #4f46e5;">進階：覆寫 Fernet 金鑰</summary>
+        <p style="margin: 10px 0; color: #6b7280;">若環境尚未注入 <code>VITE_KOALA_LOGIN_KEY</code> / <code>VITE_KOALA_SENSITIVE_KEY</code>，可在此手動填入。</p>
+        <label for="loginKey">Login Key</label>
+        <textarea id="loginKey" rows="2" placeholder="例如：HnMaD-8xfYG1CqyWk71DUrMICdB2kNfHsLS57TPoCZc=" style="margin-bottom: 12px;"></textarea>
+        <label for="sensitiveKey">Sensitive Key</label>
+        <textarea id="sensitiveKey" rows="2" placeholder="例如：YFzfi8WyL0cDA_jKNooSFqzUv80FSiWM21lzG487GbM="></textarea>
+      </details>
+
+      <button id="runBtn" style="margin-top: 24px;">
+        <span>送出 PATCH 測試</span>
+      </button>
+
+      <div id="log" class="log" style="display: none;"></div>
+    </div>
+
+    <script type="module">
+      import { encryptNationalId, encryptPassword } from '/src/lib/encryption.ts'
+
+      const $ = (id) => document.getElementById(id)
+      const logEl = $('log')
+      const runBtn = $('runBtn')
+
+      const appendLog = (msg) => {
+        logEl.style.display = 'block'
+        const time = new Date().toLocaleTimeString()
+        logEl.textContent += `[${time}] ${msg}\n`
+        logEl.scrollTop = logEl.scrollHeight
+      }
+
+      const clearLog = () => {
+        logEl.textContent = ''
+        logEl.style.display = 'none'
+      }
+
+      async function login(apiBase, email, password) {
+        appendLog('加密密碼並登入...')
+        const encryptedPassword = await encryptPassword(password)
+        const resp = await fetch(`${apiBase}/api/account/auth/login/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password: encryptedPassword }),
+        })
+        const data = await resp.json()
+        appendLog(`登入狀態: ${resp.status}`)
+        if (resp.ok && data?.code === 2000) {
+          appendLog('登入成功，取得 access token')
+          return data.data.tokens.access_token
+        }
+        throw new Error(`登入失敗: ${JSON.stringify(data)}`)
+      }
+
+      async function patchNationalId(apiBase, token, memberId, plaintextId) {
+        appendLog('加密身分證號...')
+        const encryptedId = await encryptNationalId(plaintextId)
+        appendLog(`加密結果: ${encryptedId}`)
+
+        appendLog('呼叫 PATCH /api/account/members/${memberId}/ ...')
+        const resp = await fetch(`${apiBase}/api/account/members/${memberId}/`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ national_id: encryptedId }),
+        })
+
+        const data = await resp.json().catch(() => null)
+        appendLog(`PATCH 狀態: ${resp.status}`)
+        appendLog(`PATCH 回應: ${JSON.stringify(data)}`)
+
+        if (!resp.ok || data?.code !== 2000) {
+          throw new Error('更新身分證失敗，請檢查回應內容')
+        }
+      }
+
+      runBtn.addEventListener('click', async () => {
+        clearLog()
+        runBtn.disabled = true
+
+        const email = $('email').value.trim()
+        const password = $('password').value.trim()
+        const memberId = $('memberId').value.trim()
+        const nationalId = $('nationalId').value.trim()
+        const apiBaseInput = $('apiBase').value.trim() || window.CONFIG.API_BASE
+
+        if (!email || !password || !memberId || !nationalId) {
+          alert('請完整填寫所有欄位')
+          runBtn.disabled = false
+          return
+        }
+
+        window.CONFIG.API_BASE = apiBaseInput.replace(/\/$/, '')
+        const loginKey = $('loginKey').value.trim()
+        const sensitiveKey = $('sensitiveKey').value.trim()
+        if (loginKey) window.CONFIG.KOALA_LOGIN_KEY = loginKey
+        if (sensitiveKey) window.CONFIG.KOALA_SENSITIVE_KEY = sensitiveKey
+        appendLog(`使用 API_BASE: ${window.CONFIG.API_BASE}`)
+
+        try {
+          const token = await login(window.CONFIG.API_BASE, email, password)
+          await patchNationalId(window.CONFIG.API_BASE, token, memberId, nationalId)
+          appendLog('✅ 更新成功，請至後台或 API 驗證')
+        } catch (err) {
+          console.error(err)
+          appendLog(`❌ 發生錯誤: ${err?.message || err}`)
+        } finally {
+          runBtn.disabled = false
+        }
+      })
+    </script>
+  </body>
+</html>
