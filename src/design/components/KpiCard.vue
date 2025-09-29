@@ -127,12 +127,14 @@ const showChange = computed(() => props.changeLabel !== undefined || props.chang
 const changeIcon = computed(() => {
   if (typeof props.change !== 'number') return null
 
+  // 箭頭方向應該根據數值變化，而非 trend
+  // trend 只影響顏色（好/壞）
   if (props.change > 0) {
-    return props.trend === 'down' ? 'i-ph-trend-down' : 'i-ph-trend-up'
+    return 'i-ph-trend-up'  // 正數永遠向上
   } else if (props.change < 0) {
-    return props.trend === 'up' ? 'i-ph-trend-up' : 'i-ph-trend-down'
+    return 'i-ph-trend-down'  // 負數永遠向下
   }
-  
+
   return 'i-ph-minus'
 })
 
