@@ -201,6 +201,12 @@ export const useRentals = defineStore('rentals', () => {
         if (!found) {
             console.log('[Rentals] Not found in active_rentals, trying full rental list...');
             try {
+                // Check if user has staff/admin privileges
+                const isPrivileged = (auth.user?.roleId === 'admin' || auth.user?.roleId === 'staff');
+                if (!isPrivileged) {
+                    console.warn('[Rentals] Non-staff user attempted to access full rental list');
+                    throw new Error('找不到該車輛的進行中租借');
+                }
                 const res = await http.get('/api/rental/staff/rentals/');
                 let rows = [];
                 // 處理 Koala API 格式
@@ -263,7 +269,7 @@ export const useRentals = defineStore('rentals', () => {
         current.value = undefined;
     }
     async function fetchMemberRentals(params, opts) {
-        var _a, _b, _c, _d;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u;
         try {
             if ((opts === null || opts === void 0 ? void 0 : opts.updateState) !== false) {
                 memberRentalsLoading.value = true;
@@ -273,10 +279,74 @@ export const useRentals = defineStore('rentals', () => {
             const offset = (_b = params === null || params === void 0 ? void 0 : params.offset) !== null && _b !== void 0 ? _b : 0;
             const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
             const path = qs.toString() ? `/api/rental/member/rentals/?${qs}` : '/api/rental/member/rentals/';
+            console.log('[fetchMemberRentals] Requesting:', path);
             const res = await http.get(path);
+            console.log('[fetchMemberRentals] Raw response:', res);
             const payload = unwrapKoalaResponse(res);
-            const rows = Array.isArray(payload) ? payload : Array.isArray(res === null || res === void 0 ? void 0 : res.data) ? res.data : Array.isArray(res) ? res : (res === null || res === void 0 ? void 0 : res.results) || [];
-            const total = (_d = (_c = res === null || res === void 0 ? void 0 : res.count) !== null && _c !== void 0 ? _c : res === null || res === void 0 ? void 0 : res.total) !== null && _d !== void 0 ? _d : rows.length;
+            console.log('[fetchMemberRentals] After unwrap:', payload);
+            let rows = [];
+            let total = 0;
+            const ensureArray = (candidate) => (Array.isArray(candidate) ? candidate : []);
+            console.log('[fetchMemberRentals] Checking payload structure...');
+            console.log('[fetchMemberRentals] payload is Array:', Array.isArray(payload));
+            console.log('[fetchMemberRentals] payload.results is Array:', Array.isArray(payload === null || payload === void 0 ? void 0 : payload.results));
+            console.log('[fetchMemberRentals] payload.data is Array:', Array.isArray(payload === null || payload === void 0 ? void 0 : payload.data));
+            console.log('[fetchMemberRentals] payload.rentals is Array:', Array.isArray(payload === null || payload === void 0 ? void 0 : payload.rentals));
+            if (Array.isArray(payload)) {
+                console.log('[fetchMemberRentals] Using payload as array');
+                rows = payload;
+                total = payload.length;
+            }
+            else if (payload && typeof payload === 'object') {
+                if (Array.isArray(payload.results)) {
+                    console.log('[fetchMemberRentals] Found payload.results');
+                    rows = payload.results;
+                    total = (_d = (_c = payload.count) !== null && _c !== void 0 ? _c : payload.total) !== null && _d !== void 0 ? _d : payload.results.length;
+                }
+                else if (Array.isArray(payload.data)) {
+                    console.log('[fetchMemberRentals] Found payload.data');
+                    rows = payload.data;
+                    total = (_f = (_e = payload.count) !== null && _e !== void 0 ? _e : payload.total) !== null && _f !== void 0 ? _f : payload.data.length;
+                }
+                else if (Array.isArray(payload.rentals)) {
+                    console.log('[fetchMemberRentals] Found payload.rentals');
+                    rows = payload.rentals;
+                    total = (_g = payload.total) !== null && _g !== void 0 ? _g : payload.rentals.length;
+                }
+            }
+            if (!rows.length) {
+                console.log('[fetchMemberRentals] No rows found yet, checking fallback paths...');
+                console.log('[fetchMemberRentals] res.data.results is Array:', Array.isArray((_h = res === null || res === void 0 ? void 0 : res.data) === null || _h === void 0 ? void 0 : _h.results));
+                console.log('[fetchMemberRentals] res.data is Array:', Array.isArray(res === null || res === void 0 ? void 0 : res.data));
+                console.log('[fetchMemberRentals] res is Array:', Array.isArray(res));
+                console.log('[fetchMemberRentals] res.results is Array:', Array.isArray(res === null || res === void 0 ? void 0 : res.results));
+                if (Array.isArray((_j = res === null || res === void 0 ? void 0 : res.data) === null || _j === void 0 ? void 0 : _j.results)) {
+                    console.log('[fetchMemberRentals] Using res.data.results');
+                    rows = res.data.results;
+                    total = (_l = (_k = res.data.count) !== null && _k !== void 0 ? _k : res.data.total) !== null && _l !== void 0 ? _l : rows.length;
+                }
+                else if (Array.isArray(res === null || res === void 0 ? void 0 : res.data)) {
+                    console.log('[fetchMemberRentals] Using res.data');
+                    rows = ensureArray(res.data);
+                    total = (_o = (_m = res === null || res === void 0 ? void 0 : res.data) === null || _m === void 0 ? void 0 : _m.length) !== null && _o !== void 0 ? _o : rows.length;
+                }
+                else if (Array.isArray(res)) {
+                    console.log('[fetchMemberRentals] Using res');
+                    rows = res;
+                    total = rows.length;
+                }
+                else if (Array.isArray(res === null || res === void 0 ? void 0 : res.results)) {
+                    console.log('[fetchMemberRentals] Using res.results');
+                    rows = res.results;
+                    total = (_q = (_p = res === null || res === void 0 ? void 0 : res.count) !== null && _p !== void 0 ? _p : res === null || res === void 0 ? void 0 : res.total) !== null && _q !== void 0 ? _q : rows.length;
+                }
+            }
+            if (!total) {
+                total = (_u = (_t = (_s = (_r = res === null || res === void 0 ? void 0 : res.data) === null || _r === void 0 ? void 0 : _r.count) !== null && _s !== void 0 ? _s : res === null || res === void 0 ? void 0 : res.count) !== null && _t !== void 0 ? _t : res === null || res === void 0 ? void 0 : res.total) !== null && _u !== void 0 ? _u : rows.length;
+            }
+            console.log('[fetchMemberRentals] Final rows:', rows);
+            console.log('[fetchMemberRentals] Final total:', total);
+            console.log('[fetchMemberRentals] Returning:', { data: rows, total });
             if ((opts === null || opts === void 0 ? void 0 : opts.updateState) !== false) {
                 memberRentals.value = rows;
                 memberRentalsTotal.value = total;
@@ -314,6 +384,12 @@ export const useRentals = defineStore('rentals', () => {
     }
     async function fetchStaffRentals(params) {
         var _a, _b, _c, _d, _e, _f;
+        // Check if user has staff/admin privileges
+        const isPrivileged = (auth.user?.roleId === 'admin' || auth.user?.roleId === 'staff');
+        if (!isPrivileged) {
+            console.warn('[Rentals] Non-staff user attempted to access staff rentals');
+            return { data: [], total: 0 };
+        }
         try {
             const limit = (_a = params === null || params === void 0 ? void 0 : params.limit) !== null && _a !== void 0 ? _a : 50;
             const offset = (_b = params === null || params === void 0 ? void 0 : params.offset) !== null && _b !== void 0 ? _b : 0;
@@ -362,6 +438,12 @@ export const useRentals = defineStore('rentals', () => {
         var _a, _b;
         if (!id && id !== 0)
             return null;
+        // Check if user has staff/admin privileges
+        const isPrivileged = (auth.user?.roleId === 'admin' || auth.user?.roleId === 'staff');
+        if (!isPrivileged) {
+            console.warn('[Rentals] Non-staff user attempted to access staff rental detail');
+            return null;
+        }
         try {
             const res = await http.get(`/api/rental/staff/rentals/${id}/`);
             return (_b = (_a = res === null || res === void 0 ? void 0 : res.data) !== null && _a !== void 0 ? _a : res) !== null && _b !== void 0 ? _b : null;

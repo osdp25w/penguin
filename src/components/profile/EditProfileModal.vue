@@ -85,20 +85,14 @@
                 <p v-if="errors.email" class="mt-1 text-xs text-red-600">{{ errors.email }}</p>
               </div>
 
-              <!-- ID Number -->
+              <!-- ID Number (只顯示不可編輯) -->
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">
                   身分證號碼
                 </label>
-                <input
-                  v-model="form.idNumber"
-                  type="text"
-                  placeholder="A123456789"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                  :class="{ 'border-red-300': errors.idNumber }"
-                  maxlength="10"
-                >
-                <p v-if="errors.idNumber" class="mt-1 text-xs text-red-600">{{ errors.idNumber }}</p>
+                <div class="py-2 text-sm text-gray-900">
+                  {{ form.idNumber || '未設定' }}
+                </div>
               </div>
             </div>
           </div>
@@ -189,6 +183,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { z } from 'zod'
 import { Button } from '@/design/components'
 import { useAuth } from '@/stores/auth'
+import { useToasts } from '@/stores/toasts'
 
 const emit = defineEmits<{
   close: []
@@ -197,6 +192,7 @@ const emit = defineEmits<{
 
 // Store
 const auth = useAuth()
+const toasts = useToasts()
 
 // Form data
 const form = reactive({
@@ -223,10 +219,7 @@ const ProfileSchema = z.object({
   name: z.string().min(1, '請輸入姓名'),
   email: z.string().email('請輸入有效的電子信箱'),
   phone: z.string().optional(),
-  idNumber: z.string().optional().refine((val) => {
-    if (!val) return true // 可選欄位
-    return /^[A-Z][12]\d{8}$/.test(val)
-  }, '請輸入正確的身分證格式 (例：A123456789)'),
+  // 身分證號碼不驗證（用戶無法修改）
 })
 
 const PasswordSchema = z.object({
@@ -247,8 +240,8 @@ const validateForm = () => {
     ProfileSchema.parse({
       name: form.name,
       email: form.email,
-      phone: form.phone,
-      idNumber: form.idNumber
+      phone: form.phone
+      // 不驗證 idNumber（用戶無法修改）
     })
 
     // Validate password fields if changing password
@@ -283,8 +276,8 @@ const handleSubmit = async () => {
     const payload: any = {
       name: form.name,
       email: form.email,
-      phone: form.phone || undefined,
-      idNumber: form.idNumber || undefined
+      phone: form.phone || undefined
+      // 不發送 idNumber（用戶無法修改）
     }
 
     // Add password if changing
@@ -294,13 +287,16 @@ const handleSubmit = async () => {
     }
 
     await auth.updateMe(payload)
-    
+
+    // 顯示成功提示
+    toasts.success('個人資料已成功更新', '更新成功')
+
     emit('success')
     emit('close')
   } catch (error: any) {
     console.error('Profile update error:', error)
-    // TODO: Show error toast
-    alert('更新失敗：' + (error.message || '未知錯誤'))
+    // 顯示錯誤提示
+    toasts.error(error.message || '更新失敗，請稍後再試', '更新失敗')
   } finally {
     isSubmitting.value = false
   }

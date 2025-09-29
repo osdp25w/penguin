@@ -3,6 +3,30 @@
  * ---------------------------------------------------------------- */
 import { defineStore } from 'pinia'
 import type { Alert } from '@/types'
+import { useAuth } from '@/stores/auth'
+
+function currentRole(): string | null {
+  try {
+    const auth = useAuth()
+    return (
+      auth.user?.roleId ||
+      sessionStorage.getItem('penguin.role') ||
+      localStorage.getItem('penguin.role') ||
+      null
+    )
+  } catch {
+    return null
+  }
+}
+
+function ensureStaffAlertAccess(): boolean {
+  const role = currentRole()
+  const allowed = role === 'admin' || role === 'staff'
+  if (!allowed) {
+    console.info('[Alerts] Skip staff alert API for role:', role)
+  }
+  return allowed
+}
 
 /* === 計畫書警戒閾值 ============================================= */
 const CONTROLLER_OVERHEAT       = 90  // 控制器溫度 °C
@@ -50,6 +74,11 @@ export const useAlerts = defineStore('alerts', {
       this.isLoading = true
       this.errMsg = ''
       try {
+        if (!ensureStaffAlertAccess()) {
+          this.list = []
+          this.usingMock = false
+          return
+        }
         // 嘗試調用真實 API
         try {
           const { http } = await import('@/lib/api')
@@ -132,6 +161,10 @@ export const useAlerts = defineStore('alerts', {
     /* 關閉 / 確認單筆警報 --------------------------------------- */
     async acknowledge (id: string) {
       try {
+        if (!ensureStaffAlertAccess()) {
+          this.list = this.list.filter(a => a.id !== id)
+          return
+        }
         // 嘗試調用真實 API 標記為已讀
         try {
           const { http } = await import('@/lib/api')
@@ -218,6 +251,10 @@ export const useAlerts = defineStore('alerts', {
       this.errorBySite[siteId] = null
 
       try {
+        if (!ensureStaffAlertAccess()) {
+          this.bySite[siteId] = []
+          return
+        }
         // 嘗試調用真實 API
         try {
           const { http } = await import('@/lib/api')
