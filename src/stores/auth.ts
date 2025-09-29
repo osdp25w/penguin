@@ -1,7 +1,7 @@
 // src/stores/auth.ts
 import { defineStore } from 'pinia'
 import { Koala } from '@/services/koala'
-import { clearAuthStorage, loadUserProfile, saveUserProfile, refreshToken as apiRefreshToken, refreshTokenWithProfile } from '@/lib/api'
+import { clearAuthStorage, loadUserProfile, saveUserProfile, refreshToken as apiRefreshToken, refreshTokenWithProfile, http } from '@/lib/api'
 
 /* -------------------------------------------------------------- */
 /*  型別定義                                                       */
@@ -476,14 +476,16 @@ export const useAuth = defineStore('auth', {
         if (payload.name) apiPayload.username = payload.name
 
         // 身份證號加密處理 (只有 Member 需要)
-        if (!isStaffUser && payload.idNumber) {
+        // 注意：只有當前端明確傳送 idNumber 時才處理（表示用戶修改了）
+        if (!isStaffUser && payload.idNumber !== undefined) {
           try {
             const { encryptNationalId, looksEncrypted } = await import('@/lib/encryption')
 
-            // 檢查是否已經是加密的資料 - 如果是，表示前端有問題，應該傳明文
+            // 檢查是否已經是加密的資料
             if (looksEncrypted(payload.idNumber)) {
-              console.warn('National ID appears to be already encrypted. This should not happen.')
-              throw new Error('身分證號格式錯誤，請重新輸入明文身分證號')
+              console.error('National ID is already encrypted, this should not happen!')
+              // 這種情況不應該發生，因為前端應該只傳送解密後的明文
+              throw new Error('身分證號格式錯誤，請重新輸入')
             }
 
             // 加密明文身分證號
@@ -511,22 +513,12 @@ export const useAuth = defineStore('auth', {
         console.log(`[UpdateMe] Using ${isStaffUser ? 'Staff' : 'Member'} API:`, apiEndpoint)
         console.log('[UpdateMe] Payload:', apiPayload)
 
-        const res = await fetch(apiEndpoint, {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${validToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(apiPayload)
-        })
-        
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}))
-          throw new Error(errorData.message || errorData.detail || '更新個人資料失敗')
-        }
+        // 使用 http.patch 而不是 fetch，這樣會自動使用正確的 base URL (koala)
+        const response = await http.patch(apiEndpoint, apiPayload)
+        console.log('[UpdateMe] Updated data:', response)
 
-        const updatedData = await res.json()
-        console.log('[UpdateMe] Updated data:', updatedData)
+        // 處理回應資料
+        const updatedData = response?.data || response
 
         // 更新本地用戶資料
         if (this.user) {
@@ -535,7 +527,7 @@ export const useAuth = defineStore('auth', {
           this.user.phone = updatedData.phone || this.user.phone
           // 注意：不直接存儲解密後的身份證號，保持加密狀態
         }
-        
+
         return this.user
       } catch (e: any) {
         console.error('Update me error:', e)
