@@ -14,7 +14,8 @@ function bytesToB64u(bytes) {
     for (let i = 0; i < bytes.length; i++)
         str += String.fromCharCode(bytes[i]);
     const b64 = typeof btoa !== 'undefined' ? btoa(str) : Buffer.from(str, 'binary').toString('base64');
-    return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    // Keep '=' padding to match Python cryptography Fernet output
+    return b64.replace(/\+/g, '-').replace(/\//g, '_');
 }
 function u64be(n) {
     const out = new Uint8Array(8);
